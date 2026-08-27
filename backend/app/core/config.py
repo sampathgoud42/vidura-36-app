@@ -231,7 +231,14 @@ class Settings(BaseSettings):
     tradier_superhot_di_ratio: float = 2.0
 
     # --- commodities (API Ninjas, off-hours) --------------------------------
-    apininjas_api_key: str = "5DiMzMIH8pHWwzeltfw3yiQ5Do6WRmGCaW0Dl1cY"
+    # No default: a secret is never defaulted in source. The value lives in
+    # the operator's own credential file (customers/<user>/.env) as
+    # APININJAS_API_KEY. Empty here means "not configured".
+    #
+    # NOTE: nothing in this codebase reads this field today -- see
+    # docs/shared/secret-relocation.md. It is kept (empty) rather than
+    # deleted so removal goes through the Phase 9 dead-code review.
+    apininjas_api_key: str = ""
 
     # --- exits -----------------------------------------------------------
     # A buy reporting "filled" is not the same as the position being on the
