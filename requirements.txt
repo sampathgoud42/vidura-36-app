@@ -1,0 +1,35 @@
+# Tradier Bot — backend + vendored signal engines, one environment.
+# Install:  python -m venv .venv && .venv\Scripts\pip install -r requirements.txt
+
+fastapi>=0.115
+uvicorn[standard]>=0.30
+sqlalchemy>=2.0.44
+pydantic>=2.12
+pydantic-settings>=2.5
+cryptography>=43   # Kalshi request signing (bot station)
+requests>=2.32
+python-multipart
+email-validator
+python-dotenv
+psutil
+tzdata
+# Cloud only, but installed everywhere so tools/migrate_to_postgres.py
+# runs without a second environment. database_url_override rewrites
+# postgres:// to postgresql+psycopg://, which needs this driver.
+psycopg[binary]>=3.2
+
+# the vendored engines run on this same interpreter by default:
+# runtime/super_research (super_signal_bot.py, engine_common.py) and
+# runtime/stock-trade/levels_watcher.py
+numpy
+pandas
+yfinance
+lxml          # yfinance.get_earnings_dates parses HTML with it; ImportError without
+
+# bot station: the vendored Kalshi bots run on this same interpreter
+#   runtime/prediction-trade/kalshi/**  (btc15, btc60, sports, commodities)
+aiohttp
+
+# dev / test
+pytest>=8
+httpx>=0.27

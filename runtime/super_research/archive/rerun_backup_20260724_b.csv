@@ -1,0 +1,15 @@
+logged_at_cst,category,ticker,book,direction,signal,confluence,signal_price,entry_ref,target_price,stop_price,stop_deadline_cst,target_deadline_cst,acc_tp_before_sl_pct,acc_strict_pct,bar_time_cst,repeats,hot,engines,eng_hot,tfs,econ,outcome,outcome_at
+2026-07-20 13:02:26,etf,SPY,B,SHORT,macd_x_dn_pos+hist_turn_dn,1,745.69,745.69,743.83,747.55,09:30,09:30,100.0,33.3,2026-07-20 08:45,1,,30m,,15m,,timeout,09:30
+2026-07-20 13:00:28,etf,GLD,B,SHORT,vwap_loss+below_vwap,1,367.46,367.46,366.54,368.38,14:00,14:00,87.5,36.8,2026-07-20 12:30,1,,1h+30m,2,30m,,timeout,14:00
+2026-07-20 12:55:50,stock,COIN,B,LONG,above_vwap+above_pivot+macd_x_up,8,163.74,163.74,164.23,163.25,14:35,14:35,92.9,92.9,2026-07-20 12:50,1,,1h+2h+3h+4h+30m,5,5m,,target,13:00
+2026-07-20 12:30:36,stock,LLY,B,SHORT,below_vwap+poc_reject_dn+below_pivot,1,1162.99,1162.99,1159.5,1166.48,14:35,14:35,100.0,66.7,2026-07-20 12:00,1,,30m+1h+2h+3h+4h,5,30m,,target,12:35
+2026-07-20 11:49:43,stock,LLY,B,SHORT,below_vwap+poc_reject_dn+below_pivot,1,1166.82,1166.82,1163.32,1170.33,12:45,12:45,100.0,75.0,2026-07-20 11:30,1,,1h+2h+3h+4h,4,15m,,target,12:10
+2026-07-20 11:45:24,etf,GLD,B,SHORT,vwap_loss+below_vwap,1,367.92,367.92,366.82,369.02,12:45,12:45,85.7,50.0,2026-07-20 11:30,1,,1h,,15m,,timeout,12:45
+2026-07-20 11:30:29,etf,SPY,B,LONG,poc_reject_up+above_pivot,1,746.5,746.5,748.74,744.26,14:35,14:35,100.0,50.0,2026-07-20 11:00,1,,1h+2h+3h+4h,4,30m,,stop,12:05
+2026-07-20 11:10:32,etf,IWM,B,LONG,above_pivot+above_vwap_v+rsi_thrust_up,1,294.3,294.3,295.18,293.42,13:10,13:10,100.0,42.9,2026-07-20 11:05,1,,1h+2h+3h+4h,4,5m,,stop,11:40
+2026-07-20 11:00:27,stock,MU,B,LONG,vwap_reclaim+above_vwap,1,892.39,892.39,895.07,889.71,14:35,14:35,88.9,88.9,2026-07-20 10:45,1,,1h+2h+3h+4h,4,15m,,target,11:05
+2026-07-20 10:55:06,stock,MU,B,LONG,vwap_reclaim+rsi_thrust_up,1,889.68,889.68,892.35,887.02,14:35,14:35,85.7,85.7,2026-07-20 10:50,1,,30m+1h+2h+3h+4h,5,5m,,target,10:55
+2026-07-21 08:55:39,etf,SPX,B,LONG,poc_reject_up+strong_close+vwap_lo_bounce,1,7476.49,7476.49,7495.18,7457.8,12:55,12:55,85.7,75.0,2026-07-21 08:50,1,,30m+1h+2h+4h,4,5m,,target,09:30
+2026-07-21 09:05:36,etf,SPY,B,LONG,delta_surge+strong_close+mom_ignite_up,2,745.41,745.41,747.27,743.55,13:05,13:05,87.5,77.8,2026-07-21 09:00,1,,2h+4h,2,5m,,target,10:10
+2026-07-21 09:30:50,etf,QQQ,B,LONG,vwap_reclaim+above_pivot+macd_x_up,1,706.23,706.23,708.0,704.46,10:30,10:30,85.7,75.0,2026-07-21 09:25,1,,30m+1h,2,5m,,target,10:05
+2026-07-21 10:16:12,stock,AAPL,B,LONG,hist_turn_up+rvol_thrust_up,9,327.45,327.45,328.76,326.14,12:15,12:15,88.9,80.0,2026-07-21 10:10,1,,30m+1h+2h,3,5m,,target,10:45

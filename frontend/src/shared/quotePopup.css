@@ -1,0 +1,131 @@
+/* Shared ticker quote + pivot-levels popup (qtp-*) — extracted from the
+   Super Signals world's QuotePopup so every world can open the same desk
+   popup. Neutral dark chrome; per-world accent via --qtp-accent. */
+
+.qtp-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
+  background: rgba(4, 4, 10, 0.82);
+  backdrop-filter: blur(3px);
+}
+.qtp-card {
+  position: relative;
+  width: min(30rem, 100%);
+  max-height: 90vh;
+  overflow-y: auto;
+  border: 1px solid color-mix(in srgb, var(--qtp-accent) 35%, transparent);
+  border-radius: 16px;
+  background: linear-gradient(180deg, #14111d, #0a0812);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+  padding: 1.1rem 1.2rem 1.3rem;
+  text-align: left;
+  color: #e6e1f5;
+}
+.qtp-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: transparent;
+  color: rgba(230, 225, 245, 0.6);
+  font-size: 14px;
+  cursor: pointer;
+}
+.qtp-title {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: color-mix(in srgb, var(--qtp-accent) 75%, white);
+}
+.qtp-mono { font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; }
+.qtp-loading { padding: 1.6rem 0; text-align: center; color: rgba(230, 225, 245, 0.7); }
+.qtp-err {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 1rem 0;
+  color: #fca5a5;
+  font-size: 11px;
+}
+.qtp-price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+  flex-wrap: wrap;
+}
+.qtp-price b { font-size: 2rem; font-weight: 800; }
+.qtp-chg { font-size: 12px; font-weight: 700; }
+.qtp-cur { font-size: 9.5px; color: rgba(230, 225, 245, 0.4); }
+.qtp-badges { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.55rem; }
+.qtp-badge {
+  border: 1px solid color-mix(in srgb, var(--qt-c) 45%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--qt-c) 14%, transparent);
+  color: color-mix(in srgb, var(--qt-c) 80%, white);
+  padding: 3px 10px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  cursor: help;
+}
+.qtp-eyebrow {
+  margin-top: 0.9rem;
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(230, 225, 245, 0.45);
+  overflow-wrap: anywhere;
+}
+.qtp-pivots { margin-top: 0.4rem; display: grid; gap: 2px; }
+.qtp-lvl {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  border-left: 3px solid transparent;
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 11px;
+  background: rgba(255, 255, 255, 0.02);
+}
+.qtp-lvl span { width: 1.6rem; font-weight: 800; color: rgba(230, 225, 245, 0.55); }
+.qtp-lvl b { font-size: 12.5px; }
+.qtp-lvl small { margin-left: auto; font-size: 8.5px; color: rgba(230, 225, 245, 0.35); }
+.qtp-lvl.res { border-left-color: rgba(248, 113, 113, 0.5); }
+.qtp-lvl.res b { color: #fca5a5; }
+.qtp-lvl.sup { border-left-color: rgba(52, 211, 153, 0.5); }
+.qtp-lvl.sup b { color: #6ee7b7; }
+.qtp-lvl.pivot { border-left-color: #fbbf24; background: rgba(251, 191, 36, 0.08); }
+.qtp-lvl.pivot b { color: #fde68a; }
+.qtp-lvl.near { outline: 1px solid color-mix(in srgb, var(--qtp-accent) 55%, transparent); }
+.qtp-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.9rem; }
+.qtp-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid color-mix(in srgb, var(--qtp-accent) 35%, transparent);
+  border-radius: 999px;
+  padding: 4px 12px;
+  font-family: ui-monospace, Consolas, monospace;
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--qtp-accent) 80%, white);
+  background: color-mix(in srgb, var(--qtp-accent) 10%, transparent);
+  cursor: pointer;
+  text-decoration: none;
+}
+.qtp-chip:hover { background: color-mix(in srgb, var(--qtp-accent) 20%, transparent); }
+.qtp-tv { border-color: rgba(56, 189, 248, 0.45); color: #bae6fd; background: rgba(56, 189, 248, 0.08); }
+.qtp-buy-call { border-color: rgba(52, 211, 153, 0.5); color: #6ee7b7; background: rgba(52, 211, 153, 0.1); }
+.qtp-buy-call:hover { background: rgba(52, 211, 153, 0.22); }
+.qtp-buy-put { border-color: rgba(248, 113, 113, 0.5); color: #fca5a5; background: rgba(248, 113, 113, 0.1); }
+.qtp-buy-put:hover { background: rgba(248, 113, 113, 0.22); }
+.qtp-meta { margin-top: 0.7rem; font-size: 9px; color: rgba(230, 225, 245, 0.35); }

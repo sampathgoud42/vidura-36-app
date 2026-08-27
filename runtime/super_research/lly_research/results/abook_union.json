@@ -1,0 +1,126 @@
+{
+ "picked": [
+  {
+   "d": "SHORT",
+   "combo": [
+    "below_vwap",
+    "orb_break_dn_v"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 7
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "s1_bounce",
+    "ylow_reclaim"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "hist_turn_up",
+    "vwap_lo_bounce"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.8,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "poc_reject_up",
+    "hist_turn_up",
+    "cvd_up"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.8,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "r1_reject",
+    "yhigh_reject"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "below_vwap",
+    "poc_reject_dn",
+    "below_pivot"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "yhigh_reject",
+    "hist_turn_dn",
+    "cvd_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "orb_break_dn",
+    "below_vwap_v"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  }
+ ],
+ "union": {
+  "trades": 37,
+  "wins": 37,
+  "stops": 0,
+  "scratch": 0,
+  "win_rate": 100.0,
+  "tp_before_sl": 100.0,
+  "days": 21,
+  "per_day": 0.62,
+  "net_pct": 11.1
+ },
+ "ok": false,
+ "n_days": 60,
+ "bot": "lly_intraday_bot.py",
+ "target_freq": 10.0
+}

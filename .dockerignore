@@ -1,0 +1,45 @@
+# SECRETS — never in an image.
+#
+# customers/ holds live Tradier tokens and the .sam login password. A
+# container image is pushed to a registry and its layers are readable by
+# anyone who can pull it, so baking this folder in would publish the keys to
+# the live trading account. The deployment mounts these as Secret Manager
+# files at runtime instead (see CLOUDRUN.md). Do not remove this line.
+customers/
+*.env
+.env
+!frontend/.env.production
+
+# Local state. var/ is the SQLite ledger and the pid/log files of a machine
+# that is not this container; the cloud deployment runs on Postgres.
+var/
+*.db
+*.db-wal
+*.db-shm
+
+# Build inputs that the image rebuilds itself, or does not need.
+.venv/
+**/node_modules/
+frontend/dist/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.git/
+.github/
+tests/
+
+# Generated data that would only bloat the layer.
+runtime/super_research/gex/
+runtime/**/*.log
+runtime/**/*.out
+
+# Bot Station state. The bots CANNOT run in cloud mode (no place for a
+# long-lived process, and the filesystem is wiped on every restart), so
+# their scripts ship — the station still renders and still reports what is
+# registered — but one machine's ledgers, locks, session state and scraped
+# rankings have no business in an image.
+runtime/prediction-trade/**/*.lock
+runtime/prediction-trade/**/*_state.json
+runtime/prediction-trade/**/*_state_paper.json
+runtime/prediction-trade/**/*trade_history*.csv
+runtime/prediction-trade/sports/tennis/web/archive_data/

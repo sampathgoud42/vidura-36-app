@@ -1,0 +1,53 @@
+/* LIVE-mode notice shown in every world whose mode toggle is set to live */
+
+.vw-live-note {
+  margin-top: 0.7rem;
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  font-size: 12px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+}
+
+/* server refuses live starts — informational, not alarming */
+.vw-live-note.locked {
+  border: 1px solid rgba(148, 163, 184, 0.45);
+  background: rgba(148, 163, 184, 0.1);
+  color: #cbd5e1;
+}
+.vw-live-note.locked b { color: #e2e8f0; }
+.vw-live-note.locked code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: #fbbf24;
+}
+.vw-live-note.locked pre {
+  margin: 0.5rem 0 0.35rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.45);
+  color: #e2e8f0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  white-space: pre-wrap;
+  -webkit-user-select: all;
+  user-select: all;      /* select the whole block in one click to copy */
+}
+.vw-live-hint { color: rgba(203, 213, 225, 0.6); font-size: 11px; }
+
+/* live is unlocked: the next start spends real money */
+.vw-live-note.armed {
+  border: 1px solid var(--lm, #f87171);
+  background: rgba(248, 113, 113, 0.14);
+  color: #fecaca;
+  animation: vw-live-pulse 2.4s ease-in-out infinite;
+}
+.vw-live-note.armed b { color: #fff; }
+
+@keyframes vw-live-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(248, 113, 113, 0); }
+  50% { box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.18); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vw-live-note.armed { animation: none; }
+}

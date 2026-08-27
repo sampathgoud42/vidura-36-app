@@ -1,0 +1,11 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:adi_up+hist_turn_up+strong_close+orb_break_up|nk0.0|vm1.2|full_0845_1400,11,0.18,9,1,1,81.8,90.0,9.18,2.45,0.3,34.5
+LONG:hist_turn_up+rvol_thrust_up|nk0.0|vm0.8|am_0845_1130,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.0,18.5
+LONG:above_vwap+hist_turn_up+rvol_thrust_up|nk0.0|vm0.8|am_0845_1130,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.0,18.5
+LONG:hist_turn_up+strong_close+rvol_thrust_up|nk0.0|vm0.8|am_0845_1130,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.0,18.5
+LONG:hist_turn_up+strong_close+above_vwap_v|nk0.0|vm0.8|am_0845_1130,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.0,18.5
+LONG:hist_turn_up+rvol_thrust_up+above_vwap_v|nk0.0|vm0.8|am_0845_1130,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.0,18.5
+LONG:above_vwap+hist_turn_up+strong_close+rvol_thrust_up|nk0.0|vm0.8|am_0845_1130,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.0,18.5
+LONG:above_vwap+hist_turn_up+strong_close+above_vwap_v|nk0.0|vm0.8|am_0845_1130,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.0,18.5
+LONG:above_vwap+hist_turn_up+rvol_thrust_up+above_vwap_v|nk0.0|vm0.8|am_0845_1130,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.0,18.5
+LONG:hist_turn_up+strong_close+rvol_thrust_up+above_vwap_v|nk0.0|vm0.8|am_0845_1130,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.0,18.5

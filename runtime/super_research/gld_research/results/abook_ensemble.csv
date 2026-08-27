@@ -1,0 +1,17 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:adi_up+above_pivot+hist_turn_up|nk0.8|vm1.2|pm_1130_1400,18,0.3,5,0,13,27.8,100.0,1.89,0.81,0.21,77.2
+SHORT:below_pivot+weak_close+vwap_loss_v|nk0.0|vm0.8|full_0845_1400,15,0.25,11,0,4,73.3,100.0,16.42,3.23,0.16,54.0
+SHORT:adi_dn+hist_turn_dn+rsi_thrust_dn|nk0.0|vm0.8|pm_1130_1400,10,0.17,6,0,4,60.0,100.0,32.45,1.88,0.05,57.0
+SHORT:ylow_break+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,8,0.13,7,0,1,87.5,100.0,inf,2.22,0.0,24.4
+SHORT:below_vwap+r1_reject+weak_close|nk0.0|vm1.2|am_0845_1130,7,0.12,6,0,1,85.7,100.0,inf,1.95,0.0,82.9
+LONG:above_vwap+vwap_lo_bounce|nk0.8|vm1.2|full_0845_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,57.0
+SHORT:poc_reject_dn+below_pivot|nk0.0|vm0.8|mid_1030_1300,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,123.0
+SHORT:vwap_loss+macd_x_dn_pos|nk0.0|vm0.8|full_0845_1400,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,53.3
+SHORT:vwap_loss+below_vwap|nk0.0|vm1.2|mid_1030_1300,7,0.12,5,0,2,71.4,100.0,9.51,1.37,0.16,65.0
+SHORT:hist_turn_dn+rvol_thrust_dn+cvd_dn+rsi_thrust_dn|nk0.0|vm0.8|full_0845_1400,9,0.15,7,0,2,77.8,100.0,195.54,2.13,0.01,57.2
+SHORT:ylow_break+below_pivot|nk0.0|vm1.2|pm_1130_1400,6,0.1,5,0,1,83.3,100.0,inf,1.62,0.0,35.8
+SHORT:below_pivot+hist_turn_dn+rsi_thrust_dn|nk0.0|vm0.8|pm_1130_1400,8,0.13,6,0,2,75.0,100.0,30.04,1.74,0.06,33.8
+LONG:vwap_lo_bounce+cvd_up|nk0.8|vm0.8|full_0845_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,63.0
+SHORT:vwap_loss+yhigh_reject|nk0.0|vm0.8|full_0845_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,40.0
+SHORT:vwap_loss+weak_close+rsi_thrust_dn|nk0.0|vm0.8|full_0845_1400,8,0.13,5,0,3,62.5,100.0,25.98,1.55,0.05,34.4
+SHORT:r1_reject+yhigh_reject+weak_close|nk0.0|vm0.8|am_0845_1130,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,36.0

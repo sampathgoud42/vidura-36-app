@@ -1,0 +1,222 @@
+{
+ "picked": [
+  {
+   "d": "LONG",
+   "combo": [
+    "above_pivot",
+    "mom_ignite_up"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 42.9,
+   "t": 100.0,
+   "n": 21
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss_v",
+    "mom_ignite_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 38.5,
+   "t": 100.0,
+   "n": 13
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "poc_reject_up",
+    "vwap_lo_bounce"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 11
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "delta_surge",
+    "above_pivot",
+    "strong_close",
+    "mom_ignite_up"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.5,
+   "vm": 0.8,
+   "s": 53.8,
+   "t": 100.0,
+   "n": 13
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "poc_reject_dn",
+    "adi_dn",
+    "below_vwap_v"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 75.0,
+   "t": 100.0,
+   "n": 8
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "poc_reject_up",
+    "above_pivot"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 80.0,
+   "t": 100.0,
+   "n": 10
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "vwap_reclaim",
+    "orb_break_up",
+    "cvd_up"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 75.0,
+   "t": 100.0,
+   "n": 8
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "r1_reject",
+    "cvd_dn_v"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 71.4,
+   "t": 100.0,
+   "n": 7
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "macd_x_dn_pos",
+    "hist_turn_dn"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 83.3,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "delta_dump",
+    "orb_break_dn_v",
+    "mom_ignite_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "delta_surge",
+    "strong_close",
+    "mom_ignite_up"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.5,
+   "vm": 0.8,
+   "s": 75.0,
+   "t": 100.0,
+   "n": 8
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "macd_x_dn",
+    "weak_close",
+    "mom_ignite_dn"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "macd_x_dn",
+    "cvd_dn_v",
+    "mom_ignite_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 66.7,
+   "t": 100.0,
+   "n": 9
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss",
+    "orb_break_dn_v"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "macd_x_dn_pos",
+    "below_vwap_v"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 71.4,
+   "t": 100.0,
+   "n": 7
+  }
+ ],
+ "union": {
+  "trades": 95,
+  "wins": 61,
+  "stops": 0,
+  "scratch": 34,
+  "win_rate": 64.2,
+  "tp_before_sl": 100.0,
+  "days": 47,
+  "per_day": 1.58,
+  "net_pct": 19.53
+ },
+ "ok": false,
+ "n_days": 60,
+ "bot": "spy_intraday_bot.py",
+ "target_freq": 10.0
+}

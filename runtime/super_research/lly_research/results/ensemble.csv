@@ -1,0 +1,11 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+SHORT:orb_break_dn+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,19.4
+SHORT:orb_break_dn_v+cvd_dn|nk0.0|vm0.8|full_0845_1400,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,19.4
+SHORT:orb_break_dn_v+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,19.4
+SHORT:below_vwap+weak_close+orb_break_dn_v|nk0.0|vm0.8|full_0845_1400,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,20.6
+SHORT:below_vwap+orb_break_dn+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,19.4
+SHORT:below_vwap+orb_break_dn_v+cvd_dn|nk0.0|vm0.8|full_0845_1400,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,19.4
+SHORT:below_vwap+orb_break_dn_v+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,19.4
+SHORT:orb_break_dn+orb_break_dn_v+cvd_dn|nk0.0|vm0.8|full_0845_1400,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,19.4
+SHORT:orb_break_dn+orb_break_dn_v+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,19.4
+SHORT:orb_break_dn+cvd_dn+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,19.4

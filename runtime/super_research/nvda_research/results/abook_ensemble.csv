@@ -1,0 +1,8 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+SHORT:below_pivot+orb_break_dn|nk0.0|vm1.2|pm_1130_1400,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,16.7
+LONG:vwap_reclaim+hist_turn_up+cvd_up_v|nk0.0|vm0.8|full_0845_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,29.0
+SHORT:below_pivot+macd_x_dn+rsi_thrust_dn|nk0.0|vm0.8|full_0845_1400,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,23.3
+SHORT:ylow_break+macd_x_dn|nk0.0|vm0.8|full_0845_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,13.0
+SHORT:delta_dump+macd_x_dn+rsi_thrust_dn|nk0.0|vm0.8|full_0845_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,17.0
+SHORT:below_vwap+macd_x_dn_pos|nk0.0|vm0.8|pm_1130_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,32.0
+SHORT:macd_x_dn+orb_break_dn_v|nk0.0|vm0.8|full_0845_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,13.0

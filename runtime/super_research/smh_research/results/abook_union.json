@@ -1,0 +1,85 @@
+{
+ "picked": [
+  {
+   "d": "LONG",
+   "combo": [
+    "above_vwap",
+    "above_pivot",
+    "macd_x_up_neg"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.8,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 10
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "yhigh_break",
+    "hist_turn_up"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 1.2,
+   "s": 83.3,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "macd_x_up_neg",
+    "hist_turn_up"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 7
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "orb_break_up_v",
+    "mom_ignite_up"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "macd_x_up_neg",
+    "strong_close"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.8,
+   "vm": 1.2,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  }
+ ],
+ "union": {
+  "trades": 29,
+  "wins": 28,
+  "stops": 0,
+  "scratch": 1,
+  "win_rate": 96.6,
+  "tp_before_sl": 100.0,
+  "days": 18,
+  "per_day": 0.48,
+  "net_pct": 8.6
+ },
+ "ok": false,
+ "n_days": 60,
+ "bot": "smh_intraday_bot.py",
+ "target_freq": 10.0
+}

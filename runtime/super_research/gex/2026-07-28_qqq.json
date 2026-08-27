@@ -1,0 +1,93 @@
+{
+ "symbol": "QQQ",
+ "as_of": "2026-07-28T14:00:04.071Z",
+ "market_open": true,
+ "price": {
+  "bid": 669.9,
+  "ask": 669.98,
+  "mid": 669.94,
+  "last": 669.94,
+  "last_update": "2026-07-28T14:00:04.071Z"
+ },
+ "volatility": {
+  "atm_iv": 30.65,
+  "hv_20": 21.26,
+  "hv_60": 24.95,
+  "vrp": null,
+  "skew_25d": null,
+  "iv_term_structure": null
+ },
+ "options_flow": {
+  "total_call_oi": 4694145,
+  "total_put_oi": 6216122,
+  "total_call_volume": 46494,
+  "total_put_volume": 59272,
+  "pc_ratio_oi": 1.324,
+  "pc_ratio_volume": 1.275,
+  "active_expirations": 34
+ },
+ "exposure": {
+  "net_gex": -7773892545,
+  "net_dex": null,
+  "net_vex": null,
+  "net_chex": null,
+  "gamma_flip": 701.02359076831,
+  "call_wall": 700,
+  "put_wall": 660,
+  "max_pain": null,
+  "highest_oi_strike": 700,
+  "regime": "negative_gamma",
+  "interpretation": {
+   "gamma": "Dealers short gamma \u2014 moves amplified, trend following likely",
+   "vanna": null,
+   "charm": null
+  },
+  "hedging_estimate": null,
+  "zero_dte": null,
+  "top_strikes": null,
+  "oi_weighted_dte": 131.2
+ },
+ "macro": {
+  "vix": {
+   "value": 19.34,
+   "change": null,
+   "change_pct": null,
+   "as_of": "2026-07-28T13:59:16Z"
+  },
+  "vvix": {
+   "value": 101.37,
+   "change": null,
+   "change_pct": null,
+   "as_of": "2026-07-28T13:54:31Z"
+  },
+  "skew": null,
+  "spx": {
+   "value": 7388.59,
+   "change": -24.59,
+   "change_pct": -0.33,
+   "as_of": "2026-07-28T13:59:52Z"
+  },
+  "move": null,
+  "vix_term_structure": {
+   "levels": {
+    "vix9d": 19.43,
+    "vix": 19.5,
+    "vix3m": 20.61,
+    "vix6m": 22.41
+   },
+   "near_slope_pct": 0.36,
+   "structure": "contango"
+  },
+  "vix_futures": {
+   "front_month": 20.61,
+   "spot": 19.5,
+   "spread": 1.11,
+   "basis_pct": 5.69,
+   "basis": "contango"
+  },
+  "fear_and_greed": {
+   "score": 38,
+   "rating": "fear"
+  }
+ }
+}

@@ -1,0 +1,11 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+SHORT:macd_x_dn+weak_close|nk0.8|vm0.8|mid_1030_1300,14,0.25,10,1,3,71.4,90.9,5.42,2.45,0.3,113.2
+SHORT:below_vwap+yhigh_reject|nk0.0|vm0.8|mid_1030_1300,12,0.21,9,1,2,75.0,90.0,7.85,2.38,0.3,107.5
+SHORT:yhigh_reject+cvd_dn|nk0.0|vm0.8|mid_1030_1300,10,0.18,7,1,2,70.0,87.5,6.13,1.78,0.3,110.0
+SHORT:below_vwap+yhigh_reject+cvd_dn|nk0.0|vm0.8|mid_1030_1300,10,0.18,7,1,2,70.0,87.5,6.13,1.78,0.3,110.0
+SHORT:below_vwap+macd_x_dn+weak_close|nk0.8|vm0.8|mid_1030_1300,10,0.18,7,1,2,70.0,87.5,3.93,1.57,0.3,98.5
+SHORT:macd_x_dn+weak_close+cvd_dn|nk0.8|vm0.8|mid_1030_1300,10,0.18,7,1,2,70.0,87.5,3.93,1.57,0.3,98.5
+SHORT:below_vwap+macd_x_dn+weak_close+cvd_dn|nk0.8|vm0.8|mid_1030_1300,10,0.18,7,1,2,70.0,87.5,3.93,1.57,0.3,98.5
+SHORT:r1_reject+weak_close|nk0.0|vm0.8|mid_1030_1300,9,0.16,7,1,1,77.8,87.5,6.59,1.78,0.32,87.8
+SHORT:below_vwap+adi_dn+yhigh_reject|nk0.0|vm0.8|mid_1030_1300,9,0.16,7,1,1,77.8,87.5,7.1,1.83,0.3,95.6
+SHORT:adi_dn+yhigh_reject+cvd_dn|nk0.0|vm0.8|mid_1030_1300,9,0.16,7,1,1,77.8,87.5,7.1,1.83,0.3,95.6

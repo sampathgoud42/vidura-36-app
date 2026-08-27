@@ -1,0 +1,14 @@
+logged_at_cst,category,ticker,book,direction,signal,confluence,signal_price,entry_ref,target_price,stop_price,stop_deadline_cst,target_deadline_cst,acc_tp_before_sl_pct,acc_strict_pct,bar_time_cst,repeats,hot,engines,eng_hot,tfs,econ,outcome,outcome_at
+2026-07-20 13:25:54,etf,GLD,A,SHORT,hist_turn_dn+rvol_thrust_dn+cvd_dn+rsi_thrust_dn,2,367.46,367.46,366.54,368.38,14:35,14:35,100.0,88.9,2026-07-20 13:20,1,,30m+1h+2h+4h,4,5m,,stop,14:30
+2026-07-20 13:00:28,etf,GLD,A,SHORT,vwap_loss+below_vwap,1,367.91,367.91,366.81,369.01,14:35,14:35,100.0,71.4,2026-07-20 12:10,2,,30m+1h+2h+3h+4h,5,5m+30m,,timeout,14:35
+2026-07-20 11:49:43,stock,LLY,A,SHORT,below_vwap+poc_reject_dn+below_pivot,1,1166.82,1166.82,1163.32,1170.33,14:35,14:35,100.0,100.0,2026-07-20 11:30,1,,1h+2h+3h+4h,4,15m,,target,12:10
+2026-07-20 11:45:42,stock,LLY,A,LONG,hist_turn_up+vwap_lo_bounce,1,1166.82,1166.82,1170.33,1163.32,14:35,14:35,100.0,100.0,2026-07-20 11:40,1,,4h,,5m,,stop,12:10
+2026-07-20 11:44:05,etf,GLD,A,SHORT,vwap_loss+below_vwap,1,367.81,367.81,366.71,368.91,14:35,14:35,100.0,71.4,2026-07-20 11:40,1,,30m+1h+2h+3h+4h,5,5m,,timeout,14:35
+2026-07-20 11:21:03,etf,SPY,A,LONG,poc_reject_up+above_pivot,1,746.73,746.73,748.97,744.49,14:35,14:35,100.0,80.0,2026-07-20 11:05,2,,1h+2h+3h+4h,4,5m,,stop,12:05
+2026-07-20 11:10:32,etf,IWM,A,LONG,delta_surge+above_pivot+rsi_thrust_up,2,294.3,294.3,295.18,293.42,14:35,14:35,100.0,83.3,2026-07-20 11:05,1,,30m+1h+2h+3h+4h,5,5m,,stop,11:40
+2026-07-20 11:00:27,stock,MU,A,LONG,vwap_reclaim+rsi_thrust_up,1,892.39,892.39,895.07,889.71,14:35,14:35,100.0,100.0,2026-07-20 10:45,1,,30m+1h+2h+3h+4h,5,15m,,target,11:05
+2026-07-20 10:55:06,stock,MU,A,LONG,vwap_reclaim+above_vwap,1,889.68,889.68,892.35,887.02,14:35,14:35,100.0,100.0,2026-07-20 10:50,1,,30m+1h+2h+3h+4h,5,5m,,target,10:55
+2026-07-20 10:50:57,stock,NVDA,A,SHORT,macd_x_dn+orb_break_dn_v,1,204.91,204.91,204.3,205.52,14:35,14:35,100.0,100.0,2026-07-20 10:45,1,,4h,,5m,,stop,10:50
+2026-07-21 08:55:39,etf,SPX,A,LONG,poc_reject_up+strong_close+vwap_lo_bounce,1,7476.49,7476.49,7495.18,7457.8,09:25,09:25,100.0,62.5,2026-07-21 08:50,1,,30m+1h+2h+4h,4,5m,,timeout,09:25
+2026-07-21 09:30:50,etf,QQQ,A,LONG,vwap_reclaim+above_pivot+macd_x_up,1,706.23,706.23,708.0,704.46,10:00,10:00,100.0,62.5,2026-07-21 09:25,1,,30m+1h,2,5m,,timeout,10:00
+2026-07-21 10:16:12,stock,AAPL,A,LONG,hist_turn_up+rvol_thrust_up,9,327.45,327.45,328.76,326.14,11:15,11:15,100.0,80.0,2026-07-21 10:10,1,,30m+1h+2h,3,5m,,target,10:45

@@ -1,0 +1,6 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:poc_reject_up+strong_close+vwap_lo_bounce|nk0.0|vm0.8|full_0845_1400,9,0.15,7,0,2,77.8,100.0,18.45,2.08,0.12,63.3
+LONG:vwap_reclaim+orb_break_up|nk0.0|vm1.2|full_0845_1400,7,0.12,5,0,2,71.4,100.0,23.09,1.52,0.07,89.3
+LONG:above_vwap+poc_reject_up|nk0.0|vm0.8|mid_1030_1300,7,0.12,5,0,2,71.4,100.0,40.99,1.65,0.04,102.9
+SHORT:r1_reject+orb_break_dn|nk0.0|vm0.8|full_0845_1400,6,0.1,5,0,1,83.3,100.0,11.25,1.37,0.0,103.3
+LONG:vwap_reclaim+adi_up+above_pivot|nk0.0|vm1.2|full_0845_1400,7,0.12,5,0,2,71.4,100.0,23.09,1.52,0.07,101.4
