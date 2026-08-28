@@ -1,0 +1,537 @@
+<title>Phase 2 Specification</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+  :root{
+    --ground:#EEF0F3; --surface:#FFFFFF; --surface-2:#F6F7F9;
+    --ink:#171A1F; --ink-2:#3C444F; --muted:#646E7B;
+    --rule:#D6DAE0; --rule-strong:#B6BDC7;
+    --accent:#8A5200; --accent-soft:#F4E7D2;
+    --critical:#9E2A19; --critical-soft:#F7E2DE;
+    --warn:#7A5A05; --warn-soft:#F6EDD4;
+    --ok:#2A6047; --ok-soft:#DEEDE5;
+    --shadow:0 1px 2px rgba(23,26,31,.06),0 8px 24px rgba(23,26,31,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F1216; --surface:#171B21; --surface-2:#1D222A;
+      --ink:#E4E7EC; --ink-2:#BFC6D0; --muted:#8B95A3;
+      --rule:#2A313A; --rule-strong:#3B444F;
+      --accent:#E3A94E; --accent-soft:#2E2415;
+      --critical:#EC7B66; --critical-soft:#331914;
+      --warn:#D7B152; --warn-soft:#2C2513;
+      --ok:#72C098; --ok-soft:#152A20;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0F1216; --surface:#171B21; --surface-2:#1D222A;
+    --ink:#E4E7EC; --ink-2:#BFC6D0; --muted:#8B95A3;
+    --rule:#2A313A; --rule-strong:#3B444F;
+    --accent:#E3A94E; --accent-soft:#2E2415;
+    --critical:#EC7B66; --critical-soft:#331914;
+    --warn:#D7B152; --warn-soft:#2C2513;
+    --ok:#72C098; --ok-soft:#152A20;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);
+    font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+    font-size:16.5px;line-height:1.62;margin:0;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px 96px}
+
+  .mast{border-bottom:2px solid var(--ink);padding:56px 0 20px;margin-bottom:40px}
+  .eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+  h1{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;font-weight:700;
+    font-size:clamp(2.3rem,5.6vw,3.5rem);line-height:1.04;letter-spacing:-.015em;
+    text-wrap:balance;margin:.28em 0 .32em}
+  .standfirst{font-size:1.14rem;color:var(--ink-2);max-width:64ch;margin:0}
+  .status-pill{display:inline-flex;align-items:center;gap:7px;
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.1em;
+    text-transform:uppercase;background:var(--warn-soft);color:var(--warn);
+    border:1px solid color-mix(in srgb,var(--warn) 34%,transparent);
+    border-radius:2px;padding:4px 9px}
+  .status-pill::before{content:"";width:6px;height:6px;background:var(--warn);border-radius:50%}
+
+  section{margin:0 0 54px}
+  .qnum{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;
+    color:var(--accent);text-transform:uppercase;display:block;margin-bottom:6px}
+  h2.sec{font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-size:clamp(1.5rem,3vw,1.95rem);font-weight:700;letter-spacing:-.012em;
+    margin:0 0 6px;text-wrap:balance;padding-bottom:10px;border-bottom:1px solid var(--rule-strong)}
+  h3{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.12rem;font-weight:600;
+    margin:30px 0 8px;letter-spacing:-.005em}
+  p{max-width:68ch}
+  a{color:var(--accent)}
+
+  .answer{background:var(--surface-2);border:1px solid var(--rule);
+    padding:14px 18px;margin:14px 0 20px;font-size:1.02rem}
+  .answer .lbl{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.15em;
+    text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.885em}
+  code{background:var(--surface-2);border:1px solid var(--rule);border-radius:2px;padding:1px 5px}
+  .cite{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);white-space:nowrap}
+
+  /* workflow card */
+  .wf{border:1px solid var(--rule);background:var(--surface);margin:16px 0;
+    box-shadow:var(--shadow)}
+  .wf-head{padding:13px 18px;border-bottom:1px solid var(--rule);background:var(--surface-2);
+    display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline}
+  .wf-id{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--surface);
+    background:var(--ink-2);padding:2px 7px;border-radius:2px;letter-spacing:.05em}
+  .wf-name{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:1.1rem}
+  .wf-body{padding:4px 18px 16px}
+  .wf dl{display:grid;grid-template-columns:auto 1fr;gap:0 16px;margin:0}
+  .wf dt{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);padding-top:12px;white-space:nowrap}
+  .wf dd{margin:0;padding-top:12px;font-size:.965rem;color:var(--ink-2)}
+  .wf dd ul{margin:0;padding-left:1.05em;max-width:none}
+  .wf dd li{margin:3px 0}
+  @media (max-width:620px){
+    .wf dl{grid-template-columns:1fr}
+    .wf dt{padding-top:14px;padding-bottom:0}
+    .wf dd{padding-top:2px}
+  }
+
+  pre{background:var(--surface-2);border:1px solid var(--rule);padding:13px 15px;
+    overflow-x:auto;margin:12px 0;font-family:"IBM Plex Mono",monospace;
+    font-size:12.7px;line-height:1.6;color:var(--ink-2)}
+  pre b{color:var(--critical);font-weight:600}
+  pre em{color:var(--ok);font-style:normal;font-weight:600}
+  pre i{color:var(--muted);font-style:normal}
+
+  .scroll{overflow-x:auto;margin:16px 0;border:1px solid var(--rule);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:.93rem;min-width:620px}
+  th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);background:var(--surface-2);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  td.num,th.num{font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace;text-align:right}
+
+  ul,ol{max-width:68ch;padding-left:1.15em}
+  li{margin:5px 0}
+  li::marker{color:var(--muted)}
+
+  /* decisions */
+  .dec{border:1px solid var(--rule-strong);background:var(--surface);
+    box-shadow:var(--shadow);margin:16px 0}
+  .dec-head{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:baseline;
+    padding:14px 20px 0}
+  .dec-id{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.08em;
+    color:var(--surface);background:var(--accent);padding:2px 8px;border-radius:2px}
+  .dec-title{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;font-size:1.08rem}
+  .dec-body{padding:8px 20px 18px}
+  .dec-body p{margin:0 0 10px;font-size:.965rem;color:var(--ink-2)}
+  .dec-body p:last-child{margin-bottom:0}
+  .prop{border-top:1px solid var(--rule);margin-top:12px;padding-top:11px}
+  .prop .lbl{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.15em;
+    text-transform:uppercase;color:var(--accent);display:block;margin-bottom:3px}
+  .tag{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.13em;
+    text-transform:uppercase;padding:2px 7px;border-radius:2px;border:1px solid}
+  .tag.crit{color:var(--critical);background:var(--critical-soft);border-color:color-mix(in srgb,var(--critical) 32%,transparent)}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 32%,transparent)}
+
+  .stopbar{border:2px solid var(--accent);background:var(--accent-soft);
+    padding:20px 24px;margin:48px 0 0}
+  .stopbar h2{font-family:"IBM Plex Sans Condensed",sans-serif;margin:0 0 8px;
+    font-size:1.3rem;color:var(--accent);letter-spacing:-.01em}
+  .stopbar p{margin:0 0 10px;color:var(--ink-2);max-width:68ch}
+  .stopbar p:last-child{margin-bottom:0}
+
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:8px 22px}
+  @media (max-width:640px){.wrap{padding:0 17px 64px}body{font-size:16px}}
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">
+      <span>Phase 2</span><span>Vidura 36 rebuild</span><span>Specification</span>
+      <span class="status-pill">Awaiting decisions</span>
+    </div>
+    <h1>Specification</h1>
+    <p class="standfirst">What the system should do — the workflows stated as rules rather than as code, the domain boundaries now settled, the onboarding contracts that make this rebuild worth doing, and eleven decisions that are yours rather than mine.</p>
+  </header>
+
+  <section>
+    <span class="qnum">Resolved since Phase 1</span>
+    <h2 class="sec">The blocking gap closed itself</h2>
+    <div class="answer">
+      <span class="lbl">TBOT_API_KEY</span>
+      <strong>Nothing uses it.</strong> It is not set in this deployment's <code>.env</code>, and no script, launcher, tool, Dockerfile, <code>firebase.json</code> or <code>launch.json</code> in the repository sends it. It appears only as documented advice in <span class="cite">README.md:241</span> and <span class="cite">DEPLOY.md:254</span> — as an option for cron that was never taken up — plus the tests that cover the branch.
+    </div>
+    <p>So the middleware's shared-key branch <span class="cite">main.py:499</span> is dead code in this deployment. Phase 0 Decision 03 needs no answer from you: the key is demoted to unscoped operational endpoints, and nothing breaks. I have written that into the spec below rather than leaving it open.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Boundaries</span>
+    <h2 class="sec">Domains, settled</h2>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Domain</th><th>Owns</th><th>Real boundary?</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><strong>Trading</strong><br><span class="cite">Tradier Platform + 36 Trades</span></td>
+          <td>Equity-options execution against Tradier: contract selection by signed delta band, sizing by balance percentage, resting take-profit on the venue, monitored stop-loss, position ledger, auto-trade watchers, market data (quotes, chains, timesales, DMI, flow, hot scan).</td>
+          <td><span class="tag ok">One domain</span> Two clients, proven in Phase 1: zero business-rule differences, twelve shared endpoints, one shared indicator function.</td>
+        </tr>
+        <tr>
+          <td><strong>Bot Station</strong><br><span class="cite">Kalshi</span></td>
+          <td>Event-contract bots run as supervised subprocesses: lifecycle, per-bot bankroll and targets, CSV-to-ledger ingest, exchange reconciliation, portfolio value.</td>
+          <td><span class="tag ok">Genuine</span> Different venue, different instrument, subprocess execution, zero endpoint overlap.</td>
+        </tr>
+        <tr>
+          <td><strong>Shared</strong></td>
+          <td>Tenants, credentials, sessions, world access, and the super-research signal store that both trading strategies read.</td>
+          <td><span class="tag warn">Support, not a domain</span> Exists because both domains need it, not because it models anything.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p><strong>Super-research is the one boundary I want to name explicitly</strong>, because it is easy to mistake for a third domain. It is a signal <em>store</em>: an ingest pipeline plus a read API. The trading domain consumes it (the A/B options strategy trades its signals); the bot station does not. It belongs inside trading as a supporting module, not beside it as a peer — the alternative gives us a domain with no execution, no venue and one consumer.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Behaviour</span>
+    <h2 class="sec">Workflows</h2>
+
+    <p>Stated as rules. Where the current implementation has a rule I believe is wrong, it is marked and carried to the decision list rather than corrected here.</p>
+
+    <h3>Trading domain</h3>
+
+    <div class="wf">
+      <div class="wf-head"><span class="wf-id">T-1</span><span class="wf-name">Open a managed options position</span></div>
+      <div class="wf-body"><dl>
+        <dt>Purpose</dt><dd>Turn "buy SPY calls in the 0.25–0.45 delta band with 50% of buying power" into a filled position with both exits armed.</dd>
+        <dt>Inputs</dt><dd>Tenant, symbol, side (call/put), delta band, buy %, take-profit %, stop-loss %, venue (sandbox default), optional expiration or 0DTE pin.</dd>
+        <dt>Outputs</dt><dd>A position row; a resting take-profit sell order on the venue; a monitored stop-loss.</dd>
+        <dt>Rules</dt><dd><ul>
+          <li>The delta band is spoken as a magnitude but searched as a signed range: calls <code>+min..+max</code>, puts <code>−max..−min</code>. Matching on absolute value is wrong and recorded every put's entry delta as positive.</li>
+          <li>A contract with no live two-sided quote is never entered — an option that cannot be exited must not be opened.</li>
+          <li>Ties within the band break toward the tighter spread.</li>
+          <li>Size is <code>floor((balance × buy_pct) / (price × 100))</code>. The ×100 multiplier is mandatory; omitting it orders 100× the intended size.</li>
+          <li>Buy % is a target, not a cap. A tolerance band either side lets an indivisible contract that would otherwise size to zero still trade, and stops a partial lot leaving budget parked.</li>
+          <li>Entry limit is the mid-price when the spread is wide, the ask when it is one or two cents.</li>
+          <li>Take-profit rests on the venue so it survives an API restart. Stop-loss lives in the monitor loop and survives because the row does.</li>
+          <li>Exits arm only after a delay <em>and</em> after the holding is visible on the books — a fill report is not the same as a position, and selling into that gap is what the venue rejects.</li>
+          <li>Sandbox is the default for every call that does not name a venue. <code>paper_only</code> refuses a live request outright rather than silently downgrading it.</li>
+        </ul></dd>
+        <dt>Errors</dt><dd>No contract in band → refuse with the band searched. Sizing below minimum → refuse with the arithmetic. Venue rejects → surface the venue's own message. Live requested while <code>paper_only</code> → refuse and say the server is locked.</dd>
+      </dl></div>
+    </div>
+
+    <div class="wf">
+      <div class="wf-head"><span class="wf-id">T-2</span><span class="wf-name">Close or sweep a position</span></div>
+      <div class="wf-body"><dl>
+        <dt>Purpose</dt><dd>Exit one position, or flatten everything, without leaving an orphaned resting order.</dd>
+        <dt>Rules</dt><dd><ul>
+          <li>Cancel the resting take-profit <em>before</em> selling. A sell that races its own TP double-sells.</li>
+          <li>Sell to close is a limit at mid when the spread exceeds two cents, market otherwise.</li>
+          <li>A forced close skips the arm-delay guard; that is what <code>force</code> means and it is the operator's explicit override.</li>
+        </ul></dd>
+        <dt>Errors</dt><dd>Position already closed → report the terminal state, do not re-sell. Venue unreachable → the row stays open and reconciliation catches it later.</dd>
+      </dl></div>
+    </div>
+
+    <div class="wf">
+      <div class="wf-head"><span class="wf-id">T-3</span><span class="wf-name">Auto-trade: A/B signal into options</span></div>
+      <div class="wf-body"><dl>
+        <dt>Purpose</dt><dd>Trade super-research signals automatically, without buying a premium that is already melting.</dd>
+        <dt>Rules</dt><dd><ul>
+          <li>LONG signal → call, SHORT → put, on the signal's own ticker, from the desk's delta band.</li>
+          <li>The signal does not place the order. The chosen contract's bid is sampled for a minimum observation window and bought only while rising or stable.</li>
+          <li>A fading bid is not discarded — watching continues and the trade fires the moment a trailing window turns steady again, giving up at a maximum wait.</li>
+          <li>"Falling" includes a bid that spiked and gave the move back, not merely one that ended lower.</li>
+          <li>Expirations run today out to a maximum DTE. Same-day contracts are entered only before the 0DTE cutoff, checked twice — once so an observation that cannot finish in time never starts, and again at the order.</li>
+          <li>After an entry the ticker is on cooldown; later signals are ignored however good. The cooldown is read from the position ledger, not watcher memory, so it survives a restart, and it is re-checked at the order so two observations ripening together cannot both slip through.</li>
+          <li>Rejected buys do not start a cooldown — an order that never reached the book must not lock a ticker out.</li>
+        </ul></dd>
+      </dl></div>
+    </div>
+
+    <div class="wf">
+      <div class="wf-head"><span class="wf-id">T-4</span><span class="wf-name">Auto-trade: opening-range level cross</span></div>
+      <div class="wf-body"><dl>
+        <dt>Rules</dt><dd><ul>
+          <li>A new cross above the 10-minute high is a call candidate; below the low, a put.</li>
+          <li>Only crosses stamped inside the configured CST window qualify.</li>
+          <li>A candidate waits a confirmation interval, then the snapshot is re-read: the trade fires only if that level's latest signal is still the same. A flip back inside the range cancels it.</li>
+          <li>Orders are pinned to today's expiration and sized by percentage of option buying power. Landing below the minimum skips the trade — recorded, not retried.</li>
+          <li>Each <code>(date, ticker, level, bar)</code> trades at most once; the watcher re-arms per CST date.</li>
+        </ul></dd>
+      </dl></div>
+    </div>
+
+    <div class="wf">
+      <div class="wf-head"><span class="wf-id">T-5</span><span class="wf-name">Market data reads</span></div>
+      <div class="wf-body"><dl>
+        <dt>Purpose</dt><dd>Quotes, option chains, timesales, DMI readings, options flow, hot scan.</dd>
+        <dt>Rules</dt><dd><ul>
+          <li>Indicator maths lives in exactly one place. The DMI board and the hot scan differ only in universe and gating, never in computation.</li>
+          <li>Sweeps run in the background; a read returns whatever snapshot exists and never blocks on the venue.</li>
+          <li>Missing symbols are returned as null rows, not omitted — a dropped row looks like a rendering bug rather than "no reading yet".</li>
+          <li>Every read is cached with an explicit TTL, because a reading cannot change until the next bar closes.</li>
+        </ul></dd>
+      </dl></div>
+    </div>
+
+    <h3>Bot station domain</h3>
+
+    <div class="wf">
+      <div class="wf-head"><span class="wf-id">B-1</span><span class="wf-name">Start a bot</span></div>
+      <div class="wf-body"><dl>
+        <dt>Inputs</dt><dd>Tenant, bot key, version, per-bot bankroll, target %, stop %, contracts, and family-specific options.</dd>
+        <dt>Rules</dt><dd><ul>
+          <li><strong>One running instance per (tenant, bot).</strong> A second start is refused — a double-launch corrupted a live ledger once and must not be possible again.</li>
+          <li>Machine shutdown on halt is always forced off, whatever the bot's own default.</li>
+          <li>While the server is paper-only, every known dry-run flag is forced on and no live flag is honoured.</li>
+          <li>The subprocess environment never inherits credentials from the API process. Each bot loads its own tenant's credentials.</li>
+          <li>Bankroll and target are <strong>per bot</strong>, not per account. The venue account is shared across bots, so an account-wide floor let one bot's drawdown halt the others.</li>
+        </ul></dd>
+        <dt>Errors</dt><dd>Already running → 409 with the existing run. Script missing → report the resolved path rather than a generic failure. Credentials unusable → refuse to launch, do not start a bot that cannot trade.</dd>
+      </dl></div>
+    </div>
+
+    <div class="wf">
+      <div class="wf-head"><span class="wf-id">B-2</span><span class="wf-name">Ingest bot trades into the ledger</span></div>
+      <div class="wf-body"><dl>
+        <dt>Purpose</dt><dd>Mirror bot-owned trade records into one ledger so every family reports the same way.</dd>
+        <dt>Rules</dt><dd><ul>
+          <li>Upsert on a deterministic external id — re-running must be idempotent.</li>
+          <li>Rows corrected by reconciliation are stamped and are never overwritten by a later ingest. Without that lock the next auto-sync reverts every correction to the bot's own estimate.</li>
+          <li>The original record is preserved verbatim alongside the mapped row.</li>
+          <li>A record whose live-or-paper status is genuinely unknown is stored as unknown. It is never guessed.</li>
+        </ul></dd>
+      </dl></div>
+    </div>
+
+    <div class="wf">
+      <div class="wf-head"><span class="wf-id">B-3</span><span class="wf-name">Reconcile the ledger against the exchange</span></div>
+      <div class="wf-body"><dl>
+        <dt>Purpose</dt><dd>The bots' own realised P&amp;L is an estimate. A forensic pass found it overstated by roughly $8,000. The exchange's fills and settlements are what the account really did.</dd>
+        <dt>Rules</dt><dd><ul>
+          <li><em>Pass 1 — settle stale opens.</em> A row still open past a staleness floor: if the ticker is still an active position the bot is simply still in it, leave it. If not, it resolved — take true P&amp;L from fills and settlements and close it.</li>
+          <li><em>Pass 2 — fee true-up.</em> Closed live rows not yet priced from the exchange are recomputed so fees net out on both legs, and corrected when the booked figure differs.</li>
+          <li>Every fill is a cash outflow of <code>count × side_price + fee</code>; matched yes/no pairs redeem at $1; settlement revenue is added. The exchange records each fill as the token the account <em>acquired</em>, so a "sell yes" arrives as "no bought at 1−price".</li>
+          <li>That formula needs a market's whole fill history, so it applies only when one ledger row owns the ticker. Shared tickers fall back to per-leg arithmetic that is provably equivalent for yes-held rows only — <strong>no-held shared-ticker rows are skipped rather than mis-booked</strong>, because the inversion that would mis-book them shipped in every bot.</li>
+          <li>Reconciliation is a preview by default and applies only when asked.</li>
+        </ul></dd>
+      </dl></div>
+    </div>
+
+    <h3>Shared</h3>
+
+    <div class="wf">
+      <div class="wf-head"><span class="wf-id">S-1</span><span class="wf-name">Sign in and act as a tenant</span></div>
+      <div class="wf-body"><dl>
+        <dt>Rules</dt><dd><ul>
+          <li>One message for "no such operator" and "wrong password" — the screen must not confirm who exists. Failures are counted per typed name so username guessing is throttled too.</li>
+          <li>Lockout after repeated failures; a fixed delay burned on every failure path so a missing operator is not detectable by response time.</li>
+          <li><strong>The session determines which tenant the request acts as. Full stop.</strong> No request may name a tenant. This is the change that closes all five Phase 1 findings, and it makes four of them structurally unreachable rather than merely fixed.</li>
+          <li>Requesting a record belonging to another tenant returns <em>not found</em>, never <em>forbidden</em> — forbidden confirms the record exists.</li>
+          <li>A data query without a resolved tenant is a programming error and fails hard. It never widens to all tenants.</li>
+        </ul></dd>
+      </dl></div>
+    </div>
+
+    <div class="wf">
+      <div class="wf-head"><span class="wf-id">S-2</span><span class="wf-name">Hold and use tenant credentials</span></div>
+      <div class="wf-body"><dl>
+        <dt>Rules</dt><dd><ul>
+          <li>Credentials are stored encrypted at rest with a per-record data key wrapped by a master key from the environment. The master key is the only credential material in any file.</li>
+          <li>Decrypt at the point of use, hold briefly, never log, never return in a response, never include in an error, a stack trace, a debug dump or a support export.</li>
+          <li>Rotation and revocation happen at runtime with no downtime, and record who changed what and when.</li>
+          <li>Adding a tenant is a runtime write. No file, no migration, no deploy, no restart.</li>
+        </ul></dd>
+      </dl></div>
+    </div>
+  </section>
+
+  <section>
+    <span class="qnum">The point of the rebuild</span>
+    <h2 class="sec">Extension points and their onboarding contracts</h2>
+
+    <p>Four extension points exist. For each: what it costs today, measured; and the contract I am asking you to hold me to.</p>
+
+    <h3>1. A new bot — the primary success criterion</h3>
+
+    <p>Today the registry at <span class="cite">services/bot_registry.py:52</span> is genuinely config-driven, which is a good start and I want to keep it. Everything around it is not.</p>
+
+    <pre><i>Adding a bot family TODAY:</i>
+  1. bot_registry.py         new BotSpec entry           <em>-- config, fine</em>
+  2. api/v1/bots.py          <b>~9 new endpoints</b>, a new KEYS tuple, new validators
+  3. services/bot_manager.py new _&lt;family&gt;_env() mapper + a branch at line 458
+  4. services/ingest.py      <b>a new arm in the CSV-shape switch</b> (lines 243-272)
+  5. viduraApi.js            ~9 new client functions
+  6. BotStationSite.jsx      a new panel
+
+<i>Four families exist and each has its own near-identical route block:</i>
+  /bots/btc/*          8 endpoints
+  /bots/sports/*      11 endpoints
+  /bots/parley/*       9 endpoints
+  /bots/commodities/*  9 endpoints
+                      <b>37 endpoints performing 8 distinct operations</b></pre>
+
+    <div class="answer">
+      <span class="lbl">Contract — a new bot</span>
+      <strong>1.</strong> one config entry declaring key, name, category, versions, launch style, and its options schema<br>
+      <strong>2.</strong> one implementation class conforming to the bot adapter interface (lifecycle + record mapping)<br>
+      <strong>3.</strong> zero registration lines — discovery is automatic from the config<br><br>
+      <span class="lbl">Must not require</span>
+      editing any shared library · adding or changing any API endpoint · adding or changing any table or migration · editing any other bot's code · <strong>editing any dispatch switch</strong> · any frontend change
+    </div>
+
+    <p>The endpoint half of that is achievable because the eight operations are already identical across families: <code>status</code>, <code>start</code>, <code>stop</code>, <code>logs</code>, <code>trades</code>, <code>sync</code>, <code>processes</code>, <code>kill</code>. Keyed by <code>bot_key</code> they become eight endpoints instead of thirty-seven. The family-specific options that differ become a declared schema per bot rather than a hand-written route. Phase 4 will put every one of those merges in the consolidation table with its user-visible-change column, and Phase 6 proves the contract by onboarding a throwaway bot as a fixture.</p>
+
+    <h3>2. A new tenant</h3>
+    <div class="answer">
+      <span class="lbl">Contract — a new customer</span>
+      Three runtime writes: a tenant row, an encrypted credential record, a world-access record. <strong>Zero deploys, zero files, zero schema changes, zero restarts.</strong>
+    </div>
+    <p>Today every one of those is violated: a folder, a <code>.env</code>, a <code>.pem</code>, a <code>.sam</code>, and an edit to <code>worlds.json</code>. You have said more customers are coming, so this contract is the one with a date attached.</p>
+
+    <h3>3. A new research ticker</h3>
+    <p>Today: copy eight files, six of them byte-identical, to change sixteen constants.</p>
+    <div class="answer">
+      <span class="lbl">Contract — a new research ticker</span>
+      One config entry carrying the sixteen values that genuinely vary. Zero copied files.
+    </div>
+
+    <h3>4. A new world</h3>
+    <p>Today a world is a frontend route plus a <code>worlds.json</code> key. Since the trading domain serves two worlds already and the backend has no world discriminator at all, this stays cheap — and the spec keeps it that way: <strong>a world is a presentation grouping, never a backend concept.</strong> Adding one must require zero backend endpoints and zero tables.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Your call</span>
+    <h2 class="sec">Decisions — behaviour I will not change silently</h2>
+
+    <p>The brief says bugs are neither carried forward nor fixed without you. Eleven items. The first four are the security fixes; they are the only ones I would push back on if refused.</p>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D1</span><span class="dec-title">Tenant comes from the session, never from the request</span><span class="tag crit">Security</span></div>
+      <div class="dec-body">
+        <p>Removes <code>user_id</code> from every request. Kills the <code>?operator=</code> switch, the parameter-swap attack, and the "new user pointed at an existing folder" escalation in one change.</p>
+        <div class="prop"><span class="lbl">Proposed</span>Adopt. User-visible impact for sampath: none — the resolved id is identical. For any other operator: they stop seeing sampath's data, which is a bug being removed. <strong>Frontend diff required</strong> and it lands in the same change set (Phase 4 rule).</div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D2</span><span class="dec-title">An unscoped query fails instead of returning every tenant</span><span class="tag crit">Security</span></div>
+      <div class="dec-body">
+        <p>Inverts <code>if user_id:</code>. Any endpoint that today returns all tenants' rows when the parameter is omitted will instead refuse.</p>
+        <div class="prop"><span class="lbl">Proposed</span>Adopt. No screen requests an unscoped list; any that did was displaying other operators' trades.</div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D3</span><span class="dec-title">Delete the password-verification endpoint</span><span class="tag crit">Security</span></div>
+      <div class="dec-body">
+        <p><code>POST /users/{user_id}/verify-password</code> is an unthrottled oracle against any operator's password, bypassing every defence <code>/auth/login</code> has. Nothing calls it. Its docstring calls it a "legacy wellness/sports app login contract".</p>
+        <div class="prop"><span class="lbl">Proposed</span>Delete. <strong>I need you to confirm no external app outside this repo calls it</strong> — that is exactly the statically-invisible caller the brief warns about. If one does, it becomes a real login with real throttling.</div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D4</span><span class="dec-title">Demote the shared API key to operational endpoints</span><span class="tag ok">No caller</span></div>
+      <div class="dec-body">
+        <p>Health, readiness, version only. Anything touching tenant data requires a session, because a shared key resolves to no tenant.</p>
+        <div class="prop"><span class="lbl">Proposed</span>Adopt — evidence above shows nothing sends it today.</div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D5</span><span class="dec-title">Trades of unknown mode are invisible in both ledgers</span><span class="tag warn">User-visible</span></div>
+      <div class="dec-body">
+        <p>A row with unknown live-or-paper status appears only under "all" — not under LIVE and not under PAPER. The intent is sound: a live ledger must never quietly include an unverified trade. But the same rule hides those rows from the paper ledger too, so <strong>93 of sampath's v2 rows are in neither view</strong> and the two views do not sum to the whole.</p>
+        <div class="prop"><span class="lbl">Options</span><strong>(a)</strong> keep as-is; <strong>(b)</strong> show them in PAPER, since an unverified row is more likely paper than live — I do not recommend this, it launders unknowns into a category; <strong>(c)</strong> keep them out of both but surface a visible "N unclassified" count so the gap is honest rather than silent. <strong>I recommend (c)</strong>: it changes what the user sees, so it needs your approval, but it fixes a ledger that currently under-reports without saying so.</div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D6</span><span class="dec-title">Per-bot P&amp;L is measured against an account-wide baseline</span><span class="tag warn">Correctness</span></div>
+      <div class="dec-body">
+        <p>A run records the account's value at launch. The venue account is shared across bots, so the delta is "what the account did while this bot ran", not "what this bot earned". The code's own docstring says this becomes "a P&amp;L figure that quietly credits one bot with another's trades".</p>
+        <div class="prop"><span class="lbl">Proposed</span>Compute per-bot P&amp;L from that bot's own ledger rows and drop the account-baseline delta, or keep it but label it "account change during run". <strong>Either way the number on screen changes</strong>, so this is yours.</div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D7</span><span class="dec-title">Three data mutations run on every boot</span><span class="tag warn">Design</span></div>
+      <div class="dec-body">
+        <p><span class="cite">database.py:63</span> recomputes India signal timestamps; <span class="cite">:118</span> backfills btc15 modes; <span class="cite">:171</span> rewrites every stored credential-folder path. All three are idempotent and each is well argued. But they are unversioned data migrations wearing the costume of startup code, they run forever, and one of them silently rewrites where credentials are read from.</p>
+        <div class="prop"><span class="lbl">Proposed</span>Convert to versioned, run-once migrations. Keep the path-relocation behaviour but make it explicit and logged at start, not a silent <code>UPDATE</code>. Same outcomes, auditable.</div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D8</span><span class="dec-title">Sessions are in-memory, so any restart signs everyone out</span><span class="tag warn">Ops</span></div>
+      <div class="dec-body">
+        <p>Deliberate and documented — a desk left running overnight cannot be walked up to. The cost is that <strong>a deploy during market hours signs out every operator</strong>, and this desk can hold open positions with monitored stop-losses.</p>
+        <div class="prop"><span class="lbl">Proposed</span>Keep the behaviour; it is the right trade for a trading desk. But it becomes a documented precondition in <code>deploy.md</code> and <code>safe-shutdown.md</code> rather than folklore. <strong>Note the monitored stop-loss is the real exposure, not the sign-out</strong> — Phase 5's safe-shutdown doc must state what happens to a monitored SL across a restart, and I will need to verify that behaviour before writing it.</div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D9</span><span class="dec-title">The v2 CSV's undeclared column</span><span class="tag warn">Data</span></div>
+      <div class="dec-body">
+        <p>231 rows carry a 20th field the 19-column header never names; 93 rows predate it. Import must decide what the 93 are.</p>
+        <div class="prop"><span class="lbl">Proposed</span>Import all 324. Map the 20th field to the mode flag for the 231. Leave the 93 explicitly unknown rather than inferring from run windows — the existing inference joins on time ranges and I do not trust it enough to stamp real-money rows with it. Ties to D5.</div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D10</span><span class="dec-title">The main CSV is an event log, not a trade table</span><span class="tag warn">Data</span></div>
+      <div class="dec-body">
+        <p>99 rows = 45 opens + 54 close events, joined only by ticker, and ticker is not unique across the file.</p>
+        <div class="prop"><span class="lbl">Proposed</span>Reconstruct trades by pairing each close event to the most recent unclosed open on the same ticker. Report every unpaired row rather than dropping it. Phase 8 delivers the counts in a dry run before anything is written.</div>
+      </div>
+    </div>
+
+    <div class="dec">
+      <div class="dec-head"><span class="dec-id">D11</span><span class="dec-title">37 client wrappers no screen calls</span><span class="tag ok">Cleanup</span></div>
+      <div class="dec-body">
+        <p>Whole families of them — every <code>*Processes</code> and <code>*Kill</code>, <code>sportsPerformance</code>, <code>parleyActiveBets</code>, the engine-gates pair.</p>
+        <div class="prop"><span class="lbl">Proposed</span>Nothing yet. Phase 4 lists them individually with evidence and Phase 9 deletes only what you confirm. I flag it here because if any of these is a half-finished feature you intend to finish, I should design for it now rather than delete it and rebuild it later.</div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <span class="qnum">Stated plainly</span>
+    <h2 class="sec">Assumptions I had to make</h2>
+    <ol>
+      <li>Super-research signals are <strong>not tenant-scoped</strong> — they are market data, identical for everyone. Nothing in the code scopes them and nothing suggests they should be. If any operator should see a different signal set, this is wrong and the data model changes.</li>
+      <li>The <code>.sam</code> password format is a plaintext single line compared byte-wise. Phase 8 must preserve login for sampath, so the new store hashes it on first successful login rather than guessing a hash format that was never used. <strong>I will confirm this against the file before writing the import</strong>, per the brief's instruction not to guess.</li>
+      <li><code>runtime/</code> stays as vendored bot scripts. The rebuild replaces the backend around them, not the trading engines themselves — those are the strategies, not the plumbing, and rewriting them is not what you asked for.</li>
+      <li>Bot-written CSVs remain bot-owned during the transition; the ledger mirrors them. Removing CSVs entirely means changing the vendored bots, which is outside this scope until you say otherwise.</li>
+      <li>The three worlds keep their three tiles, their routes and their names. Nothing in this spec changes what the operator sees.</li>
+    </ol>
+  </section>
+
+  <div class="stopbar">
+    <h2>Stopping here for decisions</h2>
+    <p>Phase 2 is complete and still read-only — the only file changed in this whole rebuild so far is the hardcoded vendor key removed in Phase 0.</p>
+    <p>I need <strong>D1–D4</strong> approved to design the tenancy layer, <strong>D5 and D6</strong> answered because they change numbers on screen, and a yes/no on <strong>D3's external caller</strong> and <strong>D11's half-finished features</strong>. D7–D10 have recommendations you can accept by saying so.</p>
+    <p>On approval, Phase 3 designs the architecture and data model: module boundaries, the conceptual model with an evidence table citing a Phase 1 finding or Phase 2 rule for every single column, the physical SQLite schema, and the migration approach. No <code>.sql</code> until you approve that.</p>
+  </div>
+
+  <footer>
+    <span>Phase 2 of 10</span>
+    <span>11 workflows specified</span>
+    <span>4 extension points contracted</span>
+    <span>11 decisions open</span>
+    <span>Next: Phase 3 architecture</span>
+  </footer>
+
+</div>

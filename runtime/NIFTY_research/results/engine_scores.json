@@ -1,0 +1,1296 @@
+{
+ "v": 4,
+ "scored_on": "2026-08-18",
+ "fingerprint": "952b42215bbed59d55330ffa313ba9d5",
+ "bars_end": "2026-08-17 15:25:00+05:30",
+ "scores": {
+  "LONG:above_vwap+ylow_reclaim|nk0.0|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 11,
+     "wins": 3,
+     "stops": 0,
+     "acc_strict": 27.3,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 11,
+     "wins": 6,
+     "stops": 0,
+     "acc_strict": 54.5,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 11,
+     "wins": 7,
+     "stops": 1,
+     "acc_strict": 63.6,
+     "acc_tpsl": 87.5
+    },
+    "4h": {
+     "trades": 11,
+     "wins": 8,
+     "stops": 1,
+     "acc_strict": 72.7,
+     "acc_tpsl": 88.9
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 8,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 8,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 25.0,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 8,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 50.0,
+     "acc_tpsl": 80.0
+    },
+    "4h": {
+     "trades": 8,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 50.0,
+     "acc_tpsl": 80.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 10,
+     "wins": 0,
+     "stops": 1,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 10,
+     "wins": 2,
+     "stops": 3,
+     "acc_strict": 20.0,
+     "acc_tpsl": 40.0
+    },
+    "2h": {
+     "trades": 10,
+     "wins": 3,
+     "stops": 4,
+     "acc_strict": 30.0,
+     "acc_tpsl": 42.9
+    },
+    "4h": {
+     "trades": 10,
+     "wins": 4,
+     "stops": 4,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    }
+   }
+  },
+  "SHORT:below_vwap_v+mom_ignite_dn|nk0.5|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 15,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 13.3,
+     "acc_tpsl": 50.0
+    },
+    "1h": {
+     "trades": 15,
+     "wins": 4,
+     "stops": 3,
+     "acc_strict": 26.7,
+     "acc_tpsl": 57.1
+    },
+    "2h": {
+     "trades": 15,
+     "wins": 7,
+     "stops": 4,
+     "acc_strict": 46.7,
+     "acc_tpsl": 63.6
+    },
+    "4h": {
+     "trades": 15,
+     "wins": 8,
+     "stops": 5,
+     "acc_strict": 53.3,
+     "acc_tpsl": 61.5
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 5,
+     "wins": 0,
+     "stops": 1,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 5,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 20.0,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 1,
+     "acc_strict": 40.0,
+     "acc_tpsl": 66.7
+    },
+    "4h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 1,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 1,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "2h": {
+     "trades": 1,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "4h": {
+     "trades": 1,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    }
+   }
+  },
+  "LONG:s1_bounce+cvd_up|nk0.8|vm0.8|full_0930_1400": {
+   "5m": {
+    "30m": {
+     "trades": 13,
+     "wins": 4,
+     "stops": 0,
+     "acc_strict": 30.8,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 13,
+     "wins": 6,
+     "stops": 0,
+     "acc_strict": 46.2,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 13,
+     "wins": 7,
+     "stops": 0,
+     "acc_strict": 53.8,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 13,
+     "wins": 7,
+     "stops": 0,
+     "acc_strict": 53.8,
+     "acc_tpsl": 100.0
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 10,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 10.0,
+     "acc_tpsl": 50.0
+    },
+    "1h": {
+     "trades": 10,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 10.0,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 10,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 40.0,
+     "acc_tpsl": 80.0
+    },
+    "4h": {
+     "trades": 10,
+     "wins": 5,
+     "stops": 2,
+     "acc_strict": 50.0,
+     "acc_tpsl": 71.4
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 8,
+     "wins": 0,
+     "stops": 2,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 8,
+     "wins": 0,
+     "stops": 3,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "2h": {
+     "trades": 8,
+     "wins": 1,
+     "stops": 4,
+     "acc_strict": 12.5,
+     "acc_tpsl": 20.0
+    },
+    "4h": {
+     "trades": 8,
+     "wins": 1,
+     "stops": 4,
+     "acc_strict": 12.5,
+     "acc_tpsl": 20.0
+    }
+   }
+  },
+  "SHORT:yhigh_reject+hist_turn_dn|nk0.8|vm0.8|full_0930_1400": {
+   "5m": {
+    "30m": {
+     "trades": 9,
+     "wins": 3,
+     "stops": 0,
+     "acc_strict": 33.3,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 9,
+     "wins": 4,
+     "stops": 0,
+     "acc_strict": 44.4,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 9,
+     "wins": 5,
+     "stops": 0,
+     "acc_strict": 55.6,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 9,
+     "wins": 6,
+     "stops": 0,
+     "acc_strict": 66.7,
+     "acc_tpsl": 100.0
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 7,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 14.3,
+     "acc_tpsl": 50.0
+    },
+    "1h": {
+     "trades": 7,
+     "wins": 1,
+     "stops": 2,
+     "acc_strict": 14.3,
+     "acc_tpsl": 33.3
+    },
+    "2h": {
+     "trades": 7,
+     "wins": 1,
+     "stops": 2,
+     "acc_strict": 14.3,
+     "acc_tpsl": 33.3
+    },
+    "4h": {
+     "trades": 7,
+     "wins": 1,
+     "stops": 4,
+     "acc_strict": 14.3,
+     "acc_tpsl": 20.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 5,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 20.0,
+     "acc_tpsl": 50.0
+    },
+    "1h": {
+     "trades": 5,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 20.0,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 1,
+     "acc_strict": 40.0,
+     "acc_tpsl": 66.7
+    },
+    "4h": {
+     "trades": 5,
+     "wins": 3,
+     "stops": 1,
+     "acc_strict": 60.0,
+     "acc_tpsl": 75.0
+    }
+   }
+  },
+  "SHORT:macd_x_dn+weak_close|nk0.8|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 15,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 13.3,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 15,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 26.7,
+     "acc_tpsl": 80.0
+    },
+    "2h": {
+     "trades": 15,
+     "wins": 5,
+     "stops": 2,
+     "acc_strict": 33.3,
+     "acc_tpsl": 71.4
+    },
+    "4h": {
+     "trades": 15,
+     "wins": 7,
+     "stops": 4,
+     "acc_strict": 46.7,
+     "acc_tpsl": 63.6
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 5,
+     "wins": 0,
+     "stops": 1,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    },
+    "4h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 2,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 50.0,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 50.0,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 50.0,
+     "acc_tpsl": 50.0
+    }
+   }
+  },
+  "SHORT:below_vwap+yhigh_reject|nk0.0|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 14,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 28.6,
+     "acc_tpsl": 80.0
+    },
+    "1h": {
+     "trades": 14,
+     "wins": 9,
+     "stops": 1,
+     "acc_strict": 64.3,
+     "acc_tpsl": 90.0
+    },
+    "2h": {
+     "trades": 14,
+     "wins": 12,
+     "stops": 1,
+     "acc_strict": 85.7,
+     "acc_tpsl": 92.3
+    },
+    "4h": {
+     "trades": 14,
+     "wins": 12,
+     "stops": 1,
+     "acc_strict": 85.7,
+     "acc_tpsl": 92.3
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 8,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 12.5,
+     "acc_tpsl": 50.0
+    },
+    "1h": {
+     "trades": 8,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 25.0,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 8,
+     "wins": 4,
+     "stops": 2,
+     "acc_strict": 50.0,
+     "acc_tpsl": 66.7
+    },
+    "4h": {
+     "trades": 8,
+     "wins": 4,
+     "stops": 2,
+     "acc_strict": 50.0,
+     "acc_tpsl": 66.7
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 7,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 14.3,
+     "acc_tpsl": 50.0
+    },
+    "1h": {
+     "trades": 7,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 14.3,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 7,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 57.1,
+     "acc_tpsl": 80.0
+    },
+    "4h": {
+     "trades": 7,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 57.1,
+     "acc_tpsl": 80.0
+    }
+   }
+  },
+  "SHORT:yhigh_reject+cvd_dn|nk0.0|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 12,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 33.3,
+     "acc_tpsl": 80.0
+    },
+    "1h": {
+     "trades": 12,
+     "wins": 8,
+     "stops": 1,
+     "acc_strict": 66.7,
+     "acc_tpsl": 88.9
+    },
+    "2h": {
+     "trades": 12,
+     "wins": 10,
+     "stops": 1,
+     "acc_strict": 83.3,
+     "acc_tpsl": 90.9
+    },
+    "4h": {
+     "trades": 12,
+     "wins": 10,
+     "stops": 1,
+     "acc_strict": 83.3,
+     "acc_tpsl": 90.9
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 5,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 20.0,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 40.0,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 5,
+     "wins": 3,
+     "stops": 0,
+     "acc_strict": 60.0,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 5,
+     "wins": 3,
+     "stops": 0,
+     "acc_strict": 60.0,
+     "acc_tpsl": 100.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 6,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 16.7,
+     "acc_tpsl": 50.0
+    },
+    "1h": {
+     "trades": 6,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 16.7,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 6,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 66.7,
+     "acc_tpsl": 80.0
+    },
+    "4h": {
+     "trades": 6,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 66.7,
+     "acc_tpsl": 80.0
+    }
+   }
+  },
+  "SHORT:below_vwap+yhigh_reject+cvd_dn|nk0.0|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 12,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 33.3,
+     "acc_tpsl": 80.0
+    },
+    "1h": {
+     "trades": 12,
+     "wins": 8,
+     "stops": 1,
+     "acc_strict": 66.7,
+     "acc_tpsl": 88.9
+    },
+    "2h": {
+     "trades": 12,
+     "wins": 10,
+     "stops": 1,
+     "acc_strict": 83.3,
+     "acc_tpsl": 90.9
+    },
+    "4h": {
+     "trades": 12,
+     "wins": 10,
+     "stops": 1,
+     "acc_strict": 83.3,
+     "acc_tpsl": 90.9
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 5,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 20.0,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 40.0,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 5,
+     "wins": 3,
+     "stops": 0,
+     "acc_strict": 60.0,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 5,
+     "wins": 3,
+     "stops": 0,
+     "acc_strict": 60.0,
+     "acc_tpsl": 100.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 6,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 16.7,
+     "acc_tpsl": 50.0
+    },
+    "1h": {
+     "trades": 6,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 16.7,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 6,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 66.7,
+     "acc_tpsl": 80.0
+    },
+    "4h": {
+     "trades": 6,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 66.7,
+     "acc_tpsl": 80.0
+    }
+   }
+  },
+  "SHORT:below_vwap+macd_x_dn+weak_close|nk0.8|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 12,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 16.7,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 12,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 33.3,
+     "acc_tpsl": 80.0
+    },
+    "2h": {
+     "trades": 12,
+     "wins": 5,
+     "stops": 1,
+     "acc_strict": 41.7,
+     "acc_tpsl": 83.3
+    },
+    "4h": {
+     "trades": 12,
+     "wins": 6,
+     "stops": 3,
+     "acc_strict": 50.0,
+     "acc_tpsl": 66.7
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 5,
+     "wins": 0,
+     "stops": 1,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    },
+    "4h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 2,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 50.0,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 50.0,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 50.0,
+     "acc_tpsl": 50.0
+    }
+   }
+  },
+  "SHORT:macd_x_dn+weak_close+cvd_dn|nk0.8|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 12,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 16.7,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 12,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 33.3,
+     "acc_tpsl": 80.0
+    },
+    "2h": {
+     "trades": 12,
+     "wins": 5,
+     "stops": 1,
+     "acc_strict": 41.7,
+     "acc_tpsl": 83.3
+    },
+    "4h": {
+     "trades": 12,
+     "wins": 6,
+     "stops": 3,
+     "acc_strict": 50.0,
+     "acc_tpsl": 66.7
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 5,
+     "wins": 0,
+     "stops": 1,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    },
+    "4h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 2,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 50.0,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 50.0,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 50.0,
+     "acc_tpsl": 50.0
+    }
+   }
+  },
+  "SHORT:below_vwap+macd_x_dn+weak_close+cvd_dn|nk0.8|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 12,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 16.7,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 12,
+     "wins": 4,
+     "stops": 1,
+     "acc_strict": 33.3,
+     "acc_tpsl": 80.0
+    },
+    "2h": {
+     "trades": 12,
+     "wins": 5,
+     "stops": 1,
+     "acc_strict": 41.7,
+     "acc_tpsl": 83.3
+    },
+    "4h": {
+     "trades": 12,
+     "wins": 6,
+     "stops": 3,
+     "acc_strict": 50.0,
+     "acc_tpsl": 66.7
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 5,
+     "wins": 0,
+     "stops": 1,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    },
+    "4h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 40.0,
+     "acc_tpsl": 50.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 2,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 50.0,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 50.0,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 2,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 50.0,
+     "acc_tpsl": 50.0
+    }
+   }
+  },
+  "SHORT:r1_reject+weak_close|nk0.0|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 9,
+     "wins": 0,
+     "stops": 1,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 9,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 11.1,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 9,
+     "wins": 3,
+     "stops": 2,
+     "acc_strict": 33.3,
+     "acc_tpsl": 60.0
+    },
+    "4h": {
+     "trades": 9,
+     "wins": 4,
+     "stops": 2,
+     "acc_strict": 44.4,
+     "acc_tpsl": 66.7
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 10,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 10.0,
+     "acc_tpsl": 50.0
+    },
+    "1h": {
+     "trades": 10,
+     "wins": 1,
+     "stops": 1,
+     "acc_strict": 10.0,
+     "acc_tpsl": 50.0
+    },
+    "2h": {
+     "trades": 10,
+     "wins": 2,
+     "stops": 2,
+     "acc_strict": 20.0,
+     "acc_tpsl": 50.0
+    },
+    "4h": {
+     "trades": 10,
+     "wins": 3,
+     "stops": 3,
+     "acc_strict": 30.0,
+     "acc_tpsl": 50.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 6,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 6,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "2h": {
+     "trades": 6,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 33.3,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 6,
+     "wins": 3,
+     "stops": 0,
+     "acc_strict": 50.0,
+     "acc_tpsl": 100.0
+    }
+   }
+  },
+  "SHORT:below_vwap+adi_dn+yhigh_reject|nk0.0|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 11,
+     "wins": 3,
+     "stops": 1,
+     "acc_strict": 27.3,
+     "acc_tpsl": 75.0
+    },
+    "1h": {
+     "trades": 11,
+     "wins": 8,
+     "stops": 1,
+     "acc_strict": 72.7,
+     "acc_tpsl": 88.9
+    },
+    "2h": {
+     "trades": 11,
+     "wins": 10,
+     "stops": 1,
+     "acc_strict": 90.9,
+     "acc_tpsl": 90.9
+    },
+    "4h": {
+     "trades": 11,
+     "wins": 10,
+     "stops": 1,
+     "acc_strict": 90.9,
+     "acc_tpsl": 90.9
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 6,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 16.7,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 6,
+     "wins": 2,
+     "stops": 1,
+     "acc_strict": 33.3,
+     "acc_tpsl": 66.7
+    },
+    "2h": {
+     "trades": 6,
+     "wins": 3,
+     "stops": 1,
+     "acc_strict": 50.0,
+     "acc_tpsl": 75.0
+    },
+    "4h": {
+     "trades": 6,
+     "wins": 3,
+     "stops": 1,
+     "acc_strict": 50.0,
+     "acc_tpsl": 75.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 3,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 3,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "2h": {
+     "trades": 3,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 66.7,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 3,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 66.7,
+     "acc_tpsl": 100.0
+    }
+   }
+  },
+  "SHORT:adi_dn+yhigh_reject+cvd_dn|nk0.0|vm0.8|mid_1030_1300": {
+   "5m": {
+    "30m": {
+     "trades": 10,
+     "wins": 3,
+     "stops": 1,
+     "acc_strict": 30.0,
+     "acc_tpsl": 75.0
+    },
+    "1h": {
+     "trades": 10,
+     "wins": 7,
+     "stops": 1,
+     "acc_strict": 70.0,
+     "acc_tpsl": 87.5
+    },
+    "2h": {
+     "trades": 10,
+     "wins": 9,
+     "stops": 1,
+     "acc_strict": 90.0,
+     "acc_tpsl": 90.0
+    },
+    "4h": {
+     "trades": 10,
+     "wins": 9,
+     "stops": 1,
+     "acc_strict": 90.0,
+     "acc_tpsl": 90.0
+    }
+   },
+   "15m": {
+    "30m": {
+     "trades": 5,
+     "wins": 1,
+     "stops": 0,
+     "acc_strict": 20.0,
+     "acc_tpsl": 100.0
+    },
+    "1h": {
+     "trades": 5,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 40.0,
+     "acc_tpsl": 100.0
+    },
+    "2h": {
+     "trades": 5,
+     "wins": 3,
+     "stops": 0,
+     "acc_strict": 60.0,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 5,
+     "wins": 3,
+     "stops": 0,
+     "acc_strict": 60.0,
+     "acc_tpsl": 100.0
+    }
+   },
+   "30m": {
+    "30m": {
+     "trades": 3,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "1h": {
+     "trades": 3,
+     "wins": 0,
+     "stops": 0,
+     "acc_strict": 0.0,
+     "acc_tpsl": 0.0
+    },
+    "2h": {
+     "trades": 3,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 66.7,
+     "acc_tpsl": 100.0
+    },
+    "4h": {
+     "trades": 3,
+     "wins": 2,
+     "stops": 0,
+     "acc_strict": 66.7,
+     "acc_tpsl": 100.0
+    }
+   }
+  }
+ }
+}

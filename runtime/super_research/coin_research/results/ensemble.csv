@@ -1,0 +1,11 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:above_vwap+above_pivot+macd_x_up|nk0.0|vm0.8|mid_1030_1300,14,0.23,13,1,0,92.9,92.9,13.0,3.6,0.3,7.5
+LONG:adi_up+above_pivot+macd_x_up|nk0.0|vm0.8|mid_1030_1300,14,0.23,13,1,0,92.9,92.9,13.0,3.6,0.3,6.8
+LONG:above_vwap+adi_up+above_pivot+macd_x_up|nk0.0|vm0.8|mid_1030_1300,13,0.22,12,1,0,92.3,92.3,12.0,3.3,0.3,6.9
+LONG:above_pivot+macd_x_up+cvd_up|nk0.0|vm0.8|mid_1030_1300,12,0.2,11,1,0,91.7,91.7,11.0,3.0,0.3,6.7
+LONG:above_vwap+above_pivot+macd_x_up+cvd_up|nk0.0|vm0.8|mid_1030_1300,12,0.2,11,1,0,91.7,91.7,11.0,3.0,0.3,6.7
+LONG:adi_up+above_pivot+macd_x_up+cvd_up|nk0.0|vm0.8|mid_1030_1300,12,0.2,11,1,0,91.7,91.7,11.0,3.0,0.3,6.7
+LONG:above_vwap+above_pivot+macd_x_up+strong_close|nk0.0|vm0.8|mid_1030_1300,9,0.15,8,1,0,88.9,88.9,8.0,2.1,0.3,7.2
+LONG:above_pivot+macd_x_up|nk0.0|vm0.8|mid_1030_1300,17,0.28,15,2,0,88.2,88.2,7.5,3.9,0.3,7.9
+LONG:above_vwap+above_pivot+mom_ignite_up|nk0.0|vm1.2|pm_1130_1400,8,0.13,7,1,0,87.5,87.5,7.0,1.8,0.3,6.2
+LONG:above_pivot+macd_x_up+hist_turn_up|nk0.0|vm0.8|full_0845_1400,8,0.13,7,1,0,87.5,87.5,7.0,1.8,0.3,6.9

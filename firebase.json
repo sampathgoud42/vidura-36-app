@@ -1,0 +1,65 @@
+{
+  "_comment": [
+    "Firebase Hosting in front of the Cloud Run service. Hosting serves the",
+    "built SPA from its CDN and rewrites /api/** to the container, so the",
+    "browser talks to one origin and apiBase() resolving to same-origin is",
+    "correct with no CORS involved and no backend URL baked into the bundle.",
+    "",
+    "KNOWN LIMIT: a Hosting rewrite to Cloud Run times out at 60 seconds.",
+    "GET /api/v1/desk36/dmi is allowed 120s by the client because a cold scan",
+    "of a full watchlist makes one timesales call per symbol. A warm board is",
+    "far under 60s, but a cold one can exceed it and will surface as a 504 on",
+    "the DI readings only. If that bites, open the Cloud Run URL directly -",
+    "the container serves the same SPA itself and has no such ceiling.",
+    "",
+    "serviceId/region must match what deploy/cloudrun.sh created."
+  ],
+  "hosting": {
+    "public": "frontend/dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/**",
+        "run": {
+          "serviceId": "tradier-bot",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "/health",
+        "run": {
+          "serviceId": "tradier-bot",
+          "region": "us-central1"
+        }
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "/assets/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "/index.html",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache, no-store, must-revalidate"
+          }
+        ]
+      }
+    ]
+  }
+}

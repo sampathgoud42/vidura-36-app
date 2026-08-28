@@ -1,0 +1,12 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:above_vwap+adi_up+ylow_reclaim|nk0.0|vm1.2|full_0845_1400,9,0.15,9,0,0,100.0,100.0,inf,2.7,0.0,8.3
+LONG:macd_x_up+rsi_thrust_up|nk0.0|vm0.8|full_0845_1400,8,0.13,8,0,0,100.0,100.0,inf,2.4,0.0,9.4
+SHORT:vwap_loss+below_pivot+macd_x_dn+cvd_dn|nk0.0|vm0.8|full_0845_1400,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,10.0
+LONG:vwap_reclaim+delta_surge|nk0.0|vm0.8|pm_1130_1400,7,0.12,7,0,0,100.0,100.0,inf,2.1,0.0,22.9
+LONG:mom_ignite_up+rsi_thrust_up|nk0.0|vm0.8|full_0845_1400,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,10.8
+LONG:above_vwap+yhigh_break|nk0.8|vm0.8|pm_1130_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,22.0
+LONG:above_vwap+ylow_reclaim|nk0.0|vm0.8|mid_1030_1300,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,14.2
+LONG:above_pivot+macd_x_up_neg|nk0.0|vm1.2|am_0845_1130,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,5.0
+SHORT:vwap_loss+delta_dump+below_pivot+cvd_dn|nk0.0|vm0.8|am_0845_1130,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,5.0
+LONG:above_vwap+s1_bounce+strong_close|nk0.8|vm1.2|full_0845_1400,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,9.2
+SHORT:below_vwap+below_pivot+macd_x_dn+hist_turn_dn|nk0.0|vm0.8|full_0845_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,16.0

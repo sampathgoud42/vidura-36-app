@@ -1,0 +1,103 @@
+{
+ "symbol": "SPY",
+ "as_of": "2026-08-01T00:00:00.33Z",
+ "market_open": false,
+ "price": {
+  "bid": 744.18,
+  "ask": 744.6,
+  "mid": 744.39,
+  "last": 744.39,
+  "last_update": "2026-08-01T00:00:00.33Z"
+ },
+ "volatility": {
+  "atm_iv": 12.59,
+  "hv_20": 12.7,
+  "hv_60": 13.81,
+  "vrp": null,
+  "skew_25d": null,
+  "iv_term_structure": null
+ },
+ "options_flow": {
+  "total_call_oi": 5460188,
+  "total_put_oi": 10248293,
+  "total_call_volume": 227,
+  "total_put_volume": 76,
+  "pc_ratio_oi": 1.877,
+  "pc_ratio_volume": 0.335,
+  "active_expirations": 34
+ },
+ "exposure": {
+  "net_gex": 105493187,
+  "net_dex": null,
+  "net_vex": null,
+  "net_chex": null,
+  "gamma_flip": 743.642301517826,
+  "call_wall": 745,
+  "put_wall": 740,
+  "max_pain": null,
+  "highest_oi_strike": 520,
+  "regime": "positive_gamma",
+  "interpretation": {
+   "gamma": "Dealers long gamma \u2014 moves dampened, mean reversion likely",
+   "vanna": null,
+   "charm": null
+  },
+  "hedging_estimate": null,
+  "zero_dte": null,
+  "top_strikes": null,
+  "oi_weighted_dte": 118.7
+ },
+ "macro": {
+  "vix": {
+   "value": 15.99,
+   "change": -1.1,
+   "change_pct": -6.44,
+   "as_of": "2026-07-31T20:15:01Z"
+  },
+  "vvix": {
+   "value": 91.64,
+   "change": -3.02,
+   "change_pct": -3.19,
+   "as_of": "2026-07-31T20:15:01Z"
+  },
+  "skew": {
+   "value": 141.23,
+   "change": 1.33,
+   "change_pct": 0.95,
+   "as_of": "2026-07-31T21:00:44Z"
+  },
+  "spx": {
+   "value": 7489.72,
+   "change": 52.09,
+   "change_pct": 0.7,
+   "as_of": "2026-07-31T21:22:12Z"
+  },
+  "move": {
+   "value": 83.0244,
+   "change": 5.93,
+   "change_pct": 7.69,
+   "as_of": "2026-07-31T20:34:30Z"
+  },
+  "vix_term_structure": {
+   "levels": {
+    "vix9d": 13.05,
+    "vix": 15.99,
+    "vix3m": 19.02,
+    "vix6m": 21.34
+   },
+   "near_slope_pct": 22.53,
+   "structure": "contango"
+  },
+  "vix_futures": {
+   "front_month": 19.02,
+   "spot": 15.99,
+   "spread": 3.03,
+   "basis_pct": 18.95,
+   "basis": "contango"
+  },
+  "fear_and_greed": {
+   "score": 42,
+   "rating": "fear"
+  }
+ }
+}

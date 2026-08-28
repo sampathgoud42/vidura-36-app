@@ -1,0 +1,116 @@
+{
+ "symbol": "SPY",
+ "as_of": "2026-08-25T14:07:25.73Z",
+ "market_open": true,
+ "price": {
+  "bid": 765.34,
+  "ask": 765.36,
+  "mid": 765.35,
+  "last": 765.35,
+  "last_update": "2026-08-25T14:07:25.73Z"
+ },
+ "volatility": {
+  "atm_iv": 11.74,
+  "hv_20": 13.25,
+  "hv_60": 13.91,
+  "vrp": null,
+  "skew_25d": null,
+  "iv_term_structure": null
+ },
+ "options_flow": {
+  "total_call_oi": 2139797,
+  "total_put_oi": 5912126,
+  "total_call_volume": 91693,
+  "total_put_volume": 95710,
+  "pc_ratio_oi": 2.763,
+  "pc_ratio_volume": 1.044,
+  "active_expirations": 32
+ },
+ "exposure": {
+  "net_gex": -4631146048,
+  "net_dex": null,
+  "net_vex": null,
+  "net_chex": null,
+  "gamma_flip": 765.850525100721,
+  "call_wall": 770,
+  "put_wall": 765,
+  "max_pain": null,
+  "highest_oi_strike": 525,
+  "regime": "negative_gamma",
+  "interpretation": {
+   "gamma": "Dealers short gamma \u2014 moves amplified, trend following likely",
+   "vanna": null,
+   "charm": null
+  },
+  "hedging_estimate": null,
+  "zero_dte": null,
+  "top_strikes": null,
+  "oi_weighted_dte": 92
+ },
+ "macro": {
+  "vix": {
+   "value": 15.81,
+   "change": -0.04,
+   "change_pct": -0.25,
+   "as_of": "2026-08-25T14:07:01.391Z"
+  },
+  "vvix": {
+   "value": 87.75,
+   "change": 1.48,
+   "change_pct": 1.72,
+   "as_of": "2026-08-25T14:06:31.468Z"
+  },
+  "skew": {
+   "value": 145.64,
+   "change": 1.74,
+   "change_pct": 1.21,
+   "as_of": "2026-08-24T21:00:19Z"
+  },
+  "spx": {
+   "value": 7671.75,
+   "change": 18.89,
+   "change_pct": 0.25,
+   "as_of": "2026-08-25T14:07:19Z"
+  },
+  "move": {
+   "value": 73.975,
+   "change": 0.57,
+   "change_pct": 0.78,
+   "as_of": "2026-08-24T20:30:15Z"
+  },
+  "vix_term_structure": {
+   "levels": {
+    "vix9d": 14.09,
+    "vix": 15.83,
+    "vix3m": 18.46,
+    "vix6m": 20.99
+   },
+   "near_slope_pct": 12.35,
+   "structure": "contango"
+  },
+  "vix_futures": {
+   "front_month": 18.46,
+   "spot": 15.83,
+   "spread": 2.63,
+   "basis_pct": 16.61,
+   "basis": "contango"
+  },
+  "fear_and_greed": {
+   "score": 60,
+   "rating": "greed"
+  }
+ },
+ "endpoint_version": "2026.08.22",
+ "data_as_of": {
+  "node": "fa5",
+  "equity_feed": "2026-08-25T14:07:25.845Z",
+  "equity_options_feed": "2026-08-25T14:07:24.94Z",
+  "index_feed": "2026-08-25T14:07:24.073Z",
+  "index_options_feed": "2026-08-25T14:07:23.999Z",
+  "futures_feed": "2026-08-25T14:06:46.342Z",
+  "futures_options_feed": "2026-08-25T14:06:46.371Z",
+  "flow_feed": "2026-08-25T14:07:00Z",
+  "oi_feed": null,
+  "macro_feed": "2026-08-24T20:30:15Z"
+ }
+}

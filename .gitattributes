@@ -1,0 +1,38 @@
+# Line endings decide whether the launchers run at all, so they are pinned
+# here rather than left to each machine's core.autocrlf.
+#
+#   *.sh   LF    a CRLF shell script fails on Linux with a shebang error
+#                naming an interpreter that looks correct on screen
+#   *.bat  CRLF  cmd.exe mis-parses labels and multi-line blocks with LF
+*.sh  text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Source: LF everywhere, working tree included. Not because Python or Node
+# care, but because the extraction scripts rewrite only the files they patch
+# — so a mixed tree makes the next sync's diff unreadable.
+*.py   text eol=lf
+*.js   text eol=lf
+*.jsx  text eol=lf
+*.json text eol=lf
+*.css  text eol=lf
+*.html text eol=lf
+*.md   text eol=lf
+*.toml text eol=lf
+*.txt  text eol=lf
+
+# No extension to match on, and all read by Linux tooling. Not cosmetic for
+# the Dockerfile: a CRLF line carries its carriage return into the last
+# argument, so CMD's final token stops being what it looks like and the image
+# builds and then fails to start.
+Dockerfile     text eol=lf
+.dockerignore  text eol=lf
+.gitattributes text eol=lf
+.gitignore     text eol=lf
+
+# Never touched.
+*.webp binary
+*.png  binary
+*.jpg  binary
+*.db   binary
+*.pem  binary

@@ -1,0 +1,11 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:vwap_reclaim+macd_x_up|nk0.0|vm0.8|am_0845_1130,12,0.2,9,1,2,75.0,90.0,10.04,2.71,0.3,77.9
+LONG:vwap_reclaim+above_vwap+macd_x_up|nk0.0|vm0.8|am_0845_1130,12,0.2,9,1,2,75.0,90.0,10.04,2.71,0.3,77.9
+LONG:vwap_reclaim+adi_up+macd_x_up|nk0.0|vm0.8|am_0845_1130,11,0.18,9,1,1,81.8,90.0,9.53,2.56,0.3,63.2
+LONG:vwap_reclaim+above_vwap+adi_up+macd_x_up|nk0.0|vm0.8|am_0845_1130,11,0.18,9,1,1,81.8,90.0,9.53,2.56,0.3,63.2
+LONG:vwap_reclaim+macd_x_up_neg|nk0.0|vm0.8|am_0845_1130,11,0.18,8,1,2,72.7,88.9,9.04,2.41,0.3,82.3
+LONG:vwap_reclaim+above_vwap+macd_x_up_neg|nk0.0|vm0.8|am_0845_1130,11,0.18,8,1,2,72.7,88.9,9.04,2.41,0.3,82.3
+LONG:vwap_reclaim+above_pivot+macd_x_up|nk0.0|vm0.8|full_0845_1400,11,0.18,8,1,2,72.7,88.9,9.04,2.41,0.3,63.6
+LONG:vwap_reclaim+macd_x_up+macd_x_up_neg|nk0.0|vm0.8|am_0845_1130,11,0.18,8,1,2,72.7,88.9,9.04,2.41,0.3,82.3
+LONG:vwap_reclaim+above_vwap+above_pivot+macd_x_up|nk0.0|vm0.8|full_0845_1400,11,0.18,8,1,2,72.7,88.9,9.04,2.41,0.3,63.6
+LONG:vwap_reclaim+above_vwap+macd_x_up+macd_x_up_neg|nk0.0|vm0.8|am_0845_1130,11,0.18,8,1,2,72.7,88.9,9.04,2.41,0.3,82.3

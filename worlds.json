@@ -1,0 +1,23 @@
+{
+  "_comment": "Which worlds each operator may open. A world set to false is refused by the app with a hard stop rather than hidden, so someone following an old bookmark is told why instead of landing on a blank page. Unlisted operators get `defaults`. `default` is the world they land on at /, and it must be one they are allowed to open.",
+
+  "defaults": {
+    "worlds": {
+      "tradier-platform": true,
+      "36-trade-desk": true,
+      "bot-station": true
+    },
+    "default": "tradier-platform"
+  },
+
+  "users": {
+    "sampath": {
+      "worlds": {
+        "tradier-platform": true,
+        "36-trade-desk": true,
+        "bot-station": true
+      },
+      "default": "36-trade-desk"
+    }
+  }
+}

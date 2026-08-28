@@ -1,0 +1,58 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+var/
+*.log
+*.out
+*.err
+test_app.db
+*.db
+*.db-shm
+*.db-wal
+.idea/
+.vscode/
+
+# --- SECRETS -----------------------------------------------------------
+# customers/<user>/ holds live Tradier tokens, Kalshi API keys, private
+# keys and login passwords. Never commit any of it.
+customers/
+.env
+
+# The flashAlpha key lives in the vendored runtime, and so do the Kalshi
+# credentials the sports bot reads (kaslhi_sports_secrets.env).
+runtime/**/*.env
+# ...but the two NON-secret bot configs must ship, or a fresh clone has no
+# sport list, no band, no series. Both say so in their own header.
+!runtime/prediction-trade/kalshi/sports/kaslhi_sports.env
+!runtime/prediction-trade/kalshi/btc/btc.env
+runtime/**/*.pem
+runtime/**/*.lock
+
+# --- machine-local runtime state ---------------------------------------
+runtime/**/__pycache__/
+runtime/**/cache/
+runtime/**/*.out
+runtime/**/*.log
+runtime/**/*.err
+runtime/super_research/.resolve_state.json
+runtime/super_research/.agg_state_*.json
+runtime/super_research/.archive_state.json
+
+# --- frontend -----------------------------------------------------------
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# --- bot station: per-run state the Kalshi bots write beside themselves ---
+# Ledgers, session state and scraped rankings are this machine's history,
+# not the project. The bots recreate every one of them on the next run.
+runtime/prediction-trade/**/*_state.json
+runtime/prediction-trade/**/*_state_paper.json
+runtime/prediction-trade/**/*_trade_history*.csv
+runtime/prediction-trade/**/trade_history*.csv
+runtime/prediction-trade/**/bot_*_state.json
+runtime/prediction-trade/sports/tennis/web/tennis_rankings.csv
+runtime/prediction-trade/sports/tennis/web/archive_data/

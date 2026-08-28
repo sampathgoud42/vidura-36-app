@@ -1,0 +1,76 @@
+{
+ "updated": "2026-08-18 17:34:42 CST",
+ "tickers": {
+  "SPY": {
+   "levels": {
+    "yesterday_high": 776.78,
+    "yesterday_low": 772.51,
+    "postmarket_high": 776.48,
+    "postmarket_low": 767.8,
+    "10min_high": 769.46,
+    "10min_low": 767.91
+   },
+   "latest": {
+    "10min_high": {
+     "signal": "below_10min_high",
+     "dir": "SHORT",
+     "time": "08:00"
+    },
+    "postmarket_low": {
+     "signal": "below_postmarket_low",
+     "dir": "SHORT",
+     "time": "14:50"
+    },
+    "10min_low": {
+     "signal": "below_10min_low",
+     "dir": "SHORT",
+     "time": "14:40"
+    }
+   }
+  },
+  "QQQ": {
+   "levels": {
+    "yesterday_high": 734.58,
+    "yesterday_low": 729.27,
+    "postmarket_high": 730.1,
+    "postmarket_low": 719.97,
+    "10min_high": 721.77,
+    "10min_low": 718.79
+   },
+   "latest": {
+    "10min_high": {
+     "signal": "below_10min_high",
+     "dir": "SHORT",
+     "time": "07:05"
+    },
+    "postmarket_low": {
+     "signal": "below_postmarket_low",
+     "dir": "SHORT",
+     "time": "08:45"
+    },
+    "10min_low": {
+     "signal": "below_10min_low",
+     "dir": "SHORT",
+     "time": "12:15"
+    }
+   }
+  },
+  "SPX": {
+   "levels": {
+    "yesterday_high": 7790.68,
+    "yesterday_low": 7744.88,
+    "postmarket_high": 7745.07,
+    "postmarket_low": 7745.05,
+    "10min_high": 7712.86,
+    "10min_low": 7698.76
+   },
+   "latest": {
+    "10min_low": {
+     "signal": "below_10min_low",
+     "dir": "SHORT",
+     "time": "14:50"
+    }
+   }
+  }
+ }
+}

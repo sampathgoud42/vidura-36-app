@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
+}
+
+body {
+  margin: 0;
+  background: #050510;
+  color: #f4f1ea;
+  font-family: 'Outfit', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  /* the app-wide wellness reminder bar is fixed at the top; this keeps it
+     from covering the first rows of any world (0 when no reminder shows) */
+  padding-top: var(--vw-reminder-h, 0px);
+}
+
+/* branded suspense loader */
+.loader-ring {
+  width: 54px;
+  height: 54px;
+  border-radius: 9999px;
+  border: 2px solid rgba(251, 191, 36, 0.15);
+  border-top-color: #fbbf24;
+  animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- shared footer ---------------------------------------------------- */
+.site-footer {
+  position: relative;
+  z-index: 30;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem 1.25rem;
+  padding: 1.1rem 1.5rem calc(1.1rem + env(safe-area-inset-bottom));
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--footer-fg, rgba(244, 241, 234, 0.55));
+  background: var(--footer-bg, transparent);
+  border-top: 1px solid var(--footer-line, rgba(244, 241, 234, 0.08));
+  font-family: 'Outfit', sans-serif;
+}
+.site-footer b {
+  font-weight: 600;
+  color: var(--footer-hi, rgba(244, 241, 234, 0.85));
+}
+.site-footer .dot {
+  opacity: 0.4;
+}
+
+/* thin elegant scrollbars everywhere */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(160, 160, 180, 0.35) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(160, 160, 180, 0.28);
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

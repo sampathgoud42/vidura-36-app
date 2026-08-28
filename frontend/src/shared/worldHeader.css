@@ -1,0 +1,268 @@
+/* Shared world header — one bar in every world: ☰ switcher, ⌂ home,
+   notification (and optional sound) toggles. Each world sets --vw-accent. */
+
+.vw-header {
+  position: sticky;
+  /* sits below the app-wide wellness reminder bar when one is showing */
+  top: var(--vw-reminder-h, 0px);
+  z-index: 60;
+  padding-top: env(safe-area-inset-top, 0);
+  background: linear-gradient(180deg, rgba(3, 8, 6, 0.94), rgba(3, 8, 6, 0.72) 70%, transparent);
+  backdrop-filter: blur(6px);
+}
+.vw-header-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  padding: 0.5rem clamp(0.6rem, 3vw, 1.25rem);
+}
+.vw-hdr-spacer { flex: 1 1 auto; }
+/* portal target for app-wide chips (wellness routine pill) */
+.vw-hdr-slot { display: contents; }
+
+.vw-hdr-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  min-height: 44px;
+  padding: 0 0.7rem;
+  border: 1px solid color-mix(in srgb, var(--vw-accent) 32%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vw-accent) 8%, transparent);
+  color: color-mix(in srgb, var(--vw-accent) 72%, white);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+.vw-hdr-btn:hover,
+.vw-hdr-btn:active,
+.vw-hdr-btn.on {
+  border-color: var(--vw-accent);
+  background: color-mix(in srgb, var(--vw-accent) 18%, transparent);
+  color: #fff;
+}
+/* the apps burger stands apart from the world's accent — its links leave
+   the app (always new tabs) */
+.vw-appsbtn {
+  border-color: rgba(56, 189, 248, 0.4);
+  background: rgba(56, 189, 248, 0.1);
+  color: #bae6fd;
+}
+.vw-appsbtn:hover, .vw-appsbtn:active, .vw-appsbtn.on {
+  border-color: #38bdf8;
+  background: rgba(56, 189, 248, 0.22);
+  color: #fff;
+}
+.vw-appsmenu { border-color: rgba(56, 189, 248, 0.35); }
+.vw-hdr-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--vw-accent) 60%, white);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 42vw;
+}
+
+/* ── the Vidura mark: the home button, always first ─────────────────────── */
+.vw-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, #ffb347 35%, transparent);
+  background: radial-gradient(circle at 35% 30%, rgba(255, 179, 71, 0.14), rgba(255, 138, 43, 0.04));
+  flex: none;
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+}
+.vw-mark:hover {
+  box-shadow: 0 0 16px rgba(255, 179, 71, 0.45);
+  transform: scale(1.05);
+}
+.vw-mark-svg { width: 30px; height: 30px; display: block; }
+
+/* ── worlds/apps: one segmented control ─────────────────────────────────── */
+.vw-seg {
+  display: inline-flex;
+  align-items: stretch;
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--vw-accent) 32%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--vw-accent) 6%, transparent);
+  overflow: hidden;
+}
+.vw-seg-div { width: 1px; background: color-mix(in srgb, var(--vw-accent) 25%, transparent); }
+.vw-seg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0 0.85rem;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--vw-accent) 72%, white);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.vw-seg-btn:hover, .vw-seg-btn.on {
+  background: color-mix(in srgb, var(--vw-accent) 18%, transparent);
+  color: #fff;
+}
+/* the apps segment stands apart — its links leave the app (new tabs) */
+.vw-seg-btn.apps { color: #7dd3fc; }
+.vw-seg-btn.apps:hover, .vw-seg-btn.apps.on { background: rgba(56, 189, 248, 0.18); color: #fff; }
+.vw-chev { font-size: 8px; opacity: 0.7; transition: transform 0.18s ease; }
+.vw-chev.up { transform: rotate(180deg); }
+
+/* ── icon-only toggles (sound / alerts): symbol speaks, no words ────────── */
+.vw-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--vw-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--vw-accent) 8%, transparent);
+  color: color-mix(in srgb, var(--vw-accent) 75%, white);
+  cursor: pointer;
+  flex: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+.vw-icon-btn:hover { border-color: var(--vw-accent); background: color-mix(in srgb, var(--vw-accent) 18%, transparent); }
+.vw-icon-btn.on { color: #fff; }
+/* Sign-out reads in the warning colour rather than the world accent:
+   it is the one control in this header that ends something. */
+.vw-icon-btn.signout {
+  color: color-mix(in srgb, #ff6b6b 62%, #cbd5d1);
+  border-color: rgba(255, 107, 107, 0.3);
+  background: rgba(255, 107, 107, 0.07);
+}
+.vw-icon-btn.signout:hover {
+  color: #fff; border-color: #ff6b6b; background: rgba(255, 107, 107, 0.22);
+}
+.vw-icon-btn.off {
+  color: color-mix(in srgb, var(--vw-accent) 40%, #6b7280);
+  border-color: rgba(255, 77, 77, 0.35);
+}
+.vw-ic { width: 20px; height: 20px; display: block; }
+.vw-ic-off {
+  fill: none;
+  stroke: #ff4d4d;
+  stroke-width: 2;
+  stroke-linecap: round;
+  filter: drop-shadow(0 0 3px rgba(255, 77, 77, 0.6));
+}
+
+/* ── dropdown menu header with its close ✕ ──────────────────────────────── */
+.vw-menu-hd {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.15rem 0.45rem 0.35rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--vw-accent) 20%, transparent);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9.5px;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--vw-accent) 70%, white);
+}
+.vw-menu-hd.apps { color: #7dd3fc; border-bottom-color: rgba(56, 189, 248, 0.25); }
+.vw-menu-x {
+  border: 0;
+  background: transparent;
+  color: rgba(233, 245, 238, 0.55);
+  font-size: 13px;
+  min-width: 36px;
+  min-height: 36px;
+  cursor: pointer;
+  border-radius: 8px;
+}
+.vw-menu-x:hover { color: #ff8f8f; background: rgba(255, 77, 77, 0.08); }
+
+/* the switcher panel: a grid so it stays one tap from any world on a phone */
+.vw-worldmenu {
+  margin: 0 clamp(0.6rem, 3vw, 1.25rem) 0.6rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(15rem, 100%), 1fr));
+  gap: 0.4rem;
+  border: 1px solid color-mix(in srgb, var(--vw-accent) 28%, transparent);
+  border-radius: 14px;
+  background: rgba(3, 10, 7, 0.96);
+  padding: 0.5rem;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.55);
+  animation: vw-menu-in 0.16s ease-out;
+}
+@keyframes vw-menu-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .vw-worldmenu { animation: none; }
+  .vw-burger-lines i { transition: none; }
+}
+
+.vw-worlditem {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 52px;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  color: rgba(233, 245, 238, 0.85);
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.vw-worlditem:hover,
+.vw-worlditem:active { background: color-mix(in srgb, var(--vw-accent) 12%, transparent); }
+.vw-worlditem.active {
+  border-color: color-mix(in srgb, var(--vw-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--vw-accent) 16%, transparent);
+}
+.vw-worldicon { font-size: 1.15rem; width: 1.6rem; text-align: center; flex: none; }
+.vw-worldtext { display: grid; line-height: 1.25; min-width: 0; }
+.vw-worldtext b { font-size: 0.86rem; font-weight: 700; }
+.vw-worldtext small {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: rgba(233, 245, 238, 0.45);
+}
+.vw-worlddot {
+  margin-left: auto;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--vw-accent);
+  box-shadow: 0 0 8px var(--vw-accent);
+}
+
+/* hide the wordy labels on narrow phones — icons stay tappable */
+@media (max-width: 480px) {
+  .vw-hdr-txt { display: none; }
+  .vw-hdr-btn { padding: 0 0.6rem; }
+  .vw-hdr-title { max-width: 38vw; }
+}

@@ -1,0 +1,105 @@
+{
+ "symbol": "QQQ",
+ "as_of": "2026-08-24T14:02:34.834Z",
+ "data_as_of": "2026-08-24T14:02:34.834Z",
+ "market_open": true,
+ "price": {
+  "bid": 704.03,
+  "ask": 704.07,
+  "mid": 704.05,
+  "last": 704.05,
+  "last_update": "2026-08-24T14:02:34.834Z"
+ },
+ "volatility": {
+  "atm_iv": 18.79,
+  "hv_20": 22.32,
+  "hv_60": 26.08,
+  "vrp": null,
+  "skew_25d": null,
+  "iv_term_structure": null
+ },
+ "options_flow": {
+  "total_call_oi": 5183259,
+  "total_put_oi": 6299762,
+  "total_call_volume": 0,
+  "total_put_volume": 0,
+  "pc_ratio_oi": 1.215,
+  "pc_ratio_volume": null,
+  "active_expirations": 31
+ },
+ "exposure": {
+  "net_gex": -3979633838,
+  "net_dex": null,
+  "net_vex": null,
+  "net_chex": null,
+  "gamma_flip": 710.289347481582,
+  "call_wall": 730,
+  "put_wall": 700,
+  "max_pain": null,
+  "highest_oi_strike": 700,
+  "regime": "negative_gamma",
+  "interpretation": {
+   "gamma": "Dealers short gamma \u2014 moves amplified, trend following likely",
+   "vanna": null,
+   "charm": null
+  },
+  "hedging_estimate": null,
+  "zero_dte": null,
+  "top_strikes": null,
+  "oi_weighted_dte": 133.3
+ },
+ "macro": {
+  "vix": {
+   "value": 15.85,
+   "change": 0.72,
+   "change_pct": 4.76,
+   "as_of": "2026-08-24T14:02:16.326Z"
+  },
+  "vvix": {
+   "value": 88.63,
+   "change": -1.23,
+   "change_pct": -1.37,
+   "as_of": "2026-08-24T14:02:16.439Z"
+  },
+  "skew": {
+   "value": 143.9,
+   "change": 0.67,
+   "change_pct": 0.47,
+   "as_of": "2026-08-21T21:00:46Z"
+  },
+  "spx": {
+   "value": 7653.45,
+   "change": -20.92,
+   "change_pct": -0.27,
+   "as_of": "2026-08-24T14:02:33Z"
+  },
+  "move": {
+   "value": 73.399,
+   "change": 0.22,
+   "change_pct": 0.3,
+   "as_of": "2026-08-21T20:30:15Z"
+  },
+  "vix_term_structure": {
+   "levels": {
+    "vix9d": 14.54,
+    "vix": 15.99,
+    "vix3m": 18.66,
+    "vix6m": 21.1
+   },
+   "near_slope_pct": 9.97,
+   "structure": "contango"
+  },
+  "vix_futures": {
+   "front_month": 18.66,
+   "spot": 15.99,
+   "spread": 2.67,
+   "basis_pct": 16.7,
+   "basis": "contango"
+  },
+  "fear_and_greed": {
+   "score": 55,
+   "rating": "greed"
+  }
+ },
+ "endpoint_version": "2026.08.22"
+}

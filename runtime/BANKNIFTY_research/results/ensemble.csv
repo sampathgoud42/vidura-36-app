@@ -1,0 +1,11 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+SHORT:adi_dn+below_pivot+orb_break_dn+cvd_dn|nk0.8|vm0.8|mid_1030_1300,13,0.23,11,1,1,84.6,91.7,11.07,3.02,0.3,81.9
+SHORT:below_pivot+weak_close+orb_break_dn+cvd_dn|nk0.8|vm0.8|mid_1030_1300,13,0.23,10,1,2,76.9,90.9,7.37,2.61,0.41,91.9
+SHORT:adi_dn+below_pivot+orb_break_dn_v|nk0.0|vm0.8|mid_1030_1300,12,0.21,10,1,1,83.3,90.9,10.07,2.72,0.3,77.5
+SHORT:below_pivot+weak_close+orb_break_dn_v|nk0.0|vm0.8|mid_1030_1300,12,0.21,10,1,1,83.3,90.9,10.07,2.72,0.3,77.5
+SHORT:adi_dn+below_pivot+weak_close+orb_break_dn|nk0.0|vm1.2|mid_1030_1300,12,0.21,10,1,1,83.3,90.9,10.07,2.72,0.3,77.5
+SHORT:adi_dn+below_pivot+weak_close+orb_break_dn_v|nk0.0|vm0.8|mid_1030_1300,12,0.21,10,1,1,83.3,90.9,10.07,2.72,0.3,77.5
+SHORT:adi_dn+below_pivot+orb_break_dn+orb_break_dn_v|nk0.0|vm0.8|mid_1030_1300,12,0.21,10,1,1,83.3,90.9,10.07,2.72,0.3,77.5
+SHORT:below_pivot+weak_close+orb_break_dn+orb_break_dn_v|nk0.0|vm0.8|mid_1030_1300,12,0.21,10,1,1,83.3,90.9,10.07,2.72,0.3,77.5
+SHORT:delta_dump+below_pivot+orb_break_dn|nk0.0|vm0.8|mid_1030_1300,11,0.19,9,1,1,81.8,90.0,9.07,2.42,0.3,76.4
+SHORT:delta_dump+below_pivot+orb_break_dn_v|nk0.0|vm0.8|mid_1030_1300,11,0.19,9,1,1,81.8,90.0,9.07,2.42,0.3,76.4

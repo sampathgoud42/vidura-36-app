@@ -1,0 +1,8 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+SHORT:below_pivot+hist_turn_dn+orb_break_dn|nk0.8|vm0.8|pm_1130_1400,9,0.15,7,1,1,77.8,87.5,4.87,1.67,0.3,57.8
+SHORT:below_pivot+hist_turn_dn+weak_close+orb_break_dn|nk0.8|vm0.8|pm_1130_1400,9,0.15,7,1,1,77.8,87.5,4.87,1.67,0.3,57.8
+LONG:vwap_reclaim+strong_close+vwap_lo_bounce+cvd_up|nk0.0|vm1.2|full_0845_1400,8,0.13,6,1,1,75.0,85.7,5.31,1.46,0.34,73.1
+LONG:vwap_reclaim+strong_close+vwap_lo_bounce+cvd_up_v|nk0.0|vm0.8|full_0845_1400,8,0.13,6,1,1,75.0,85.7,5.31,1.46,0.34,73.1
+LONG:strong_close+vwap_reclaim_v+vwap_lo_bounce+cvd_up|nk0.0|vm0.8|full_0845_1400,8,0.13,6,1,1,75.0,85.7,5.31,1.46,0.34,73.1
+LONG:strong_close+vwap_reclaim_v+vwap_lo_bounce+cvd_up_v|nk0.0|vm0.8|full_0845_1400,8,0.13,6,1,1,75.0,85.7,5.31,1.46,0.34,73.1
+SHORT:below_vwap+below_pivot+hist_turn_dn+orb_break_dn|nk0.8|vm0.8|pm_1130_1400,8,0.13,6,1,1,75.0,85.7,4.18,1.37,0.3,57.5

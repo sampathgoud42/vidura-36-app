@@ -1,0 +1,10 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:vwap_reclaim+cvd_up|nk0.8|vm1.2|mid_1030_1300,9,0.15,6,0,3,66.7,100.0,638.24,1.9,0.0,70.0
+LONG:above_pivot+mom_ignite_up|nk0.5|vm1.2|mid_1030_1300,9,0.15,5,0,4,55.6,100.0,3.78,1.21,0.25,77.8
+LONG:vwap_reclaim+above_pivot+macd_x_up|nk0.0|vm0.8|am_0845_1130,8,0.13,6,0,2,75.0,100.0,inf,2.11,0.0,81.9
+LONG:above_pivot+hist_turn_up+rvol_thrust_up|nk0.0|vm0.8|am_0845_1130,8,0.13,5,0,3,62.5,100.0,inf,1.97,0.0,125.0
+LONG:adi_up+s1_bounce|nk0.0|vm0.8|mid_1030_1300,7,0.12,7,0,0,100.0,100.0,inf,2.1,0.0,40.0
+LONG:adi_up+s1_bounce+strong_close|nk0.8|vm1.2|full_0845_1400,7,0.12,7,0,0,100.0,100.0,inf,2.1,0.0,44.3
+LONG:delta_surge+orb_break_up_v|nk0.0|vm0.8|am_0845_1130,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,19.0
+LONG:delta_surge+s1_bounce|nk0.8|vm0.8|full_0845_1400,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,40.8
+LONG:orb_break_up+above_vwap_v+rsi_thrust_up|nk0.0|vm0.8|full_0845_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,21.0

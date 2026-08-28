@@ -1,0 +1,7 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:above_pivot+hist_turn_up+rvol_thrust_up|nk0.0|vm0.8|am_0845_1130,8,0.13,8,0,0,100.0,100.0,inf,2.4,0.0,17.5
+LONG:yhigh_break+hist_turn_up+strong_close|nk0.0|vm0.8|pm_1130_1400,7,0.12,6,0,1,85.7,100.0,inf,2.04,0.0,110.7
+SHORT:hist_turn_dn+cvd_dn+rsi_thrust_dn|nk0.8|vm0.8|full_0845_1400,6,0.1,5,0,1,83.3,100.0,inf,1.53,0.0,20.8
+LONG:macd_x_up+hist_turn_up+strong_close+cvd_up|nk0.0|vm1.2|full_0845_1400,7,0.12,7,0,0,100.0,100.0,inf,2.1,0.0,19.3
+LONG:vwap_reclaim+rvol_thrust_up|nk0.0|vm0.8|am_0845_1130,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,30.0
+LONG:yhigh_break+hist_turn_up|nk0.8|vm0.8|mid_1030_1300,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,100.0

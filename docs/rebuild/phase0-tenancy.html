@@ -1,0 +1,533 @@
+<title>Phase 0 Tenancy Model</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+  :root{
+    --ground:#EEF0F3;
+    --surface:#FFFFFF;
+    --surface-2:#F6F7F9;
+    --ink:#171A1F;
+    --ink-2:#3C444F;
+    --muted:#646E7B;
+    --rule:#D6DAE0;
+    --rule-strong:#B6BDC7;
+    --accent:#8A5200;
+    --accent-soft:#F4E7D2;
+    --critical:#9E2A19;
+    --critical-soft:#F7E2DE;
+    --warn:#7A5A05;
+    --warn-soft:#F6EDD4;
+    --ok:#2A6047;
+    --ok-soft:#DEEDE5;
+    --shadow:0 1px 2px rgba(23,26,31,.06),0 8px 24px rgba(23,26,31,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F1216;
+      --surface:#171B21;
+      --surface-2:#1D222A;
+      --ink:#E4E7EC;
+      --ink-2:#BFC6D0;
+      --muted:#8B95A3;
+      --rule:#2A313A;
+      --rule-strong:#3B444F;
+      --accent:#E3A94E;
+      --accent-soft:#2E2415;
+      --critical:#EC7B66;
+      --critical-soft:#331914;
+      --warn:#D7B152;
+      --warn-soft:#2C2513;
+      --ok:#72C098;
+      --ok-soft:#152A20;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0F1216;
+    --surface:#171B21;
+    --surface-2:#1D222A;
+    --ink:#E4E7EC;
+    --ink-2:#BFC6D0;
+    --muted:#8B95A3;
+    --rule:#2A313A;
+    --rule-strong:#3B444F;
+    --accent:#E3A94E;
+    --accent-soft:#2E2415;
+    --critical:#EC7B66;
+    --critical-soft:#331914;
+    --warn:#D7B152;
+    --warn-soft:#2C2513;
+    --ok:#72C098;
+    --ok-soft:#152A20;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box}
+  body{
+    background:var(--ground);
+    color:var(--ink);
+    font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+    font-size:16.5px;
+    line-height:1.62;
+    margin:0;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:980px;margin:0 auto;padding:0 24px 96px}
+
+  /* ---------- masthead ---------- */
+  .mast{
+    border-bottom:2px solid var(--ink);
+    padding:56px 0 20px;
+    margin-bottom:40px;
+  }
+  .eyebrow{
+    font-family:"IBM Plex Mono",ui-monospace,monospace;
+    font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;
+    color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;
+  }
+  h1{
+    font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;
+    font-weight:700;
+    font-size:clamp(2.3rem,5.6vw,3.5rem);
+    line-height:1.04;
+    letter-spacing:-.015em;
+    text-wrap:balance;
+    margin:.28em 0 .32em;
+  }
+  .standfirst{
+    font-size:1.14rem;color:var(--ink-2);max-width:62ch;margin:0;
+  }
+  .status-pill{
+    display:inline-flex;align-items:center;gap:7px;
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;
+    letter-spacing:.1em;text-transform:uppercase;
+    background:var(--warn-soft);color:var(--warn);
+    border:1px solid color-mix(in srgb,var(--warn) 34%,transparent);
+    border-radius:2px;padding:4px 9px;
+  }
+  .status-pill::before{content:"";width:6px;height:6px;background:var(--warn);border-radius:50%}
+
+  /* ---------- verdict ---------- */
+  .verdict{
+    background:var(--surface);
+    border:1px solid var(--rule);
+    border-left:4px solid var(--critical);
+    box-shadow:var(--shadow);
+    padding:26px 28px;
+    margin:0 0 48px;
+  }
+  .verdict h2{
+    font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-size:1.42rem;margin:0 0 12px;letter-spacing:-.01em;font-weight:700;
+  }
+  .verdict p{margin:0 0 12px;max-width:66ch}
+  .verdict p:last-child{margin-bottom:0}
+
+  /* ---------- sections ---------- */
+  section{margin:0 0 54px}
+  .qnum{
+    font-family:"IBM Plex Mono",monospace;
+    font-size:12px;letter-spacing:.12em;color:var(--accent);
+    text-transform:uppercase;display:block;margin-bottom:6px;
+  }
+  h2.sec{
+    font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-size:clamp(1.5rem,3vw,1.95rem);font-weight:700;
+    letter-spacing:-.012em;margin:0 0 6px;text-wrap:balance;
+    padding-bottom:10px;border-bottom:1px solid var(--rule-strong);
+  }
+  h3{
+    font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-size:1.12rem;font-weight:600;margin:30px 0 8px;letter-spacing:-.005em;
+  }
+  p{max-width:68ch}
+  a{color:var(--accent)}
+
+  .answer{
+    background:var(--surface-2);
+    border:1px solid var(--rule);
+    padding:14px 18px;margin:14px 0 20px;
+    font-size:1.02rem;
+  }
+  .answer strong{color:var(--ink)}
+  .answer .lbl{
+    font-family:"IBM Plex Mono",monospace;font-size:10.5px;
+    letter-spacing:.15em;text-transform:uppercase;color:var(--muted);
+    display:block;margin-bottom:4px;
+  }
+
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.885em}
+  code{background:var(--surface-2);border:1px solid var(--rule);border-radius:2px;padding:1px 5px}
+  .cite{
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;
+    color:var(--muted);white-space:nowrap;
+  }
+
+  /* ---------- evidence ---------- */
+  .ev{
+    display:grid;grid-template-columns:auto 1fr;gap:0;
+    border:1px solid var(--rule);background:var(--surface);
+    margin:12px 0;box-shadow:var(--shadow);
+  }
+  .ev-stripe{width:4px;background:var(--rule-strong)}
+  .ev.crit .ev-stripe{background:var(--critical)}
+  .ev.warn .ev-stripe{background:var(--warn)}
+  .ev.ok .ev-stripe{background:var(--ok)}
+  .ev-body{padding:15px 18px}
+  .ev-head{
+    display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;
+    margin-bottom:6px;
+  }
+  .ev-title{font-weight:600;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.05rem}
+  .ev p{margin:0;font-size:.965rem;color:var(--ink-2);max-width:66ch}
+  .tag{
+    font-family:"IBM Plex Mono",monospace;font-size:10px;
+    letter-spacing:.13em;text-transform:uppercase;
+    padding:2px 7px;border-radius:2px;border:1px solid;
+  }
+  .tag.crit{color:var(--critical);background:var(--critical-soft);border-color:color-mix(in srgb,var(--critical) 32%,transparent)}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 32%,transparent)}
+
+  pre{
+    background:var(--surface-2);border:1px solid var(--rule);
+    padding:13px 15px;overflow-x:auto;margin:12px 0;
+    font-family:"IBM Plex Mono",monospace;font-size:12.9px;line-height:1.6;
+    color:var(--ink-2);
+  }
+  pre b{color:var(--critical);font-weight:600}
+  pre i{color:var(--muted);font-style:normal}
+
+  .scroll{overflow-x:auto;margin:16px 0;border:1px solid var(--rule);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:.93rem;min-width:640px}
+  th,td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{
+    font-family:"IBM Plex Mono",monospace;font-size:10.5px;
+    letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+    background:var(--surface-2);white-space:nowrap;
+  }
+  tbody tr:last-child td{border-bottom:none}
+  td.num{font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace}
+
+  ul,ol{max-width:68ch;padding-left:1.15em}
+  li{margin:5px 0}
+  li::marker{color:var(--muted)}
+
+  /* ---------- decision blocks ---------- */
+  .decision{
+    background:var(--surface);border:1px solid var(--rule-strong);
+    box-shadow:var(--shadow);padding:22px 24px;margin:18px 0;
+  }
+  .decision h3{margin-top:0;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+  .dnum{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;
+    color:var(--surface);background:var(--accent);padding:2px 8px;border-radius:2px;
+  }
+  .rec{
+    border-top:1px solid var(--rule);margin-top:14px;padding-top:12px;
+    font-size:.96rem;
+  }
+  .rec .lbl{
+    font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.15em;
+    text-transform:uppercase;color:var(--accent);display:block;margin-bottom:3px;
+  }
+
+  .stopbar{
+    border:2px solid var(--critical);background:var(--critical-soft);
+    padding:20px 24px;margin:48px 0 0;
+  }
+  .stopbar h2{
+    font-family:"IBM Plex Sans Condensed",sans-serif;margin:0 0 8px;
+    font-size:1.3rem;color:var(--critical);letter-spacing:-.01em;
+  }
+  .stopbar p{margin:0;color:var(--ink-2);max-width:66ch}
+
+  footer{
+    margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:8px 22px;
+  }
+  @media (max-width:640px){
+    .wrap{padding:0 17px 64px}
+    body{font-size:16px}
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">
+      <span>Phase 0</span><span>Vidura 36 rebuild</span><span>27 Aug 2026</span>
+      <span class="status-pill">Awaiting approval</span>
+    </div>
+    <h1>Tenancy Model</h1>
+    <p class="standfirst">What a tenant is in this system, how a request resolves to one, and why nothing in the codebase today prevents one operator from trading another operator's account.</p>
+  </header>
+
+  <div class="verdict">
+    <h2>Verdict</h2>
+    <p><strong>A tenant is an individual operator.</strong> The evidence is unambiguous — no organisation layer exists anywhere in the schema, the API, or the credential layout. Q1 does not need to stop and ask.</p>
+    <p><strong>The system has no tenant isolation.</strong> Not weak isolation — none. The identity a request acts as is a <em>caller-supplied parameter</em>, and no code path anywhere compares it to the authenticated session. Any operator who can sign in can read any other operator's ledger and place live orders against their broker account by changing one query string value.</p>
+    <p>The good news is in the frontend: it always sends the logged-in user's own id, on every call, without exception. So deriving identity from the session server-side instead of from the parameter produces byte-identical results for every real user — <strong>the fix is fully compatible with constraint&nbsp;#1.</strong></p>
+  </div>
+
+  <section>
+    <span class="qnum">Question 1</span>
+    <h2 class="sec">What a tenant is</h2>
+
+    <div class="answer">
+      <span class="lbl">Decision</span>
+      <strong>One operator = one tenant.</strong> There is no B2B organisation above the user. Each operator supplies their own Kalshi and Tradier credentials and is billed by those venues directly.
+    </div>
+
+    <p>Four independent pieces of evidence agree, and none contradict:</p>
+
+    <div class="ev ok"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">The user table has no tenant column</span><span class="cite">backend/app/models/user.py:22–36</span></div>
+      <p><code>User</code> carries <code>user_id</code>, <code>username</code>, <code>email</code>, <code>user_root_folder</code>, timestamps. No <code>org_id</code>, no <code>account_id</code>, no role. Both relationships (<code>trades</code>, <code>bot_runs</code>) hang directly off the user.</p>
+    </div></div>
+
+    <div class="ev ok"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">Credentials are stored one folder per person</span><span class="cite">customers/&lt;username&gt;/</span></div>
+      <p>Four folders exist — <code>_test</code>, <code>sampath</code>, <code>sams</code>, <code>suma</code> — each holding its own <code>.env</code> (Kalshi + Tradier keys), <code>kalshi_private.pem</code>, and <code>.sam</code> password. The unit that owns credentials is the person, not a company.</p>
+    </div></div>
+
+    <div class="ev ok"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">The password lives beside the credentials, per person</span><span class="cite">backend/app/api/v1/auth.py:1–12</span></div>
+      <p>The module docstring states it outright: adding an operator is "drop a folder under customers/ with a .sam and the broker keys in it, and register the user." One folder, one login, one credential set.</p>
+    </div></div>
+
+    <div class="ev ok"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">Entitlements are keyed by username</span><span class="cite">worlds.json</span></div>
+      <p><code>users.sampath.worlds</code> grants world access per operator, with a <code>defaults</code> block for everyone else. Its own comment calls them "operators". No grouping construct exists.</p>
+    </div></div>
+
+    <h3>What this rules out</h3>
+    <p>Schema-per-tenant and database-per-tenant are both wrong here. Tenants are individuals who sign up, so their count grows without bound and their lifecycle is runtime, not release. Any model where adding a tenant means a DDL statement fails the customer Onboarding Contract before it is written.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Question 2</span>
+    <h2 class="sec">Tenant resolution</h2>
+
+    <div class="answer">
+      <span class="lbl">Required</span>
+      Exactly one mechanism, resolved once, at the edge.
+      <br><span class="lbl" style="margin-top:8px">Found</span>
+      <strong>Six mechanisms, none of them authoritative.</strong>
+    </div>
+
+    <p>The middleware at <span class="cite">backend/app/main.py:426–515</span> is an <em>authentication</em> gate. It answers "is this caller anybody?" and then hands the request on. It never answers "which tenant is this?" — that question is answered separately, and differently, by each endpoint.</p>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>#</th><th>Mechanism</th><th>Where</th><th>Trustworthy?</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td>Session token → <code>Session.user_id</code></td><td class="cite">services/sessions.py:34–55</td><td>Yes — but used only by <code>/auth/me</code></td></tr>
+        <tr><td class="num">2</td><td><code>user_id</code> query parameter</td><td class="cite">api/v1/bots.py, tradier.py, desk36.py</td><td>No — caller-supplied</td></tr>
+        <tr><td class="num">3</td><td><code>user_id</code> path segment</td><td class="cite">api/v1/kalshi.py:17, trades.py:12</td><td>No — caller-supplied</td></tr>
+        <tr><td class="num">4</td><td>Shared <code>TBOT_API_KEY</code></td><td class="cite">main.py:499–501</td><td>No — resolves to no tenant at all</td></tr>
+        <tr><td class="num">5</td><td>Env injection into bot subprocesses</td><td class="cite">services/bot_manager.py:304</td><td>Derived from #2/#3, so inherits the flaw</td></tr>
+        <tr><td class="num">6</td><td><code>username</code> lookup in <code>worlds.json</code></td><td class="cite">worlds.json</td><td>Separate key space from <code>user_id</code></td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>The gap, stated precisely</h3>
+    <p>I searched the entire backend for any comparison between the session's user and the requested user. <strong>There is none.</strong> <code>current_session</code> is imported in exactly one module — <code>auth.py</code> — and used by <code>/auth/me</code> and nothing else. Every other endpoint takes the identity it acts on from the wire.</p>
+
+    <pre><i># api/deps.py:10 — user_id comes from the request, and that is the whole check</i>
+def get_user_or_404(<b>user_id: str</b>, db: Session = Depends(get_db)) -> User:
+    user = db.get(User, user_id)
+    if user is None:
+        raise HTTPException(404, f"User {user_id} not found")
+    return user
+    <i># nothing compares user_id to the caller's session</i></pre>
+
+    <p>A signed-in operator changing <code>?user_id=</code> to another operator's id reaches <code>load_tradier_credentials(user.user_root_folder)</code> <span class="cite">services/credentials.py:113</span> and trades that account with that account's live token. The same is reachable by anything holding the shared <code>TBOT_API_KEY</code>, which is not tied to a person at all.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Question 3</span>
+    <h2 class="sec">Tenant propagation</h2>
+
+    <div class="answer">
+      <span class="lbl">Required</span>
+      It must be structurally impossible for a query to run without a tenant scope.
+      <br><span class="lbl" style="margin-top:8px">Found</span>
+      <strong>The opposite is the default.</strong> Omitting the parameter widens the query to every tenant.
+    </div>
+
+    <p>Tenant scope is applied by a truthiness check, so a missing scope silently means "all tenants" rather than "refuse":</p>
+
+    <pre><i># services/trades.py:49–50 — and the identical shape at :69–70</i>
+stmt = select(Trade)
+<b>if user_id:</b>
+    stmt = stmt.where(Trade.user_id == user_id)
+<i># user_id omitted -> every tenant's trades are returned, paginated</i></pre>
+
+    <p>The same pattern governs bot runs at <span class="cite">services/bot_manager.py:503–504</span>. It is not accidental — <span class="cite">api/v1/bots.py:51</span> documents it as intended behaviour, commenting <em>"unscoped query: no single user's files to refresh"</em>. Roughly twenty endpoints declare <code>user_id: str | None = Query(default=None)</code>, so unscoped is reachable by simply leaving the parameter off.</p>
+
+    <h3>Two further escalation paths</h3>
+
+    <div class="ev crit"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">Any caller can enumerate every tenant</span><span class="tag crit">Critical</span><span class="cite">api/v1/users.py:47–51</span></div>
+      <p><code>GET /users</code> is behind authentication but not authorisation. It returns every operator's <code>user_id</code>, username, email and credential folder path — which is exactly the input needed to exploit Q2.</p>
+    </div></div>
+
+    <div class="ev crit"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">A new user can be pointed at an existing tenant's credentials</span><span class="tag crit">Critical</span><span class="cite">api/v1/users.py:17–31, 59–67</span></div>
+      <p><code>_check_root_allowed</code> verifies only that <code>user_root_folder</code> sits <em>under</em> <code>customers_root</code>. It does not verify the folder is unclaimed. <code>POST /users</code> with <code>user_root_folder = customers/sampath</code> creates a second identity that reads sampath's live Tradier token — no password needed, because the new row is used via Q2's parameter path, never via login.</p>
+    </div></div>
+
+    <h3>Enforcement mechanism — and where SQLite changes the answer</h3>
+    <p>The brief offers Postgres row-level security as the leading candidate. <strong>Your instruction to stay strictly on SQLite removes that option:</strong> SQLite has no row-level security, no policies, and no per-session <code>SET app.tenant_id</code>. That is a genuine loss and I want it on the record rather than quietly worked around — the database can no longer be the backstop, so enforcement moves entirely into application code.</p>
+    <p>What survives that constraint, and what I recommend, is a <strong>tenant-scoped session</strong>: the repository layer is reached only through an object constructed with a resolved tenant, and the base query builder injects the <code>tenant_id</code> predicate itself. A repository constructed without a tenant raises rather than returning rows. This is defended by three things working together — no model class is importable by request handlers directly, a single unscoped-query escape hatch that is explicit and greppable for the small number of genuine admin jobs, and the Phase 6 unscoped-query test asserting a hard failure.</p>
+    <p>Honest assessment: this is enforcement by <em>construction</em>, which is materially weaker than enforcement by the database. It holds as long as nobody adds a second path to the engine. Postgres would let the database refuse a leaking query even if the code asked for one. That trade is yours to make and it is Decision 1 below.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Question 4</span>
+    <h2 class="sec">Isolation model, and how the two axes compose</h2>
+
+    <div class="answer">
+      <span class="lbl">Recommendation</span>
+      <strong>Shared tables with a <code>tenant_id</code> column.</strong> One schema. The world axis becomes a module boundary in code, not a schema boundary in the database.
+    </div>
+
+    <p>The brief asks me to say explicitly how the world axis and the tenant axis compose. They compose badly, and only one of them belongs in the database:</p>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Combination</th><th>Objects at 3 worlds &amp; N tenants</th><th>Adding a tenant costs</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>Schema-per-world × schema-per-tenant</td><td class="num">3 × N schemas</td><td>3 DDL statements + a deploy</td><td><span class="tag crit">Rejected</span></td></tr>
+        <tr><td>Schema-per-tenant only</td><td class="num">N schemas</td><td>1 DDL statement + a migration run</td><td><span class="tag crit">Rejected</span></td></tr>
+        <tr><td>Schema-per-world only</td><td class="num">3 schemas</td><td>Nothing</td><td><span class="tag warn">Not on SQLite</span></td></tr>
+        <tr><td>Single schema + <code>tenant_id</code></td><td class="num">1 schema</td><td><strong>One INSERT</strong></td><td><span class="tag ok">Recommended</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p><strong>Yes — schema-per-world × schema-per-tenant is the combinatorial explosion the brief warns about, and I am saying so.</strong> But the deciding argument is simpler than the arithmetic: the customer Onboarding Contract requires zero deploys, zero file changes and zero schema changes. Every row above except the last fails that on the "adding a tenant costs" column alone. The contract settles it.</p>
+
+    <p>SQLite reinforces this independently. It has no <code>CREATE SCHEMA</code>; the nearest equivalent is <code>ATTACH DATABASE</code>, which means a separate file per world, cross-file foreign keys that SQLite will not enforce, and no atomic cross-world transaction. Schema-per-world is not merely unnecessary on SQLite — it is not really available.</p>
+
+    <h3>Which schema owns the user tables</h3>
+    <p>The question dissolves in a single schema: there is one <code>tenants</code> table, one <code>credentials</code> table, and both worlds reference them by foreign key. This is also the honest answer, because the two worlds genuinely share the operator — sampath is one person with one login who trades on both Tradier and Kalshi. Splitting the user tables would have forced a duplicate identity per world.</p>
+
+    <div class="ev warn"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">Provisional, flagged for Phase 1 to prove</span><span class="tag warn">Not yet evidence</span></div>
+      <p>Both <code>TradierSite.jsx</code> and <code>Desk36Site.jsx</code> call the same client functions — <code>tradierQuotes</code>, <code>tradierBalance</code>, <code>tradierVenue</code>, <code>tradierPositions</code>, <code>tradierClose</code>, <code>autoTradeStatus</code>. That is consistent with your one-domain-two-clients hypothesis, but I have not yet done the call-by-call diff. I am not treating it as established, and Phase 1 will classify each difference properly.</p>
+    </div></div>
+  </section>
+
+  <section>
+    <span class="qnum">Question 5</span>
+    <h2 class="sec">Blast radius</h2>
+
+    <p>Stated plainly, as the brief requires.</p>
+
+    <div class="ev crit"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">If a single query is missing its tenant scope</span></div>
+      <p>On a <strong>read</strong>: one operator sees another's positions, ledger, P&amp;L, bankroll and bot configuration. On a <strong>write</strong> or an execution path: an order is placed, modified or closed on another operator's real brokerage account, using that operator's live token, and it settles as a genuine financial transaction. There is no compensating control — no per-order ownership check, no confirmation step keyed to identity, no audit trail that would attribute it. The affected operator's first signal is a position they did not open.</p>
+    </div></div>
+
+    <h3>What prevents it from reaching production today</h3>
+    <p>Nothing. There is no tenant isolation test in the suite of 30 test files, no authorisation layer, and no review gate that would catch it. The three findings in Q2 and Q3 are in the running system now, not hypotheticals.</p>
+
+    <h3>What will prevent it after the rebuild</h3>
+    <ol>
+      <li>Identity is resolved once at the edge from the session and never read from a parameter — a request cannot express another tenant's id, so the attack has no input surface.</li>
+      <li>The repository layer refuses to build a query without a resolved tenant, so a forgotten <code>where</code> clause is a crash, not a leak.</li>
+      <li>Phase 6 tenant isolation tests are the highest-priority category in the suite, covering every read and write path, including ID-guessing returning <em>not found</em> rather than <em>forbidden</em>.</li>
+      <li>The unscoped-query test asserts that a tenant-less query fails hard rather than returning everything — the precise inversion of <code>if user_id:</code>.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2 class="sec">Customer onboarding contract</h2>
+    <p>The brief asks for this early and holds it to the end. Filled in for this system:</p>
+
+    <pre>Adding a customer requires:
+  1. one INSERT into <b>tenants</b>
+  2. one INSERT into <b>credentials</b> (envelope-encrypted, via the admin API)
+  3. one INSERT into <b>world_access</b> (replaces worlds.json)
+
+Adding a customer must NOT require:
+  <b>-</b> creating customers/&lt;name&gt;/ or any file on disk
+  <b>-</b> writing a .env, a .pem, or a .sam
+  <b>-</b> a schema change, a migration, or a deploy
+  <b>-</b> an application restart
+  <b>-</b> editing worlds.json</pre>
+
+    <p>Today every single line in the "must NOT" list is required, which is why the current answer to "how do I add a customer" is a filesystem procedure. Phase 6 will prove the new contract by creating a tenant entirely at runtime.</p>
+  </section>
+
+  <section>
+    <h2 class="sec">Credential handling, and what I already changed</h2>
+
+    <p>Per-customer secrets live in <code>customers/&lt;name&gt;/.env</code> and <code>kalshi_private.pem</code> as plaintext on disk, and the login password sits in <code>.sam</code> as a single line of plaintext compared with <code>hmac.compare_digest</code> <span class="cite">services/credentials.py:95–110</span>. All of it is correctly gitignored — <code>customers/</code> at <span class="cite">.gitignore:21</span> — so <strong>none of it is in source control</strong>, and per your instruction it stays uncommitted. Phase 8 will move these into the encrypted store.</p>
+
+    <p>One thing needed fixing now rather than in a later phase, and you asked me to handle it:</p>
+
+    <div class="ev ok"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">Hardcoded vendor key removed from source</span><span class="tag ok">Done</span><span class="cite">backend/app/core/config.py:234</span></div>
+      <p>An API&nbsp;Ninjas commodity-price key was a literal default in <code>Settings</code> — the one and only secret-shaped literal anywhere in the codebase. The value now lives in the gitignored root <code>.env</code> as <code>TBOT_APININJAS_API_KEY</code>, the source default is <code>""</code>, and <code>.env.example</code> documents it with a dummy. Verified: the setting still resolves to the same 40-character value, so behaviour is unchanged.</p>
+    </div></div>
+
+    <p><strong>I did not put it in <code>customers/sampath/.env</code>, and here is why.</strong> That file is read only by <code>credentials.py</code>, which parses specific Kalshi and Tradier keys for a given operator — it never feeds pydantic <code>Settings</code>. Moving the key there would have silently broken the commodity price lookup. It is also the wrong axis: this is one vendor key shared by all operators, so it is application config, not customer credential, and the brief is explicit that those two must not be conflated. The root <code>.env</code> is equally gitignored, so your actual goal — the key out of source — is met either way. Say the word if you still want it on the customer folder and I will wire the loader to match.</p>
+
+    <p>Two further keys already sit in <code>customers/sampath/.env</code>: <code>API_KEY_PIXVERSE</code> and <code>API_KEY_A2EAI</code>. Neither is referenced anywhere in the codebase. They look like leftovers from unrelated work, and I have left them untouched pending your call in Phase 9.</p>
+  </section>
+
+  <section>
+    <h2 class="sec">Decisions I need from you</h2>
+
+    <div class="decision">
+      <h3><span class="dnum">01</span> SQLite removes the database-level tenancy backstop</h3>
+      <p>You have asked for strictly SQLite. That is workable, and the single-schema model above is the right shape for it — but it means a leaking query is caught by application code and tests, never by the database. Postgres row-level security would refuse the query itself.</p>
+      <div class="rec"><span class="lbl">My recommendation</span>Proceed on SQLite as instructed. The tenant-scoped repository plus the Phase 6 isolation suite is a real defence, and this is a single-machine desk with four operators, not a public SaaS. I want the trade acknowledged rather than assumed. If the operator count is ever expected to grow beyond people you personally know, this decision should be revisited before that happens.</div>
+    </div>
+
+    <div class="decision">
+      <h3><span class="dnum">02</span> Flyway cannot be used on this stack</h3>
+      <p>The brief mandates Flyway with a clean baseline. Flyway is a JVM tool and does not support SQLite; this is a Python/FastAPI/SQLAlchemy project with no JVM anywhere in it. The requirement cannot be met literally.</p>
+      <div class="rec"><span class="lbl">My recommendation</span>Use <strong>Alembic</strong> and keep every property the brief actually wanted from Flyway: a clean baseline with the old history deleted, an explicit versioning scheme, ordered and repeatable migration from an empty database, and a Phase 6 test that migrates from empty and fails the build otherwise. I will hold Alembic to the Flyway contract. Adding a world will not require editing existing migrations.</div>
+    </div>
+
+    <div class="decision">
+      <h3><span class="dnum">03</span> The shared <code>TBOT_API_KEY</code> belongs to no tenant</h3>
+      <p>It bypasses login entirely and can pass any <code>user_id</code>, so it is a permanent cross-tenant key. Once identity comes from the session, this key has no tenant to resolve to and every scoped endpoint must reject it.</p>
+      <div class="rec"><span class="lbl">My recommendation</span>Keep it, but demote it to unscoped operational endpoints only — health, readiness, version. Anything touching tenant data requires a session. I need to know what currently uses it: if a cron job, a bot supervisor, or your deploy scripts authenticate with it against data endpoints, that breaks, and Phase 1 needs to inventory those callers before Phase 4 designs around it.</div>
+    </div>
+
+    <div class="decision">
+      <h3><span class="dnum">04</span> Scope of the sampath-only migration</h3>
+      <p>You have said to use sampath as the customer for this migration. Three other folders exist: <code>_test</code>, <code>sams</code>, <code>suma</code>. <code>sams</code> and <code>suma</code> each hold real Kalshi keys and a sports trade history.</p>
+      <div class="rec"><span class="lbl">What I need</span>Confirm which you mean: <strong>(a)</strong> build and validate the whole rebuild against sampath's data only, importing the others later by the same tested path, or <strong>(b)</strong> sampath is the only tenant that carries forward and the other three are dropped. These produce different Phase 8 work and different reconciliation targets. I will assume <strong>(a)</strong> unless you say otherwise, because it is the reversible one.</div>
+    </div>
+
+    <div class="decision">
+      <h3><span class="dnum">05</span> Fixing the tenancy hole is invisible — but I still want it acknowledged</h3>
+      <p>Constraint #1 forbids user-visible change. Removing <code>user_id</code> from the wire and taking it from the session is invisible for every legitimate call, because the frontend already sends only its own id, always. The one behaviour that does change: unscoped calls stop returning all tenants' rows.</p>
+      <div class="rec"><span class="lbl">My reading</span>That is a security fix, not a UX change — no screen in the desk requests an unscoped list, and any that did was displaying other people's trades. I am treating it as approved-by-default under constraint #1 rather than as a deliberate behaviour change, but the brief says bugs are yours to decide, so I am listing it rather than fixing it silently.</div>
+    </div>
+  </section>
+
+  <div class="stopbar">
+    <h2>Stopping here for approval</h2>
+    <p>Phase 0 is complete. Nothing else has been designed, and no production code has been written beyond removing the hardcoded vendor key. Approve the tenancy model and answer the five decisions above, and I will begin Phase 1 — the read-only extraction, starting with the Tradier Platform versus 36 Trades call-by-call diff that proves or disproves the two-domain hypothesis.</p>
+  </div>
+
+  <footer>
+    <span>Phase 0 of 10</span>
+    <span>Evidence: 57 backend modules, 14,405 LOC</span>
+    <span>Blocking findings: 3 critical</span>
+    <span>Next: Phase 1 extraction</span>
+  </footer>
+
+</div>

@@ -1,0 +1,21 @@
+
+## Created
+- **[tennis/web/sofascore_rankings.py](tennis/web/sofascore_rankings.py)** — the scraper
+- **[tennis/web/requirements.txt](tennis/web/requirements.txt)** — `playwright>=1.40`
+
+## Install & run
+```bash
+pip install playwright
+playwright install chromium      # one-time browser download
+
+python tennis/web/sofascore_rankings.py          # both ATP + WTA → tennis_rankings.csv
+python tennis/web/sofascore_rankings.py atp       # one tour
+SOFA_HEADLESS=FALSE python tennis/web/sofascore_rankings.py   # debug headful
+```
+For your daily Kalshi run, just schedule that command once a day (CSV is overwritten each run). Tunables via env: `SOFA_OUTPUT`, `SOFA_HEADLESS`, `SOFA_NAV_TIMEOUT_MS`, `SOFA_DATA_WAIT_S`, `SOFA_RETRIES`, `SOFA_UA`.
+
+## Heads-up
+- **I couldn't run it live here** (Playwright/Chromium not installed). Please run the install steps, then `python tennis/web/sofascore_rankings.py` once to confirm.
+- If SofaScore's **Cloudflare challenges headless Chromium** (possible), run with `SOFA_HEADLESS=FALSE`, or add `playwright-stealth` — I can wire that in if you hit blocks.
+
+Want me to commit `tennis/web/` (script + requirements)?

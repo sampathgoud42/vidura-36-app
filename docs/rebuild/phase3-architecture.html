@@ -1,0 +1,445 @@
+<title>Phase 3 Architecture</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+  :root{
+    --ground:#EEF0F3; --surface:#FFFFFF; --surface-2:#F6F7F9;
+    --ink:#171A1F; --ink-2:#3C444F; --muted:#646E7B;
+    --rule:#D6DAE0; --rule-strong:#B6BDC7;
+    --accent:#8A5200; --accent-soft:#F4E7D2;
+    --critical:#9E2A19; --critical-soft:#F7E2DE;
+    --warn:#7A5A05; --warn-soft:#F6EDD4;
+    --ok:#2A6047; --ok-soft:#DEEDE5;
+    --shadow:0 1px 2px rgba(23,26,31,.06),0 8px 24px rgba(23,26,31,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F1216; --surface:#171B21; --surface-2:#1D222A;
+      --ink:#E4E7EC; --ink-2:#BFC6D0; --muted:#8B95A3;
+      --rule:#2A313A; --rule-strong:#3B444F;
+      --accent:#E3A94E; --accent-soft:#2E2415;
+      --critical:#EC7B66; --critical-soft:#331914;
+      --warn:#D7B152; --warn-soft:#2C2513;
+      --ok:#72C098; --ok-soft:#152A20;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0F1216; --surface:#171B21; --surface-2:#1D222A;
+    --ink:#E4E7EC; --ink-2:#BFC6D0; --muted:#8B95A3;
+    --rule:#2A313A; --rule-strong:#3B444F;
+    --accent:#E3A94E; --accent-soft:#2E2415;
+    --critical:#EC7B66; --critical-soft:#331914;
+    --warn:#D7B152; --warn-soft:#2C2513;
+    --ok:#72C098; --ok-soft:#152A20;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);
+    font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+    font-size:16.5px;line-height:1.62;margin:0;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1020px;margin:0 auto;padding:0 24px 96px}
+
+  .mast{border-bottom:2px solid var(--ink);padding:56px 0 20px;margin-bottom:36px}
+  .eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+  h1{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;font-weight:700;
+    font-size:clamp(2.3rem,5.6vw,3.5rem);line-height:1.04;letter-spacing:-.015em;
+    text-wrap:balance;margin:.28em 0 .32em}
+  .standfirst{font-size:1.14rem;color:var(--ink-2);max-width:64ch;margin:0}
+  .status-pill{display:inline-flex;align-items:center;gap:7px;
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.1em;
+    text-transform:uppercase;background:var(--ok-soft);color:var(--ok);
+    border:1px solid color-mix(in srgb,var(--ok) 34%,transparent);
+    border-radius:2px;padding:4px 9px}
+  .status-pill::before{content:"";width:6px;height:6px;background:var(--ok);border-radius:50%}
+
+  .alarm{background:var(--critical-soft);border:2px solid var(--critical);
+    padding:24px 26px;margin:0 0 48px}
+  .alarm .kicker{font-family:"IBM Plex Mono",monospace;font-size:10.5px;
+    letter-spacing:.18em;text-transform:uppercase;color:var(--critical);
+    display:block;margin-bottom:8px;font-weight:600}
+  .alarm h2{font-family:"IBM Plex Sans Condensed",sans-serif;margin:0 0 12px;
+    font-size:1.5rem;color:var(--critical);letter-spacing:-.012em;line-height:1.2}
+  .alarm p{margin:0 0 11px;max-width:70ch;color:var(--ink-2)}
+  .alarm p:last-child{margin-bottom:0}
+  .alarm strong{color:var(--ink)}
+
+  section{margin:0 0 54px}
+  .qnum{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;
+    color:var(--accent);text-transform:uppercase;display:block;margin-bottom:6px}
+  h2.sec{font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-size:clamp(1.5rem,3vw,1.95rem);font-weight:700;letter-spacing:-.012em;
+    margin:0 0 6px;text-wrap:balance;padding-bottom:10px;border-bottom:1px solid var(--rule-strong)}
+  h3{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.12rem;font-weight:600;
+    margin:30px 0 8px;letter-spacing:-.005em}
+  h4{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--muted);margin:24px 0 6px}
+  p{max-width:68ch}
+  a{color:var(--accent)}
+
+  .answer{background:var(--surface-2);border:1px solid var(--rule);
+    padding:14px 18px;margin:14px 0 20px;font-size:1.02rem}
+  .answer .lbl{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.15em;
+    text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.885em}
+  code{background:var(--surface-2);border:1px solid var(--rule);border-radius:2px;padding:1px 5px}
+  .cite{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);white-space:nowrap}
+
+  pre{background:var(--surface-2);border:1px solid var(--rule);padding:14px 16px;
+    overflow-x:auto;margin:12px 0;font-family:"IBM Plex Mono",monospace;
+    font-size:12.6px;line-height:1.62;color:var(--ink-2)}
+  pre b{color:var(--critical);font-weight:600}
+  pre em{color:var(--ok);font-style:normal;font-weight:600}
+  pre i{color:var(--muted);font-style:normal}
+  pre u{color:var(--accent);text-decoration:none;font-weight:600}
+
+  .scroll{overflow-x:auto;margin:16px 0;border:1px solid var(--rule);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:640px}
+  th,td{text-align:left;padding:8px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);background:var(--surface-2);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  td.num{font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace;text-align:right}
+  td.k{font-family:"IBM Plex Mono",monospace;font-size:.84rem;white-space:nowrap}
+  tbody tr.grp td{background:var(--surface-2);font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-weight:700;font-size:.95rem;letter-spacing:.01em}
+
+  ul,ol{max-width:68ch;padding-left:1.15em}
+  li{margin:5px 0}
+  li::marker{color:var(--muted)}
+
+  .guard{border:1px solid var(--rule);background:var(--surface);margin:14px 0;
+    box-shadow:var(--shadow);display:grid;grid-template-columns:auto 1fr}
+  .guard-n{background:var(--ink-2);color:var(--surface);font-family:"IBM Plex Mono",monospace;
+    font-size:13px;font-weight:600;display:flex;align-items:flex-start;
+    justify-content:center;padding:16px 13px;min-width:44px}
+  .guard-b{padding:14px 18px}
+  .guard-t{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;
+    font-size:1.05rem;margin-bottom:5px}
+  .guard p{margin:0 0 7px;font-size:.955rem;color:var(--ink-2);max-width:66ch}
+  .guard p:last-child{margin-bottom:0}
+
+  .tag{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.13em;
+    text-transform:uppercase;padding:2px 7px;border-radius:2px;border:1px solid}
+  .tag.crit{color:var(--critical);background:var(--critical-soft);border-color:color-mix(in srgb,var(--critical) 32%,transparent)}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 32%,transparent)}
+  .tag.new{color:var(--accent);background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 32%,transparent)}
+
+  .stopbar{border:2px solid var(--accent);background:var(--accent-soft);
+    padding:20px 24px;margin:48px 0 0}
+  .stopbar h2{font-family:"IBM Plex Sans Condensed",sans-serif;margin:0 0 8px;
+    font-size:1.3rem;color:var(--accent);letter-spacing:-.01em}
+  .stopbar p{margin:0 0 10px;color:var(--ink-2);max-width:68ch}
+  .stopbar p:last-child{margin-bottom:0}
+
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:8px 22px}
+  @media (max-width:640px){.wrap{padding:0 17px 64px}body{font-size:16px}}
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">
+      <span>Phase 3</span><span>Vidura 36 rebuild</span><span>Architecture &amp; data model</span>
+      <span class="status-pill">Decisions taken</span>
+    </div>
+    <h1>Architecture</h1>
+    <p class="standfirst">Module boundaries, the conceptual and physical model with an evidence table, and — because you asked for it explicitly — an execution-safety design that makes duplicate orders and unwatched stop-losses structurally impossible rather than merely unlikely.</p>
+  </header>
+
+  <div class="alarm">
+    <span class="kicker">Found while designing the risk layer · verify before the next live session</span>
+    <h2>Right now, if the API process stops, every open position keeps its take-profit and loses its stop-loss.</h2>
+    <p>The take-profit is a GTC limit order <strong>resting on Tradier</strong>. It survives anything that happens to this application. The stop-loss is not an order at all — it is a threshold stored in a row, compared against the bid by a Python loop inside the API process <span class="cite">main.py:325 _tradier_loop</span>. The loop's own docstring says it plainly: "its cadence IS the stop's reaction time."</p>
+    <p>So a crash, a deploy, a restart, or an unhandled exception in that task leaves live options positions with <strong>unlimited downside and an armed profit-taker</strong>. Nothing on the venue would stop them out. Nothing tells the operator this has happened.</p>
+    <p>Three narrower gaps in the same mechanism: the loop sleeps 15 seconds before its first pass, so every restart has a <strong>15–25 second blind window</strong>; the per-tenant lock is an in-process <code>threading.Lock</code> <span class="cite">tradier_bot.py:62</span>, which two uvicorn processes silently do not share — and <span class="cite">main.py:84</span> exists precisely because two once ran at the same time; and <code>place_option_order</code> <span class="cite">tradier_client.py:219</span> only implements <code>limit</code> and <code>market</code>, so nothing today <em>could</em> rest a stop on the venue even if it wanted to.</p>
+    <p><strong>This is not a refactoring artefact — it is the current production behaviour</strong>, and it is the single most consequential thing I have found. The design below treats it as the primary requirement.</p>
+  </div>
+
+  <section>
+    <span class="qnum">Your new mandate</span>
+    <h2 class="sec">Execution safety</h2>
+
+    <p>You asked for proper stop-loss validation, double confirmation on buy and sell, and no duplicates — checking existing positions and waiting before acting. I have made that the centre of the architecture rather than a checklist bolted to it. Two principles decide every detail:</p>
+
+    <div class="answer">
+      <span class="lbl">Principle 1 — structural, not procedural</span>
+      A duplicate order must be <strong>impossible to express</strong>, not merely unlikely to occur. Check-then-act is a race; a uniqueness constraint is a guarantee. Every guard below is a constraint or a lease, and the "wait and re-check" steps sit on top of that as confirmation, never as the primary defence.
+      <br><br>
+      <span class="lbl">Principle 2 — a stop must survive its watcher</span>
+      Any risk control that only exists inside a running process is not a risk control. It is a hope with a cron job.
+    </div>
+
+    <h3>The entry path, as designed</h3>
+
+    <p>Today <code>open_position</code> <span class="cite">tradier_bot.py:266</span> validates the side, the percentage, the sizing and the contract pick — and then places a real order with <strong>no check for an existing position, no check for a working order, and no idempotency key</strong>. A double-tap, or a mobile retry after the 60-second client timeout, buys twice. Note the asymmetry: the <em>exit</em> path is carefully defended — <code>_place_tp</code> asks the account what is already resting and refuses to rest more sells than the account holds. The entry path has none of that. Seven guards replace it:</p>
+
+    <div class="guard"><div class="guard-n">1</div><div class="guard-b">
+      <div class="guard-t">Idempotency key, enforced by the database</div>
+      <p>Every execution request carries a key the client generates once per operator gesture. <code>execution_attempt</code> has <code>UNIQUE(tenant_id, idempotency_key)</code>. The row is written <em>before</em> the venue is called; a second submit hits the constraint and returns the first attempt's outcome instead of placing an order.</p>
+      <p>Clients that send no key get a server-derived one: a fingerprint of tenant, contract, side, quantity and a short time bucket. A double-tap produces an identical fingerprint, so retries are absorbed even from a caller that was never updated.</p>
+    </div></div>
+
+    <div class="guard"><div class="guard-n">2</div><div class="guard-b">
+      <div class="guard-t">A cross-process lease, because a threading lock is not one</div>
+      <p>The critical section is held under a row in <code>execution_lease</code>, keyed on <code>(tenant_id, occ_symbol, venue)</code>, taken inside a <code>BEGIN IMMEDIATE</code> transaction with an expiry. SQLite in WAL mode admits exactly one writer, so this is a genuine mutex across every process on this machine — which the current <code>threading.Lock</code> is not.</p>
+      <p><strong>Stated limit:</strong> this holds for one machine sharing one database file. It does not hold across machines, and it does not hold if the file is on a network share. Both are out of scope today; both would need Postgres, and that is the same conversation as Phase 0 Decision 1.</p>
+    </div></div>
+
+    <div class="guard"><div class="guard-n">3</div><div class="guard-b">
+      <div class="guard-t">Check existing positions — the check you asked for</div>
+      <p>Inside the lease: refuse if this tenant already holds a <code>pending</code> or <code>open</code> position on the same contract and venue. The refusal names the existing position and its status, so the answer is "you already have this, here it is" rather than a bare error.</p>
+      <p>Adding deliberately to a position stays possible, but only by explicitly asking. The default answers no.</p>
+    </div></div>
+
+    <div class="guard"><div class="guard-n">4</div><div class="guard-b">
+      <div class="guard-t">Ask the venue too, not just our own records</div>
+      <p>Our database can be wrong — an order can land while the write that records it fails. So the venue is asked whether a working <code>buy_to_open</code> already exists for this contract. This is the same argument <code>_place_tp</code> already makes for sells, applied to buys: trust the account, not our stored id.</p>
+    </div></div>
+
+    <div class="guard"><div class="guard-n">5</div><div class="guard-b">
+      <div class="guard-t">Settle, then confirm — the "wait a few seconds" step</div>
+      <p>After placing, wait a short settle interval and re-read the venue's working orders for that contract. Exactly one is expected. If two appear, the extra is cancelled immediately, the position is marked for review, and the event is logged at warning level with both order ids.</p>
+      <p>This is confirmation, not protection — guards 1 and 2 are what prevent the duplicate. This is what catches the case they cannot see, which is an order placed by something outside this application.</p>
+    </div></div>
+
+    <div class="guard"><div class="guard-n">6</div><div class="guard-b">
+      <div class="guard-t">Pre-trade risk validation, refusing rather than clamping</div>
+      <p>Before anything reaches the venue: take-profit must be strictly above entry and stop strictly below; both percentages inside configured bounds; the computed stop price must be greater than zero (a 100% stop is not a stop); expiration must not be in the past; a 0DTE entry must be before the cutoff — <em>re-checked at the order</em>, not only when the request arrived; and contracts must be a positive integer inside the tenant's per-order and per-day caps.</p>
+      <p>Every failure refuses with the arithmetic that produced it. Nothing is silently clamped to a legal value — a clamped stop is a stop the operator did not choose.</p>
+    </div></div>
+
+    <div class="guard"><div class="guard-n">7</div><div class="guard-b">
+      <div class="guard-t">No entry while the stop cannot be watched</div>
+      <p>The risk monitor writes a heartbeat per tenant on every pass. If the last successful pass is older than a threshold, <strong>new entries are refused</strong> and the desk shows it. Opening a position whose stop-loss nobody is watching is worse than not trading.</p>
+      <p>This is the guard that would have made the alarm at the top of this page visible instead of silent.</p>
+    </div></div>
+
+    <h3>The exit path</h3>
+    <p>The existing sell-side logic is genuinely good and I am keeping its rules intact: cancel the resting take-profit before selling; never rest more sells than the account holds; before re-arming a cancelled order, check whether the <em>position</em> is gone too, because a sell that filled unseen looks identical. What changes is that these run under the same lease and idempotency machinery as entries, so the desk's sweep button and the background loop can no longer interleave — today they are serialised only by an in-process lock.</p>
+
+    <h3>Making the stop-loss survive its watcher</h3>
+    <p>Three layers, defence in depth:</p>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Layer</th><th>Survives</th><th>Cost</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Venue-resting stop</strong> via a bracket order, so take-profit and stop are one linked pair on Tradier</td><td>Anything. Process death, machine death, network loss.</td><td>New venue integration — the client implements only limit and market today. Must be proven against the sandbox before it is trusted.</td><td><span class="tag new">Proposed</span></td></tr>
+        <tr><td><strong>Monitored stop</strong>, as today but with a first pass on startup instead of a 15-second sleep</td><td>Restarts, once running. Not process death.</td><td>None — it exists.</td><td><span class="tag ok">Keep</span></td></tr>
+        <tr><td><strong>Heartbeat and entry block</strong> (guard 7)</td><td>Nothing — it makes the failure loud instead of silent.</td><td>None.</td><td><span class="tag ok">Adopt</span></td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p><strong>My recommendation is all three, and the venue-resting stop is the one that actually closes the hole.</strong> The other two shrink the window and make it visible; only an order the venue holds removes the dependency on us being alive. I am flagging it separately below because it is the one design decision here that adds real integration risk, and a stop that rests wrongly is its own kind of accident.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Structure</span>
+    <h2 class="sec">Module boundaries</h2>
+
+    <pre><u>api/</u>                     HTTP edge. Routers, request/response shapes, and the ONE
+                         place a tenant is resolved. Owns no rules.
+<u>domains/trading/</u>        market/     quotes, chains, bars, indicators (one implementation)
+                         execution/  order placement, idempotency, position lifecycle
+                         risk/       stop engine, pre-trade validation, heartbeat
+                         signals/    super-research store (supporting, one consumer)
+                         strategies/ auto-trade watchers
+<u>domains/botstation/</u>     registry/   bot specs — configuration, not code
+                         lifecycle/  subprocess supervision
+                         adapters/   per-bot record mapping  <em>&lt;- the plug point</em>
+                         ledger/     ingest + exchange reconciliation
+<u>tenancy/</u>                tenants, credentials, world access. Owns the tenant tables.
+<u>platform/</u>               db/         engine, session, tenant-scoped repository base
+                         security/   sessions, password, envelope encryption
+                         config/     settings, per-world
+                         obs/        logging, health, heartbeats
+
+<i>Dependency direction, enforced by an import-linter rule in CI:</i>
+    api  ->  domains  ->  tenancy  ->  platform
+<b>    domains/trading and domains/botstation may never import each other.</b>
+<i>Anything both need moves down into platform or tenancy — never sideways.</i></pre>
+
+    <p>Only two shared libraries are proposed, and each has two real consumers in the spec: <code>platform/db</code> (both domains persist) and <code>tenancy</code> (both domains scope by tenant). <code>platform/security</code> has one consumer today — the edge — and I am keeping it in platform anyway because credentials are cross-cutting by nature, not because I expect a second consumer. That is a judgement call and I would rather name it than let it look like an oversight.</p>
+
+    <p><strong>No shared "common" or "utils" module.</strong> Speculative abstraction is what produced fifteen copies of <code>features.py</code>; a grab-bag module is the same failure with better manners.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Model</span>
+    <h2 class="sec">Conceptual model</h2>
+
+    <pre>Tenant 1──n TenantCredential      (venue, encrypted, rotatable)
+       1──n TenantWorldAccess     (which tiles this operator may open)
+       │
+       ├──n Position ──1 ExecutionAttempt   (trading)
+       │        └──n PositionEvent
+       ├──1 RiskHeartbeat
+       ├──1 WellnessProfile ──n WellnessGoal
+       │
+       ├──n BotRun ──n BotTrade              (bot station)
+       └──n ExecutionLease                   (transient, expiring)
+
+Signal  (no tenant — market data, identical for every operator)</pre>
+
+    <p><strong>Natural keys.</strong> A tenant is identified by <code>slug</code>; a position by <code>(tenant, venue_order_id)</code>; a bot trade by <code>(tenant, bot_key, external_id)</code> — the same deterministic id the current ingest already uses for idempotency; a signal by <code>(book, external_id)</code>. Surrogate integer primary keys everywhere, with the natural key as a unique constraint, because natural keys here are long strings that would bloat every foreign key.</p>
+
+    <p><strong>Signal carries no tenant.</strong> Stated as an assumption in Phase 2 and worth repeating, because it is the one table that breaks the tenant-everywhere rule: super-research signals are market data, identical for everyone, and nothing in the code or the spec scopes them per operator. The repository base class therefore takes an explicit, greppable opt-out for exactly this table rather than silently permitting unscoped reads.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Justification</span>
+    <h2 class="sec">Evidence table</h2>
+
+    <p>Every column cites the Phase 1 finding or Phase 2 rule that requires it. Columns I could not cite are not in the schema. Routine surrogate keys and <code>created_at</code>/<code>updated_at</code> follow a stated convention and are not itemised; everything that carries a decision is.</p>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Column</th><th>Type</th><th>Required by</th></tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="3">tenant — one row per operator</td></tr>
+        <tr><td class="k">slug</td><td>TEXT UNIQUE</td><td>P1: <code>customers/&lt;username&gt;/</code> and <code>worlds.json</code> both key by name; the import must map both</td></tr>
+        <tr><td class="k">display_name</td><td>TEXT</td><td>P1: login screen and desk header show the operator</td></tr>
+        <tr><td class="k">email</td><td>TEXT UNIQUE NULL</td><td>P1: <code>users.email</code> exists, unique, nullable — preserved for import</td></tr>
+        <tr><td class="k">status</td><td>TEXT</td><td>P2 S-2: revocation without deletion; a suspended operator must not trade</td></tr>
+        <tr><td class="k">password_hash, password_algo, password_updated_at</td><td>TEXT / TIMESTAMP</td><td>Your instruction: get <code>.sam</code> off the filesystem. <strong>Argon2id hash, not encryption</strong> — see note below. <code>algo</code> is stored so the scheme can be upgraded later without guessing.</td></tr>
+
+        <tr class="grp"><td colspan="3">wellness_profile — one row per operator <span class="tag new">new</span></td></tr>
+        <tr><td class="k">tenant_id</td><td>FK UNIQUE NOT NULL</td><td>Your instruction: username is the unique id. <code>tenant.slug</code> <em>is</em> the username, so a UNIQUE FK enforces exactly one profile per username while keeping one identity in one place</td></tr>
+        <tr><td class="k">gender, ethnicity, diet, style, region</td><td>TEXT NULL</td><td>Source file <code>wellness-profile.json</code>: five free-text attributes</td></tr>
+        <tr><td class="k">age_band</td><td>TEXT NULL</td><td>Profiled from the actual file: a non-numeric 5-character string, i.e. a band. <strong>Named <code>age_band</code>, not <code>age</code></strong>, so nobody types it INTEGER later</td></tr>
+        <tr><td class="k">notifications</td><td>BOOLEAN NOT NULL DEFAULT 0</td><td>Source file: boolean</td></tr>
+
+        <tr class="grp"><td colspan="3">wellness_goal — the profile's goal list <span class="tag new">new</span></td></tr>
+        <tr><td class="k">tenant_id, goal, position</td><td>FK / TEXT / INTEGER</td><td>Source file: <code>goals</code> is an array. A multi-valued attribute is a child table — a JSON column would make "add a goal" a read-modify-write, and the brief forbids generic blobs where a relation is the honest model. <code>position</code> preserves the operator's order</td></tr>
+
+        <tr class="grp"><td colspan="3">tenant_credential — envelope-encrypted, one per venue</td></tr>
+        <tr><td class="k">venue</td><td>TEXT</td><td>P1: separate Kalshi and Tradier credential sets, and Tradier splits sandbox from production</td></tr>
+        <tr><td class="k">ciphertext, wrapped_dek, nonce</td><td>BLOB</td><td>Brief §5: envelope encryption, per-record data key wrapped by a master key</td></tr>
+        <tr><td class="k">key_version</td><td>INTEGER</td><td>Brief §5: re-key procedure must identify which master key wrapped which record</td></tr>
+        <tr><td class="k">rotated_at, revoked_at</td><td>TIMESTAMP NULL</td><td>Brief §5: rotation and revocation without downtime</td></tr>
+        <tr><td class="k">created_by, rotated_by</td><td>TEXT</td><td>Brief §5: record who changed a credential and when</td></tr>
+
+        <tr class="grp"><td colspan="3">position — an options position and its exits</td></tr>
+        <tr><td class="k">tenant_id</td><td>FK NOT NULL</td><td>P0: tenant scope must be structurally impossible to omit</td></tr>
+        <tr><td class="k">venue_sandbox</td><td>BOOLEAN NOT NULL</td><td>P2 T-1: sandbox is the default and paper must never be confused with live</td></tr>
+        <tr><td class="k">occ_symbol, underlying, option_type, strike, expiration</td><td>TEXT / REAL</td><td>P2 T-1: identifies the contract; expiration drives the 0DTE cutoff rule</td></tr>
+        <tr><td class="k">delta_at_entry</td><td>REAL</td><td>P2 T-1: signed delta band — the bug where every put recorded positive is only detectable if the signed value is stored</td></tr>
+        <tr><td class="k">contracts, buy_pct, tolerance_pct</td><td>INTEGER / REAL</td><td>P2 T-1: sizing is a target with a tolerance band; the inputs must be reproducible to explain a refusal</td></tr>
+        <tr><td class="k">entry_price, tp_price, sl_price</td><td>REAL</td><td>P2 T-1: the stop threshold must be durable, not held in a process</td></tr>
+        <tr><td class="k">tp_pct, sl_pct</td><td>REAL</td><td>P2 T-1: the percentages the operator chose, kept distinct from the prices they produced</td></tr>
+        <tr><td class="k">buy_order_id, tp_order_id, <span class="tag new">stop_order_id</span></td><td>TEXT NULL</td><td>P2 T-1 + this phase: the third is new and holds the venue-resting stop</td></tr>
+        <tr><td class="k">status</td><td>TEXT NOT NULL</td><td>P2 T-1/T-2: pending → open → tp_filled / sl_filled / closed / failed</td></tr>
+        <tr><td class="k">strategy</td><td>TEXT</td><td>P1: manual, A/B, level-cross and hot-scan entries share this table and must be tellable apart</td></tr>
+        <tr><td class="k">exit_price, pnl_usd, closed_at</td><td>REAL / TIMESTAMP</td><td>P2 T-2: realised outcome</td></tr>
+        <tr><td class="k">note</td><td>TEXT</td><td>P1: the desk shows the human-readable state of every position; today's code writes exactly this</td></tr>
+
+        <tr class="grp"><td colspan="3">execution_attempt <span class="tag new">new</span> — makes duplicates impossible</td></tr>
+        <tr><td class="k">idempotency_key</td><td>TEXT, UNIQUE(tenant_id, key)</td><td>Your mandate: no duplicate buy or sell. This constraint is the guarantee</td></tr>
+        <tr><td class="k">request_fingerprint</td><td>TEXT</td><td>Your mandate: absorbs retries from clients that send no key</td></tr>
+        <tr><td class="k">intent</td><td>TEXT</td><td>open / close / sweep / set_target — the operation being made idempotent</td></tr>
+        <tr><td class="k">status, response_json</td><td>TEXT</td><td>Your mandate: a repeat submit returns the first outcome instead of acting again</td></tr>
+        <tr><td class="k">position_id, venue_order_id</td><td>FK / TEXT NULL</td><td>Ties an attempt to what it actually produced, for reconciliation</td></tr>
+
+        <tr class="grp"><td colspan="3">execution_lease <span class="tag new">new</span> — cross-process mutex</td></tr>
+        <tr><td class="k">resource_key</td><td>TEXT PRIMARY KEY</td><td>P1: the current lock is per-process and two processes have run at once</td></tr>
+        <tr><td class="k">expires_at, holder</td><td>TIMESTAMP / TEXT</td><td>A crashed holder must not deadlock the contract forever</td></tr>
+
+        <tr class="grp"><td colspan="3">risk_heartbeat <span class="tag new">new</span> — the stop's own watchdog</td></tr>
+        <tr><td class="k">last_pass_at, last_ok_at</td><td>TIMESTAMP</td><td>The alarm at the top of this page: a stop nobody is watching must be detectable</td></tr>
+        <tr><td class="k">consecutive_failures</td><td>INTEGER</td><td>Distinguishes a slow pass from a broken one before entries are blocked</td></tr>
+
+        <tr class="grp"><td colspan="3">bot_run / bot_trade — bot station</td></tr>
+        <tr><td class="k">bot_key, bot_version</td><td>TEXT NOT NULL</td><td>P1: registry declares versions; status and ledger are reported per version</td></tr>
+        <tr><td class="k">mode</td><td>TEXT NOT NULL</td><td>P2 B-1: paper-only forces dry-run; the run records which it was</td></tr>
+        <tr><td class="k">bankroll, target_pct, stop_pct</td><td>REAL NULL</td><td>P2 B-1: per-bot capital, because the venue account is shared</td></tr>
+        <tr><td class="k">external_id</td><td>TEXT, UNIQUE(tenant, bot_key, external_id)</td><td>P2 B-2: ingest upserts on a deterministic id so re-running is idempotent</td></tr>
+        <tr><td class="k">is_live</td><td>BOOLEAN NULL</td><td>P1 + D5/D9: NULL is a real state — 93 rows genuinely predate the flag and must not be guessed</td></tr>
+        <tr><td class="k">reconciled_at, fee_checked_at</td><td>TIMESTAMP NULL</td><td>P2 B-3: replaces the current stamps inside a JSON blob; ingest must not overwrite corrected rows</td></tr>
+        <tr><td class="k">raw</td><td>TEXT (JSON)</td><td>P2 B-2: the original record is preserved verbatim</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h4>Passwords are hashed, credentials are encrypted — the asymmetry is deliberate</h4>
+    <p>You asked for the <code>.sam</code> password to move into the database encrypted. It moves into the database, but <strong>hashed with Argon2id rather than encrypted</strong>, and the distinction is not pedantry. Encryption is reversible by design: anyone holding the master key — or a leaked backup plus a leaked key — recovers every operator's password in plaintext. A venue API key <em>must</em> be reversible, because the system has to present it to Tradier and Kalshi; that is exactly why <code>tenant_credential</code> uses envelope encryption. A login password never needs reading back, only comparing, so a slow salted hash is strictly stronger and takes the master key out of the blast radius entirely.</p>
+    <p>Your actual requirement — no plaintext password sitting in <code>customers/&lt;name&gt;/.sam</code> — is met either way. This way it is also met if the database leaks. If you want reversible encryption regardless, say so and I will build it, but I would be arguing against it in the runbook.</p>
+
+    <h4>Wellness data is special-category personal data</h4>
+    <p>Ethnicity, gender, diet and health goals are treated as sensitive under every privacy regime that matters. The table therefore inherits the credential handling rules from <span class="cite">P2 S-2</span>: never logged, never in an error message, never in a support export, excluded from any diagnostic dump. It is tenant-scoped like everything else, so the Phase 6 isolation tests cover it for free — but I am naming it because it is the one table where a leak is a privacy incident rather than a financial one.</p>
+
+    <h4>Deliberately absent</h4>
+    <p>No soft deletes, no generic audit table, no entity-attribute-value store, no lookup tables for fixed enums. <code>tenant_secret_audit</code> is the one audit table and it exists because the brief requires recording who changed a credential — not because audit tables are good practice in the abstract. Status values are <code>CHECK</code> constraints, not foreign keys to a two-row table.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Physical</span>
+    <h2 class="sec">Schema decisions</h2>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Decision</th><th>Taken</th><th>Because</th></tr></thead>
+      <tbody>
+        <tr><td>Schema layout</td><td><strong>Single schema, <code>tenant_id</code> discriminator</strong></td><td>Settled in Phase 0. SQLite has no <code>CREATE SCHEMA</code>, and the customer onboarding contract forbids DDL per tenant. Module boundaries live in code, not in the database.</td></tr>
+        <tr><td>Normal form</td><td><strong>3NF</strong>, with two deliberate denormalisations</td><td><code>position.pnl_usd</code> is derived from entry, exit and contracts but stored, because the ledger sorts and aggregates on it. <code>bot_trade.raw</code> is a JSON blob, because preserving the source record verbatim is the requirement.</td></tr>
+        <tr><td>Tenant enforcement</td><td><strong>Repository base class</strong> refusing an unscoped query</td><td>SQLite offers no row-level security. Stated as a real loss in Phase 0 and accepted.</td></tr>
+        <tr><td>Migrations</td><td><strong>Alembic</strong>, clean baseline, old history deleted</td><td>Flyway is a JVM tool with no SQLite support. Alembic is held to the full Flyway contract: ordered versions, migrate-from-empty proven by a test, and adding a world never edits an existing migration.</td></tr>
+        <tr><td>Timestamps</td><td><strong>Naive UTC</strong>, one convention, converted only at the edge</td><td>P1: SQLite does not round-trip timezone info; the India signal bug was exactly this, and the current code already stores naive UTC for that reason.</td></tr>
+        <tr><td>Money</td><td><strong>REAL for prices, INTEGER cents for cash</strong></td><td>P1: option prices are venue-supplied floats and comparing them is the business rule; realised P&amp;L is money and must not drift.</td></tr>
+        <tr><td>Concurrency</td><td><strong>WAL, <code>foreign_keys=ON</code>, <code>busy_timeout</code>, <code>BEGIN IMMEDIATE</code></strong> for write paths</td><td>The lease depends on single-writer semantics. The first three already exist <span class="cite">database.py:29</span>; the fourth is new and is what makes the lease correct.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h4>Indexes, each justified</h4>
+    <ul>
+      <li><code>position(tenant_id, status)</code> — the monitor's hot path selects active rows per tenant every 10 seconds.</li>
+      <li><code>position(tenant_id, occ_symbol, status)</code> — guard 3's duplicate check.</li>
+      <li><code>bot_trade(tenant_id, bot_key, opened_at DESC)</code> — the ledger's default sort.</li>
+      <li><code>signal(book, logged_at DESC)</code> — P1: feeds sort descending and cap at 150.</li>
+      <li>Unique constraints on the natural keys above double as their lookup indexes; none is added twice.</li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="qnum">Ops</span>
+    <h2 class="sec">How this runs</h2>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Concern</th><th>Design</th></tr></thead>
+      <tbody>
+        <tr><td>Local</td><td>Clone, <code>.env</code> from <code>.env.example</code>, <code>alembic upgrade head</code> against an empty file, start. No customer folders required — a tenant is created through the admin API.</td></tr>
+        <tr><td>Health</td><td><code>/health</code> stays as-is. New <code>/readiness</code> reports database, migration version, and <strong>risk-monitor heartbeat age per tenant</strong> — the signal that would have made the alarm visible.</td></tr>
+        <tr><td>Deploy</td><td>Market-hours deploys are permitted only with every position flat or every stop resting on the venue. This is a financial precondition, not an availability one, and <code>deploy.md</code> will say so in those words.</td></tr>
+        <tr><td>Shutdown</td><td>Drain: stop accepting entries, verify no working orders, confirm venue-resting stops, then stop. Bots do not auto-resume — restart is explicit.</td></tr>
+        <tr><td>Rollback</td><td>Alembic down-revision for schema; the previous image for code. The one-shot user import is outside the migration chain, so a rollback never re-runs it.</td></tr>
+        <tr><td>Backup</td><td>SQLite online backup on a timer plus before every migration. <code>database.md</code> carries restore steps and the drill.</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <div class="stopbar">
+    <h2>One decision I will not take alone</h2>
+    <p><strong>The venue-resting stop.</strong> Everything else in this document I have decided, per your mandate. This one adds new integration to the order path — a bracket order pairing the take-profit with a stop on Tradier — and a stop that rests wrongly is its own kind of accident. It is also the only layer that actually closes the hole described at the top of this page.</p>
+    <p>My recommendation is to build it, prove it against the sandbox with a test that asserts both legs rest and that filling one cancels the other, and ship it behind a flag that defaults <em>on</em> for live and <em>off</em> for sandbox until you have watched it work. Say the word and it goes in the Phase 4 API design; say no and the monitored stop plus the heartbeat block is what you get, with the residual risk written into the runbook.</p>
+    <p>Meanwhile, separately from this rebuild: <strong>if you are running live positions today, the gap at the top of this page is real right now.</strong> The cheapest interim mitigation is not to leave positions open across a restart.</p>
+  </div>
+
+  <footer>
+    <span>Phase 3 of 10</span>
+    <span>7 execution guards</span>
+    <span>13 tables</span>
+    <span>No .sql written</span>
+    <span>Next: Phase 4 API surface</span>
+  </footer>
+
+</div>

@@ -1,0 +1,234 @@
+<title>Phase 6 Test Suite</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+  :root{
+    --ground:#EEF0F3; --surface:#FFFFFF; --surface-2:#F6F7F9;
+    --ink:#171A1F; --ink-2:#3C444F; --muted:#646E7B;
+    --rule:#D6DAE0; --rule-strong:#B6BDC7;
+    --accent:#8A5200; --accent-soft:#F4E7D2;
+    --critical:#9E2A19; --critical-soft:#F7E2DE;
+    --warn:#7A5A05; --warn-soft:#F6EDD4;
+    --ok:#2A6047; --ok-soft:#DEEDE5;
+    --shadow:0 1px 2px rgba(23,26,31,.06),0 8px 24px rgba(23,26,31,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F1216; --surface:#171B21; --surface-2:#1D222A;
+      --ink:#E4E7EC; --ink-2:#BFC6D0; --muted:#8B95A3;
+      --rule:#2A313A; --rule-strong:#3B444F;
+      --accent:#E3A94E; --accent-soft:#2E2415;
+      --critical:#EC7B66; --critical-soft:#331914;
+      --warn:#D7B152; --warn-soft:#2C2513;
+      --ok:#72C098; --ok-soft:#152A20;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0F1216; --surface:#171B21; --surface-2:#1D222A;
+    --ink:#E4E7EC; --ink-2:#BFC6D0; --muted:#8B95A3;
+    --rule:#2A313A; --rule-strong:#3B444F;
+    --accent:#E3A94E; --accent-soft:#2E2415;
+    --critical:#EC7B66; --critical-soft:#331914;
+    --warn:#D7B152; --warn-soft:#2C2513;
+    --ok:#72C098; --ok-soft:#152A20;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);
+    font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+    font-size:16.5px;line-height:1.62;margin:0;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px 96px}
+
+  .mast{border-bottom:2px solid var(--ink);padding:56px 0 20px;margin-bottom:36px}
+  .eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+  h1{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;font-weight:700;
+    font-size:clamp(2.3rem,5.6vw,3.5rem);line-height:1.04;letter-spacing:-.015em;
+    text-wrap:balance;margin:.28em 0 .32em}
+  .standfirst{font-size:1.14rem;color:var(--ink-2);max-width:64ch;margin:0}
+  .status-pill{display:inline-flex;align-items:center;gap:7px;
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.1em;
+    text-transform:uppercase;background:var(--ok-soft);color:var(--ok);
+    border:1px solid color-mix(in srgb,var(--ok) 34%,transparent);
+    border-radius:2px;padding:4px 9px}
+  .status-pill::before{content:"";width:6px;height:6px;background:var(--ok);border-radius:50%}
+
+  .counters{display:grid;grid-template-columns:repeat(auto-fit,minmax(126px,1fr));
+    gap:1px;background:var(--rule);border:1px solid var(--rule);margin:0 0 44px}
+  .counter{background:var(--surface);padding:15px 16px}
+  .counter .n{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.8rem;
+    font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .counter .l{font-family:"IBM Plex Mono",monospace;font-size:9.6px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);margin-top:6px;display:block;line-height:1.45}
+  .counter.bad .n{color:var(--critical)}
+  .counter.good .n{color:var(--ok)}
+
+  .alarm{background:var(--critical-soft);border:2px solid var(--critical);
+    padding:22px 26px;margin:0 0 48px}
+  .alarm .kicker{font-family:"IBM Plex Mono",monospace;font-size:10.5px;
+    letter-spacing:.18em;text-transform:uppercase;color:var(--critical);
+    display:block;margin-bottom:8px;font-weight:600}
+  .alarm h2{font-family:"IBM Plex Sans Condensed",sans-serif;margin:0 0 12px;
+    font-size:1.42rem;color:var(--critical);letter-spacing:-.012em;line-height:1.22}
+  .alarm p{margin:0 0 11px;max-width:70ch;color:var(--ink-2)}
+  .alarm p:last-child{margin-bottom:0}
+  .alarm strong{color:var(--ink)}
+
+  section{margin:0 0 54px}
+  .qnum{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;
+    color:var(--accent);text-transform:uppercase;display:block;margin-bottom:6px}
+  h2.sec{font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-size:clamp(1.5rem,3vw,1.95rem);font-weight:700;letter-spacing:-.012em;
+    margin:0 0 6px;text-wrap:balance;padding-bottom:10px;border-bottom:1px solid var(--rule-strong)}
+  h3{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.12rem;font-weight:600;
+    margin:30px 0 8px;letter-spacing:-.005em}
+  p{max-width:68ch}
+  a{color:var(--accent)}
+
+  .answer{background:var(--surface-2);border:1px solid var(--rule);
+    padding:14px 18px;margin:14px 0 20px;font-size:1.02rem}
+  .answer .lbl{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.15em;
+    text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.885em}
+  code{background:var(--surface-2);border:1px solid var(--rule);border-radius:2px;padding:1px 5px}
+  .cite{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);white-space:nowrap}
+
+  pre{background:var(--surface-2);border:1px solid var(--rule);padding:14px 16px;
+    overflow-x:auto;margin:12px 0;font-family:"IBM Plex Mono",monospace;
+    font-size:12.5px;line-height:1.62;color:var(--ink-2)}
+  pre b{color:var(--critical);font-weight:600}
+  pre em{color:var(--ok);font-style:normal;font-weight:600}
+  pre i{color:var(--muted);font-style:normal}
+
+  .scroll{overflow-x:auto;margin:16px 0;border:1px solid var(--rule);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:.9rem;min-width:640px}
+  th,td{text-align:left;padding:9px 12px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--muted);background:var(--surface-2)}
+  tbody tr:last-child td{border-bottom:none}
+  td.k{font-family:"IBM Plex Mono",monospace;font-size:.82rem}
+  td.num{font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace;text-align:right}
+
+  ul,ol{max-width:68ch;padding-left:1.15em}
+  li{margin:5px 0}
+  li::marker{color:var(--muted)}
+
+  .tag{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.11em;
+    text-transform:uppercase;padding:2px 6px;border-radius:2px;border:1px solid;white-space:nowrap}
+  .tag.crit{color:var(--critical);background:var(--critical-soft);border-color:color-mix(in srgb,var(--critical) 32%,transparent)}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 32%,transparent)}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+
+  .stopbar{border:2px solid var(--accent);background:var(--accent-soft);
+    padding:20px 24px;margin:48px 0 0}
+  .stopbar h2{font-family:"IBM Plex Sans Condensed",sans-serif;margin:0 0 8px;
+    font-size:1.3rem;color:var(--accent);letter-spacing:-.01em}
+  .stopbar p{margin:0 0 10px;color:var(--ink-2);max-width:68ch}
+  .stopbar p:last-child{margin-bottom:0}
+
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:8px 22px}
+  @media (max-width:640px){.wrap{padding:0 17px 64px}body{font-size:16px}}
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">
+      <span>Phase 6</span><span>Vidura 36 rebuild</span><span>Tests before implementation</span>
+      <span class="status-pill">Written and failing</span>
+    </div>
+    <h1>Test Suite</h1>
+    <p class="standfirst">192 tests written against the specification, not the old code. They fail on import because the implementation does not exist yet — and while writing them I found that three of the current suite's own tests already fail, two of them on exactly the duplicate-order bug you asked me to eliminate.</p>
+  </header>
+
+  <div class="counters">
+    <div class="counter"><span class="n">192</span><span class="l">new tests</span></div>
+    <div class="counter"><span class="n">8</span><span class="l">files</span></div>
+    <div class="counter bad"><span class="n">39</span><span class="l">isolation tests (was 0)</span></div>
+    <div class="counter"><span class="n">1</span><span class="l">current test failing (vendor)</span></div>
+    <div class="counter good"><span class="n">375</span><span class="l">current tests passing</span></div>
+    <div class="counter"><span class="n">0</span><span class="l">production code written</span></div>
+  </div>
+
+  <div class="alarm">
+    <span class="kicker">Correction · this section previously claimed a live bug</span>
+    <h2>I reported a duplicate-sell bug here. It was test-order dependence, not a bug — retracted.</h2>
+    <p>My first baseline run reported <strong>3 failed, 373 passed</strong>, and two of the failures were in <code>test_tradier.py</code> asserting that a second monitor pass does not stack another sell (<code>assert 2 == 1</code>). I wrote that these run against a fake venue and were therefore deterministic, and concluded the guard did not hold in this build.</p>
+    <p><strong>That conclusion was wrong.</strong> <code>test_tradier.py</code> passes 52 of 52 when run on its own, and two consecutive full-suite runs now report <strong>375 passed, 1 failed</strong>. The two tests were failing because of state carried between tests in one session — module-level globals such as the per-user monitor locks and the process table persist across a run — not because the code places two sells.</p>
+    <p>I said "deterministic — no network, no timing, no flakiness" on the strength of the fake venue alone, without running the file in isolation to check. That was the step I skipped, and it is the step that would have caught it.</p>
+    <p><strong>What still stands, on code rather than test evidence:</strong> the per-tenant lock is an in-process <code>threading.Lock</code> <span class="cite">tradier_bot.py:62</span>, so it genuinely does not span two uvicorn workers, and <span class="cite">main.py:84</span> exists because two have run at once here. That is read directly from the source and is unaffected by this correction. The cross-process lease in Phase 3 is still the right fix — it is just not fixing a bug that is currently firing.</p>
+    <p>The remaining failure, <code>test_gex0dte</code> expecting 502 and getting 200, is vendor-dependent and unrelated.</p>
+  </div>
+
+  <section>
+    <span class="qnum">What was written</span>
+    <h2 class="sec">The suite</h2>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>File</th><th class="num">Tests</th><th>Proves</th></tr></thead>
+      <tbody>
+        <tr><td class="k">test_tenant_isolation.py</td><td class="num">39</td><td>Two operators with deliberately look-alike data. Every read path, ID-guessing returning 404 not 403, identical answers for a real-but-not-yours id and an imaginary one, aggregates and counts scoped, bot logs, wellness, credentials — plus a coverage guard that fails when a new tenant-scoped endpoint has no isolation test.</td></tr>
+        <tr><td class="k">test_contract.py</td><td class="num">68</td><td>The frozen Phase 4 baseline. Every contracted path served, nothing served that is not contracted, open paths still open, and <strong>no endpoint anywhere can accept a tenant selector</strong> — checked by walking the route table, so the Phase 1 attacks have no input surface rather than merely being ignored.</td></tr>
+        <tr><td class="k">test_execution_safety.py</td><td class="num">24</td><td>The seven guards. Double-tap returns the first order; unkeyed retries absorbed; keys scoped per tenant; a concurrent burst of six buys yields one position; an expired lease does not deadlock; buying a held contract refused by name; the venue consulted as well as our records; a stray order cancelled and flagged; nine invalid risk parameters refused with arithmetic rather than clamped.</td></tr>
+        <tr><td class="k">test_onboarding.py</td><td class="num">19</td><td>Both contracts, performed rather than asserted. A throwaway bot registered by config alone must serve all eight keyed operations, render its own launch form, reach the shared ledger, and touch no shared module. A customer created entirely at runtime must sign in, write no files, and need no migration.</td></tr>
+        <tr><td class="k">test_sensitive_data.py</td><td class="num">19</td><td>Credentials absent from every response, log, error, <code>repr</code> and diagnostic. The stored password is an Argon2id hash, not the password and not ciphertext. Login answers identically for a bad password and a missing operator. Wellness data never reaches logs or diagnostics.</td></tr>
+        <tr><td class="k">test_stop_loss_durability.py</td><td class="num">9</td><td>Both exit legs rest at the venue and one filling cancels the other; a rejected stop is flagged rather than silent; the monitor's startup delay is zero; a threshold survives a rebuild from the same database; one tenant's venue failure does not disarm another's stop.</td></tr>
+        <tr><td class="k">test_migration.py</td><td class="num">9</td><td>Migrate from empty, twice is a no-op, every revision rolls back, models and migrations have not drifted, exactly one head, no migration names a customer or creates a per-tenant object, the one-shot import is outside the chain.</td></tr>
+        <tr><td class="k">test_unscoped_query.py</td><td class="num">5</td><td>The data layer itself: a repository with no tenant raises; empty string and whitespace fail exactly as <code>None</code> does — the falsy-value trap that caused the original bug; every tenant-owned model is enforced; market data is the only enumerated exception.</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>They live in <code>tests/rebuild/</code>, separate from the existing suite so the current baseline stays measurable while the new one goes red.</p>
+  </section>
+
+  <section>
+    <span class="qnum">As expected</span>
+    <h2 class="sec">They fail, and they fail correctly</h2>
+    <pre>$ pytest tests/rebuild -q
+<b>105 errors</b>
+
+<i>three distinct root causes, all of them "not built yet":</i>
+  ModuleNotFoundError: No module named 'app.domains'
+  ModuleNotFoundError: No module named 'app.platform'
+  ModuleNotFoundError: No module named 'app.tenancy'</pre>
+    <p>This is the right failure mode. A collection error means the test is asking for something that does not exist; a <em>wrong answer</em> would mean the test had quietly bound itself to the old implementation. Nothing in this suite references a CSV filename, a legacy column name, or an internal DAO method — the only internal seams touched are in <code>test_unscoped_query.py</code>, deliberately, because a structural guarantee has to be tested where the structure is.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Hygiene</span>
+    <h2 class="sec">Two things worth knowing about this working copy</h2>
+
+    <div class="answer">
+      <span class="lbl">Stale bytecode was making tracebacks lie</span>
+      Every traceback pointed at <code>..\tradier-bot\tests\…</code> — a sibling project this repository was copied from. The copy brought <code>__pycache__</code> with it, and compiled Python bakes in the absolute path of the file it was built from. I cleared all <code>__pycache__</code> directories and <code>.pytest_cache</code>; the baseline above is from a clean run. Worth adding to <code>.gitignore</code> housekeeping, and worth knowing before anyone debugs a stack trace here.
+    </div>
+
+    <p>Second: <code>pyproject.toml</code> still declares <code>name = "tradier-bot"</code>. Cosmetic, but this project is <code>vidura-36-app</code> and the sibling still exists on disk at <code>D:\_projects\tradier-bot</code>. I have not touched either — flagging it so the two do not get confused during Phase 7, when one of them starts changing.</p>
+  </section>
+
+  <div class="stopbar">
+    <h2>Ready for Phase 7</h2>
+    <p>The order is fixed by the brief and I will hold to it: Alembic clean-migrate from an empty database must pass <strong>before</strong> any application code is written. Then one library at a time, a separate commit each, the full suite after every step, and a report of which tests newly pass.</p>
+    <p>I will not modify a test to make it pass. If one turns out to be wrong, I will stop and say so rather than editing it quietly.</p>
+    <p><strong>One thing I would like your call on first:</strong> those two failing sell-guard tests are in the <em>current</em> system, and sampath may be trading on it today. Do you want me to fix them in place as a standalone patch before starting Phase 7, or leave the old code untouched and let the rebuild supersede it? Fixing in place is a small, contained change; leaving it means the accidental-short risk stays live until Phase 7 ships.</p>
+  </div>
+
+  <footer>
+    <span>Phase 6 of 10</span>
+    <span>192 tests written</span>
+    <span>105 collection errors, as designed</span>
+    <span>Baseline: 375 passed / 1 failed</span>
+    <span>Next: Phase 7 implementation</span>
+  </footer>
+
+</div>

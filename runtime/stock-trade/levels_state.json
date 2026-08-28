@@ -1,0 +1,56 @@
+{
+ "day": "2026-08-18",
+ "SPY": {
+  "last_bar": "2026-08-18T17:25:00-05:00",
+  "prev_close": 767.17,
+  "latest": {
+   "10min_high": {
+    "signal": "below_10min_high",
+    "dir": "SHORT",
+    "time": "08:00"
+   },
+   "postmarket_low": {
+    "signal": "below_postmarket_low",
+    "dir": "SHORT",
+    "time": "14:50"
+   },
+   "10min_low": {
+    "signal": "below_10min_low",
+    "dir": "SHORT",
+    "time": "14:40"
+   }
+  }
+ },
+ "QQQ": {
+  "last_bar": "2026-08-18T17:25:00-05:00",
+  "prev_close": 716.72,
+  "latest": {
+   "10min_high": {
+    "signal": "below_10min_high",
+    "dir": "SHORT",
+    "time": "07:05"
+   },
+   "postmarket_low": {
+    "signal": "below_postmarket_low",
+    "dir": "SHORT",
+    "time": "08:45"
+   },
+   "10min_low": {
+    "signal": "below_10min_low",
+    "dir": "SHORT",
+    "time": "12:15"
+   }
+  }
+ },
+ "SPX": {
+  "last_bar": "2026-08-18T15:35:00-05:00",
+  "prev_close": 7691.76,
+  "latest": {
+   "10min_low": {
+    "signal": "below_10min_low",
+    "dir": "SHORT",
+    "time": "14:50"
+   }
+  }
+ }
+}
