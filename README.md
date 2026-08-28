@@ -61,6 +61,55 @@ curl -X POST http://127.0.0.1:8791/api/v1/tenants/<id>/credentials ^
 
 ---
 
+## Try it — the demo operator
+
+| | |
+| --- | --- |
+| username | `demo` |
+| password | `BankF@t1M` |
+
+Sign in at <http://127.0.0.1:8791/> and all three worlds open with mock data
+already on the boards: four positions (one venue-protected, one
+monitored-only, one closed at target, one stopped out), eight bot trades
+across four families — three of them deliberately *unclassified*, so the
+ledger shows the real "belongs to neither LIVE nor PAPER" behaviour rather
+than a tidied-up version — and a wellness profile.
+
+Recreate or reset it at any time:
+
+```bash
+.venv\Scripts\python tools\seed_demo.py
+```
+
+### Why publishing this password is safe
+
+**The demo operator has no venue credentials.** Not empty ones — none at all.
+So it cannot reach Tradier or Kalshi even if the server is taken out of paper
+mode, because there is nothing to authenticate with. It is also not an admin,
+so it cannot create operators or list anyone's credentials.
+
+What stops it seeing your data is not the password, it is tenant isolation.
+Probed directly, with a position belonging to another operator:
+
+| as demo | result |
+| --- | --- |
+| read another operator's position | `404` |
+| read an id belonging to nobody | `404` — the same answer, so no oracle |
+| close another operator's position | `404` |
+| list positions | its own 4, never the other operator's |
+| `GET /tenants` (admin surface) | `404` — hidden, not merely forbidden |
+| reach a venue | `424` — no credential, cannot trade |
+
+The demo account is the honest test of that claim rather than an exception
+to it.
+
+**One thing to be aware of:** the server binds `0.0.0.0` by default, so with
+a published password anyone on your network can sign in as `demo`. That is
+fine for what `demo` can do — nothing — but set `TBOT_V2_HOST=127.0.0.1` if
+you would rather it were not reachable at all.
+
+---
+
 ## Signing in
 
 The desk asks for a password before it renders, and every `/api` call carries
