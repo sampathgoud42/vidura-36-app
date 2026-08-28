@@ -66,6 +66,17 @@ def account_for(cred) -> FakeVenue:
     return _ACCOUNTS.setdefault(cred.token, FakeVenue())
 
 
+def account_for_slug(slug: str) -> FakeVenue:
+    """The account belonging to one operator, by name.
+
+    Credentials are sealed in the database and never read back, so a test that
+    wants to arrange venue state cannot get at the credential to look it up.
+    The token is derived from the slug by the conftest fixture, so the same
+    derivation gets there directly.
+    """
+    return _ACCOUNTS.setdefault(f"fake-token-{slug}", FakeVenue())
+
+
 def reset() -> None:
     _ACCOUNTS.clear()
 

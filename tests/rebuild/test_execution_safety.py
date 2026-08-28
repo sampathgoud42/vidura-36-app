@@ -281,18 +281,44 @@ def test_readiness_reports_the_heartbeat_age(client, alice):
 def test_closing_cancels_the_resting_take_profit_before_selling(
     client, alice, monkeypatch
 ):
-    """A sell that races its own take-profit double-sells the holding."""
-    from app.domains.trading.execution import venue
+    """A sell that races its own take-profit double-sells the holding.
 
-    calls = []
-    monkeypatch.setattr(venue, "cancel_order", lambda oid, **k: calls.append(("cancel", oid)))
-    monkeypatch.setattr(venue, "sell_to_close", lambda **k: calls.append(("sell", k)) or {"id": "s1"})
+    The position has to be FILLED AND ARMED first. As originally written this
+    test bought and immediately closed, so the position was still pending:
+    there was no take-profit to cancel and nothing held to sell, and it
+    asserted an ordering between two calls that never happened. The rule is
+    real; the setup did not reach it.
+    """
+    from app.domains.trading.execution import venue
+    from app.domains.trading.risk import monitor
+    from tests.rebuild import fakes
 
     pos = _buy(client, alice).json()
+
+    # Drive it to filled, on the books, and armed -- which is the state the
+    # ordering rule is actually about.
+    acct = fakes.account_for_slug(alice.slug)
+    acct.orders[pos["buy_order_id"]]["status"] = "filled"
+    acct.orders[pos["buy_order_id"]]["avg_fill_price"] = 1.00
+    acct.held[pos["occ_symbol"]] = pos["contracts"]
+    monkeypatch.setattr(monitor, "ARM_DELAY_S", 0)
+    monitor.run_pass(tenant_id=alice.tenant_id)      # records the fill
+    monitor.run_pass(tenant_id=alice.tenant_id)      # arms the exits
+
+    armed = client.get(f"{OPEN}/{pos['id']}", headers=alice.headers).json()
+    assert armed["tp_order_id"], "setup failed: no take-profit is resting"
+
+    calls = []
+    monkeypatch.setattr(venue, "cancel_order",
+                        lambda oid, **k: calls.append(("cancel", oid)))
+    monkeypatch.setattr(venue, "sell_to_close",
+                        lambda **k: calls.append(("sell", k)) or {"id": "s1"})
+
     client.post(f"{OPEN}/{pos['id']}/close",
                 headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex})
 
     kinds = [c[0] for c in calls]
+    assert "cancel" in kinds and "sell" in kinds, f"expected both, got {kinds}"
     assert kinds.index("cancel") < kinds.index("sell"), (
         "the take-profit was still resting when the close order went in"
     )

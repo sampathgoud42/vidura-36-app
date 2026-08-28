@@ -63,6 +63,7 @@ def _serialise(pos: Position) -> dict:
         "sl_price": pos.sl_price,
         "tp_pct": pos.tp_pct,
         "sl_pct": pos.sl_pct,
+        "buy_order_id": pos.buy_order_id,
         "tp_order_id": pos.tp_order_id,
         "stop_order_id": pos.stop_order_id,
         # Says out loud whether the stop survives this process dying.

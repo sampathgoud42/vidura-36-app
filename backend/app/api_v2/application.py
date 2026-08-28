@@ -26,7 +26,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api_v2.routers import auth, positions, tenants, wellness
+from app.api_v2.routers import auth, bots, positions, tenants, wellness
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -91,6 +91,7 @@ def create_app() -> FastAPI:
     app.include_router(wellness.router, prefix=prefix)
     app.include_router(positions.router, prefix=prefix)
     app.include_router(positions.credentials_router, prefix=prefix)
+    app.include_router(bots.router, prefix=prefix)
 
     @app.get("/health", operation_id="healthCheck")
     def health() -> dict:
