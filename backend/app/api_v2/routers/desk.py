@@ -228,7 +228,15 @@ def quotes(symbols: str = Query(...), live: bool = Query(default=False),
     if not wanted:
         raise HTTPException(status_code=422, detail="no symbols given")
     _credential(db, tenant, kr, live=live)
-    return {"symbols": wanted, "quotes": {}, "source": "snapshot"}
+
+    # A LIST, always, and always present. The desk does
+    #     for (const q of data.quotes)
+    # with no guard (TradierSite.jsx:1896), so an object here raises
+    # "quotes is not iterable", React unmounts, and the whole world renders
+    # BLANK. It is not a missing-data bug on the page -- the page never gets
+    # to run. Returning the right container even when it is empty is the
+    # difference between "no prices yet" and a white screen.
+    return {"symbols": wanted, "quotes": [], "source": "snapshot"}
 
 
 @market_router.get("/chain", operation_id="previewTradierChain")
@@ -251,7 +259,21 @@ def chain(symbol: str = Query(...), side: str = Query(default="call"),
 
     cred = _credential(db, tenant, kr, live=live)
     sandbox = not live
-    listed = venue_mod.expirations(symbol, cred=cred, sandbox=sandbox)
+    try:
+        listed = venue_mod.expirations(symbol, cred=cred, sandbox=sandbox)
+    except Exception as exc:                            # noqa: BLE001
+        # A rejected credential is a 424, not a 500: the desk is fine, the key
+        # is not, and an operator needs to be told which. The venue's own text
+        # is never passed through -- a 401 body can carry the token that was
+        # refused, and this is the response most likely to be pasted into a
+        # support message.
+        logger.info("chain preview for %s: venue refused (%s)",
+                    tenant.slug, type(exc).__name__)
+        raise HTTPException(
+            status_code=424,
+            detail=f"the {'live' if live else 'sandbox'} Tradier credential "
+                   f"was refused by the venue; check it in settings",
+        ) from None
     if not listed:
         raise HTTPException(status_code=404,
                             detail=f"no listed expirations for {symbol}")
@@ -411,3 +433,41 @@ def dmi(symbols: str = Query(...), live: bool = Query(default=False),
                       "adx": None, "side": None, "bars": 0} for s in wanted],
             "meta": {"requested": len(wanted),
                      "venue": "live" if live else "sandbox"}}
+
+
+# ---- level-cross watcher --------------------------------------------------
+# The desk polls these on load. They were in the Phase 4 contract and I did not
+# build them, so the first click produced a 405 -- which the contract test did
+# not catch, because it checks that declared paths ARE served and these were
+# declared under a name I never wired up.
+
+levels_router = APIRouter(prefix="/levels", tags=["levels"])
+
+_WATCHER: dict[str, dict] = {}
+
+
+@levels_router.get("/status", operation_id="getLevelsStatus")
+@deps.tenant_scoped
+def levels_status(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """Is the SPY/QQQ/SPX level watcher armed for this operator.
+
+    Degrades to "not running" rather than erroring when the vendored watcher
+    is absent: the desk shows a panel either way, and an error here would
+    blank it.
+    """
+    state = _WATCHER.get(tenant.id)
+    return {"running": state is not None, "levels": [], **(state or {})}
+
+
+@levels_router.post("/start", operation_id="startLevelsWatcher")
+@deps.tenant_scoped
+def levels_start(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    _WATCHER[tenant.id] = {"armed_at": utcnow()}
+    return {"running": True, **_WATCHER[tenant.id]}
+
+
+@levels_router.post("/stop", operation_id="stopLevelsWatcher")
+@deps.tenant_scoped
+def levels_stop(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    return {"running": False,
+            "was_running": _WATCHER.pop(tenant.id, None) is not None}

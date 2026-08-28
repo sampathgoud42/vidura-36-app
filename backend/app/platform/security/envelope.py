@@ -80,6 +80,24 @@ class Keyring:
     def from_env(cls, env: dict[str, str] | None = None) -> "Keyring":
         env = dict(os.environ if env is None else env)
         current_raw = (env.get("TBOT_ENCRYPTION_MASTER_KEY") or "").strip()
+
+        # Fall back to Settings, which is what actually reads .env. Reading
+        # only os.environ meant the key had to be EXPORTED before starting the
+        # server -- so it worked in a test that set it and failed in the one
+        # place it matters, with every credential-touching endpoint answering
+        # 500. One config surface, and this is the project's.
+        if not current_raw:
+            try:
+                from app.core.config import get_settings
+
+                settings = get_settings()
+                current_raw = (settings.encryption_master_key or "").strip()
+                if current_raw and "TBOT_ENCRYPTION_KEY_VERSION" not in env:
+                    env["TBOT_ENCRYPTION_KEY_VERSION"] = str(
+                        settings.encryption_key_version)
+            except Exception:                           # noqa: BLE001
+                current_raw = ""
+
         if not current_raw:
             raise MasterKeyMissing(
                 "TBOT_ENCRYPTION_MASTER_KEY is not set. Tenant credentials "

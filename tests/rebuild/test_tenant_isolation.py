@@ -49,6 +49,7 @@ TENANT_READ_PATHS = [
     "/api/v1/tradier/timesales",
     "/api/v1/desk36/dmi",
     "/api/v1/bots/commodities/signals",
+    "/api/v1/levels/status",
 ]
 
 # Query parameters a path needs before it will answer at all. Kept apart from
@@ -357,6 +358,8 @@ COVERED_BY_NAMED_TESTS = {
     "/api/v1/tradier/stream/session": "no tenant-addressable identifier",
     "/api/v1/tradier/autotrade/start": "no tenant-addressable identifier",
     "/api/v1/tradier/autotrade/stop": "no tenant-addressable identifier",
+    "/api/v1/levels/start": "no tenant-addressable identifier",
+    "/api/v1/levels/stop": "no tenant-addressable identifier",
 }
 
 

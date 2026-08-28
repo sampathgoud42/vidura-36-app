@@ -21,10 +21,18 @@ export function useWorlds() {
     let dead = false;
     (async () => {
       try {
+        // /auth/me answers identity AND world access together. This used to
+        // be two calls, the second passing user_id — which is what let the
+        // desk ask about somebody else's worlds. One call, one round trip
+        // fewer, and no way to ask on another operator's behalf.
         const user = await ensureUser();
-        const w = await api.get('/worlds', { params: { user_id: user.user_id } });
         if (dead) return;
-        cached = { ...w, user };
+        cached = {
+          worlds: user.worlds || {},
+          default: user.default || null,
+          any_enabled: Object.values(user.worlds || {}).some(Boolean),
+          user,
+        };
         setState(cached);
       } catch (e) {
         // Never lock the operator out because the flag service hiccuped:

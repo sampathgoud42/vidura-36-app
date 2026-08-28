@@ -29,6 +29,7 @@ from fastapi.responses import JSONResponse
 from app.api_v2.routers import (auth, bots, desk, positions, tenants,
                                 wellness)
 from app.core.config import get_settings
+from app.platform.security.envelope import MasterKeyMissing
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +93,21 @@ def create_app() -> FastAPI:
     from app.domains.botstation import registry as bot_registry
     bot_registry.load_builtin_bots()
 
+    @app.exception_handler(MasterKeyMissing)
+    async def _no_master_key(request: Request, exc: MasterKeyMissing):
+        """A missing master key is a DEPLOYMENT fault, not a bug.
+
+        It surfaced as a bare 500 on four endpoints, which reads like the code
+        is broken. 503 with the actual reason tells whoever is on call what to
+        do, and never echoes the key or its absence beyond that.
+        """
+        logger.error("master key unavailable: %s", exc)
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "credential store unavailable: the encryption "
+                               "master key is not configured on this server"},
+        )
+
     prefix = settings.api_v1_prefix
     app.include_router(auth.router, prefix=prefix)
     app.include_router(tenants.router, prefix=prefix)
@@ -102,6 +118,7 @@ def create_app() -> FastAPI:
     app.include_router(desk.trades_router, prefix=prefix)
     app.include_router(desk.market_router, prefix=prefix)
     app.include_router(desk.desk36_router, prefix=prefix)
+    app.include_router(desk.levels_router, prefix=prefix)
 
     @app.get("/health", operation_id="healthCheck")
     def health() -> dict:
@@ -146,4 +163,57 @@ def create_app() -> FastAPI:
 
         return body
 
+    _serve_desk(app)
     return app
+
+
+def _serve_desk(app: FastAPI) -> None:
+    """Serve the built desk, if there is one.
+
+    Its own build directory rather than the one app.main serves. The two
+    frontends are NOT interchangeable -- this build talks to a session-scoped
+    API with no user_id, the other to one that requires it -- so sharing a
+    directory would mean whichever built last broke the other desk. That
+    matters while the old app is still serving live money.
+    """
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    root = Path(__file__).resolve().parents[3]
+    dist = root / "frontend" / "dist-v2"
+    index = dist / "index.html"
+    if not index.is_file():
+        logger.warning("no desk build at %s; the API is up and the UI is not "
+                       "(run: npm run build -- --outDir dist-v2)", dist)
+        return
+
+    for name in ("assets", "img"):
+        folder = dist / name
+        if folder.is_dir():
+            app.mount(f"/{name}", StaticFiles(directory=folder), name=name)
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def desk(full_path: str):
+        """Single-page app: every unmatched path returns index.html.
+
+        EXCEPT under /api, which must 404. Serving index.html there meant an
+        endpoint that does not exist answered 200 with HTML -- so a missing
+        route was indistinguishable from a working one, and the only symptom
+        was a panel quietly showing nothing. /api/v1/worlds did exactly that
+        after it was folded into /auth/me.
+
+        Deliberately last, so it can never shadow a real API route, and
+        excluded from the schema so the contract test does not see a
+        catch-all where an endpoint should be.
+        """
+        if full_path.startswith("api/"):
+            return JSONResponse(status_code=404,
+                                content={"detail": f"no such endpoint: /{full_path}"})
+        candidate = dist / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(index)
+
+    logger.info("serving desk from %s", dist)

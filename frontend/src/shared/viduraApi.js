@@ -57,7 +57,15 @@ export class ApiError extends Error {
   }
 }
 
-async function req(method, path, { body, params, timeout = 30000 } = {}) {
+// A key per operator GESTURE, so a double-tap or a retry after a timeout is
+// absorbed by the server instead of placing a second order.
+function newIdempotencyKey() {
+  try { return crypto.randomUUID(); } catch { /* older webview */ }
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function req(method, path, { body, params, timeout = 30000,
+                                   idempotencyKey } = {}) {
   let url = apiBase() + '/api/v1' + path;
   if (params) {
     const qs = new URLSearchParams(
@@ -66,6 +74,7 @@ async function req(method, path, { body, params, timeout = 30000 } = {}) {
     if (qs) url += (url.includes('?') ? '&' : '?') + qs;
   }
   const headers = { 'Content-Type': 'application/json' };
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
   try {
     const key = localStorage.getItem(API_KEY_KEY);
     if (key) headers['X-API-Key'] = key;
@@ -130,6 +139,9 @@ function sessionExpired(detail) {
 export const api = {
   get: (path, opts) => req('GET', path, opts),
   post: (path, body, opts) => req('POST', path, { ...opts, body }),
+  // Every write that moves money goes through this one.
+  send: (path, body, opts) => req('POST', path,
+    { ...opts, body, idempotencyKey: newIdempotencyKey() }),
   put: (path, body, opts) => req('PUT', path, { ...opts, body }),
 };
 
@@ -137,33 +149,18 @@ export const api = {
 
 const USER_KEY = 'vidura.user.id';
 
-// Default operator, overridable per browser (?operator=<name>, persisted) so
-// a deployment on any machine can pick its own without a rebuild.
-const OPERATOR_KEY = 'vidura.operator';
-
-export function operatorName() {
-  try {
-    const q = new URLSearchParams(window.location.search).get('operator');
-    if (q !== null) {
-      if (q === '' || q === 'off') localStorage.removeItem(OPERATOR_KEY);
-      else localStorage.setItem(OPERATOR_KEY, q);
-    }
-    const stored = localStorage.getItem(OPERATOR_KEY);
-    if (stored) return stored;
-  } catch { /* ignore */ }
-  return import.meta.env?.VITE_TRADIER_OPERATOR || 'sampath';
-}
-
-export async function ensureUser(username = operatorName()) {
-  // Find (or lazily create) the named user; remember the id locally. The
-  // server owns the customer-folder layout — no machine paths from here.
-  const users = await api.get('/users');
-  let user = users.find((u) => u.username.toLowerCase() === username.toLowerCase());
-  if (!user) {
-    user = await api.post('/users', { username });
-  }
-  try { localStorage.setItem(USER_KEY, user.user_id); } catch { /* ignore */ }
-  return user;
+// operatorName() used to read ?operator= from the URL, persist it, and fall
+// back to a hardcoded 'sampath'. That parameter chose WHICH OPERATOR'S ACCOUNT
+// the desk acted on, so anyone could trade anyone else's book by editing the
+// address bar. It is gone, and there is no replacement: the server decides who
+// you are from the session and the desk is simply told.
+export async function ensureUser() {
+  // /auth/me answers identity AND world access in one call. The desk used to
+  // ask GET /users (which listed every operator), find itself by name, and
+  // create the account if it was missing.
+  const me = await api.get('/auth/me');
+  try { localStorage.setItem(USER_KEY, me.tenant_id); } catch { /* ignore */ }
+  return { ...me, user_id: me.tenant_id };
 }
 
 export function storedUserId() {
@@ -210,113 +207,113 @@ export const vidura = {
   bots: () => api.get('/bots'),
 
   // btc bots (btc15, btc60) — one umbrella, `bot` picks the family member
-  btcStatus: (userId) => api.get('/bots/btc/status', { params: { user_id: userId } }),
-  btcStart: (bot, body) => api.post(`/bots/btc/start?bot=${bot}`, body),
-  btcStop: (bot, body) => api.post(`/bots/btc/stop?bot=${bot}`, body),
-  btcLogs: (params) => api.get('/bots/btc/logs', { params }),
-  btcTrades: (params) => api.get('/bots/btc/trades', { params }),
-  btcSync: (userId) => api.post(`/bots/btc/sync-trades?user_id=${userId}`),
-  btcProcesses: (bot) => api.get('/bots/btc/processes', { params: { bot } }),
-  btcKill: (bot) => api.post(`/bots/btc/kill?bot=${bot}`),
+  btcStatus: (_userId) => api.get('/bots/btc15/status'),
+  btcStart: (bot, body) => api.post(`/bots/${bot}/start`, body),
+  btcStop: (bot, body) => api.post(`/bots/${bot}/stop`, body),
+  btcLogs: (params) => api.get('/bots/btc15/logs', { params }),
+  btcTrades: (params) => api.get('/bots/btc15/trades', { params }),
+  btcSync: (userId) => api.post(`/bots/btc15/sync`),
+  btcProcesses: (bot) => api.get('/bots/btc15/processes', { params: { bot } }),
+  btcKill: (bot) => api.post(`/bots/${bot}/kill`),
 
   // multi-sport bot
   sportsProcesses: () => api.get('/bots/sports/processes'),
   sportsKill: () => api.post('/bots/sports/kill'),
   sportsConfig: () => api.get('/bots/sports/config'),
-  sportsStatus: (userId) => api.get('/bots/sports/status', { params: { user_id: userId } }),
+  sportsStatus: (_userId) => api.get('/bots/sports/status'),
   sportsStart: (body) => api.post('/bots/sports/start', body),
   sportsStop: (body) => api.post('/bots/sports/stop', body),
   sportsLogs: (params) => api.get('/bots/sports/logs', { params }),
-  sportsActiveBets: (userId) => api.get('/bots/sports/active-bets', { params: { user_id: userId } }),
+  sportsActiveBets: (userId) => api.get('/bots/sports/active-bets', { params: {} }),
   sportsPerformance: (params) => api.get('/bots/sports/performance', { params }),
   sportsTrades: (params) => api.get('/bots/sports/trades', { params }),
-  sportsSync: (userId) => api.post(`/bots/sports/sync-trades?user_id=${userId}`),
+  sportsSync: (userId) => api.post(`/bots/sports/sync`),
 
   // parlay bot — its own process, bankroll and ledger, so its own spec path
   parleyProcesses: () => api.get('/bots/parley/processes'),
   parleyKill: () => api.post('/bots/parley/kill'),
-  parleyStatus: (userId) => api.get('/bots/parley/status', { params: { user_id: userId } }),
+  parleyStatus: (_userId) => api.get('/bots/parley/status'),
   parleyStart: (body) => api.post('/bots/parley/start', body),
   parleyStop: (body) => api.post('/bots/parley/stop', body),
   parleyLogs: (params) => api.get('/bots/parley/logs', { params }),
-  parleyActiveBets: (userId) => api.get('/bots/parley/active-bets', { params: { user_id: userId } }),
+  parleyActiveBets: (userId) => api.get('/bots/parley/active-bets', { params: {} }),
   parleyTrades: (params) => api.get('/bots/parley/trades', { params }),
-  parleySync: (userId) => api.post(`/bots/parley/sync-trades?user_id=${userId}`),
+  parleySync: (userId) => api.post(`/bots/parley/sync`),
 
   // commodity bots (gold15, silver15, oil15) — same umbrella pattern as BTC
-  commodityStatus: (userId) => api.get('/bots/commodities/status', { params: { user_id: userId } }),
-  commodityStart: (bot, body) => api.post(`/bots/commodities/start?bot=${bot}`, body),
-  commodityStop: (bot, body) => api.post(`/bots/commodities/stop?bot=${bot}`, body),
-  commodityLogs: (params) => api.get('/bots/commodities/logs', { params }),
-  commodityTrades: (params) => api.get('/bots/commodities/trades', { params }),
-  commoditySync: (userId) => api.post(`/bots/commodities/sync-trades?user_id=${userId}`),
-  commodityProcesses: (bot) => api.get('/bots/commodities/processes', { params: { bot } }),
-  commodityKill: (bot) => api.post(`/bots/commodities/kill?bot=${bot}`),
+  commodityStatus: (_userId) => api.get('/bots/gold15/status'),
+  commodityStart: (bot, body) => api.post(`/bots/${bot}/start`, body),
+  commodityStop: (bot, body) => api.post(`/bots/${bot}/stop`, body),
+  commodityLogs: (params) => api.get('/bots/gold15/logs', { params }),
+  commodityTrades: (params) => api.get('/bots/gold15/trades', { params }),
+  commoditySync: (userId) => api.post(`/bots/gold15/sync`),
+  commodityProcesses: (bot) => api.get('/bots/gold15/processes', { params: { bot } }),
+  commodityKill: (bot) => api.post(`/bots/${bot}/kill`),
   // live gold/silver/oil DMI call-put readout (the v2 engine's signal) —
   // read-only market data, no user_id needed
   commodityDmiSignals: (force) => api.get('/bots/commodities/signals', { params: { force: force || undefined } }),
 
-  kalshiClient: (userId) => api.post(`/users/${userId}/kalshi-client`),
+  kalshiClient: (userId) => api.post('/credentials/tradier_sandbox/verify'),
   // live portfolio value (cash + open positions), server-cached ~30s
-  portfolio: (userId) => api.get(`/users/${userId}/portfolio`),
+  portfolio: (userId) => api.get('/portfolio'),
   // daily PV snapshots (one per CST day, written by fresh /portfolio fetches)
-  portfolioHistory: (userId) => api.get(`/users/${userId}/portfolio/history`),
+  portfolioHistory: (userId) => api.get('/portfolio/history'),
   // settle stale-open ledger rows from Kalshi fills+settlements (all bot
   // families). hours = staleness floor, NOT a lookback window; apply=false
   // previews. Kalshi lookups per row -> generous timeout.
   botsReconcile: (userId, hours = 1, apply = true) =>
-    api.post(`/bots/reconcile?user_id=${userId}&hours=${hours}&apply=${apply}`,
+    api.post(`/bots/reconcile?hours=${hours}&apply=${apply}`,
       undefined, { timeout: 180000 }),
-  recordTrade: (userId, body) => api.post(`/users/${userId}/trades`, body),
-  trades: (userId, params) => api.get(`/users/${userId}/trades`, { params }),
+  recordTrade: (userId, body) => api.post('/trades', body),
+  trades: (userId, params) => api.get('/trades', { params }),
 
   // HOT: top-100 DMI/ADX trend scan. A 100-name bar sweep runs in the
   // background, so this reads a snapshot and never waits on the venue.
   tradierHot: (userId, live, interval, refresh) => api.get('/tradier/hot', {
-    params: { user_id: userId, live, interval, refresh: refresh || undefined },
+    params: { live, interval, refresh: refresh || undefined },
   }),
   tradierCommodities: (userId, live, refresh) => api.get('/tradier/commodities', {
-    params: { user_id: userId, live, refresh: refresh || undefined },
+    params: { live, refresh: refresh || undefined },
   }),
   // tradier options executor
   // `live` is never persisted anywhere: every call states its venue, so a
   // reload always comes back on the sandbox.
-  tradierVenue: (userId) => api.get('/tradier/venue', { params: { user_id: userId } }),
+  tradierVenue: (userId) => api.get('/tradier/venue', { params: {} }),
   // market-data-only session id for Tradier's WebSocket (production-only;
   // the account token stays on the server)
   tradierStreamSession: (userId) =>
-    api.post(`/tradier/stream/session?user_id=${userId}`),
+    api.post(`/tradier/stream/session`),
   // unusual options activity — served from a background sweep, so this
   // returns instantly with whatever snapshot exists
   // today's intraday bars — seeds a chart the socket then extends
   tradierTimesales: (userId, symbol, interval = '1min', live = false, days = 1) =>
     api.get('/tradier/timesales', {
-      params: { user_id: userId, symbol, interval, live, days },
+      params: { symbol, interval, live, days },
     }),
   tradierFlow: (userId, live = false, refresh = false) =>
-    api.get('/tradier/flow', { params: { user_id: userId, live, refresh } }),
+    api.get('/tradier/flow', { params: { live, refresh } }),
   tradierBalance: (userId, live = false) =>
-    api.get('/tradier/balance', { params: { user_id: userId, live } }),
-  tradierChain: (userId, params) => api.get('/tradier/chain', { params: { user_id: userId, ...params } }),
-  tradierOpen: (body) => api.post('/tradier/positions', body, { timeout: 60000 }),
+    api.get('/tradier/balance', { params: { live } }),
+  tradierChain: (userId, params) => api.get('/tradier/chain', { params: { ...params } }),
+  tradierOpen: (body) => api.send('/tradier/positions', body, { timeout: 60000 }),
   // buy one named contract (the flow board already chose it)
   tradierBuyContract: (body) =>
-    api.post('/tradier/positions/contract', body, { timeout: 60000 }),
+    api.send('/tradier/positions/contract', body, { timeout: 60000 }),
   tradierPositions: (userId, status, venue = 'all', marks = false) =>
-    api.get('/tradier/positions', { params: { user_id: userId, status, venue, marks } }),
-  tradierSweep: (userId) => api.post(`/tradier/positions/sweep?user_id=${userId}`),
+    api.get('/tradier/positions', { params: { status, venue, marks } }),
+  tradierSweep: (userId) => api.send(`/tradier/positions/sweep`),
   tradierClose: (userId, id, force = false) =>
-    api.post(`/tradier/positions/${id}/close?user_id=${userId}&force=${force}`),
+    api.send(`/tradier/positions/${id}/close?force=${force}`),
   // move a live position's take-profit; re-rests the sell on the venue
   tradierSetTarget: (userId, id, targetPrice) =>
-    api.post(`/tradier/positions/${id}/target`,
-      { user_id: userId, target_price: targetPrice }, { timeout: 30000 }),
+    api.send(`/tradier/positions/${id}/target`,
+      { target_price: targetPrice }, { timeout: 30000 }),
   tradierCarryOver: (userId, id, carryOver = true) =>
-    api.post(`/tradier/positions/${id}/carryover`,
-      { user_id: userId, carry_over: carryOver }),
+    api.send(`/tradier/positions/${id}/carryover`,
+      { carry_over: carryOver }),
   // desk ticker rail: Tradier batch quotes, yfinance fill for gaps/no-keys
   tradierQuotes: (userId, symbols) =>
-    api.get('/tradier/quotes', { params: { user_id: userId, symbols } }),
+    api.get('/tradier/quotes', { params: { symbols } }),
 
   // SPY/QQQ/SPX level-cross watcher (levels_watcher.py in the day-trade repo)
   levelsStatus: () => api.get('/levels/status'),
@@ -325,8 +322,8 @@ export const vidura = {
 
   // opening-range auto-trader (level cross -> confirmed -> managed 0DTE)
   autoTradeStart: (body) => api.post('/tradier/autotrade/start', body),
-  autoTradeStop: (userId) => api.post(`/tradier/autotrade/stop?user_id=${userId}`),
-  autoTradeStatus: (userId) => api.get('/tradier/autotrade/status', { params: { user_id: userId } }),
+  autoTradeStop: (userId) => api.post(`/tradier/autotrade/stop`),
+  autoTradeStatus: (userId) => api.get('/tradier/autotrade/status', { params: {} }),
 
   // super research
   superState: (all) => api.get('/super/state', { params: all ? { all: 1 } : undefined }),

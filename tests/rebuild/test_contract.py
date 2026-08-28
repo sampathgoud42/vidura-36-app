@@ -76,6 +76,9 @@ CONTRACT: list[tuple[str, str]] = [
     ("POST", f"{V1}/bots/launch"),
     ("GET", f"{V1}/bots/commodities/signals"),
     # desk + wellness + worlds
+    ("GET", f"{V1}/levels/status"),
+    ("POST", f"{V1}/levels/start"),
+    ("POST", f"{V1}/levels/stop"),
     ("GET", f"{V1}/desk36/dmi"),
     ("GET", f"{V1}/wellness/profile"),
     ("PUT", f"{V1}/wellness/profile"),

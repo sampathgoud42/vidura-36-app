@@ -56,3 +56,7 @@ runtime/prediction-trade/**/trade_history*.csv
 runtime/prediction-trade/**/bot_*_state.json
 runtime/prediction-trade/sports/tennis/web/tennis_rankings.csv
 runtime/prediction-trade/sports/tennis/web/archive_data/
+var/tok.txt
+var/v2.out
+var/v2.err
+frontend/dist-v2/
