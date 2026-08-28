@@ -26,7 +26,8 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api_v2.routers import auth, bots, positions, tenants, wellness
+from app.api_v2.routers import (auth, bots, desk, positions, tenants,
+                                wellness)
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
@@ -85,6 +86,12 @@ def create_app() -> FastAPI:
             )
         return await call_next(request)
 
+    # The bots this project ships with. Registered exactly the way a bot
+    # added tomorrow is, so the onboarding contract is proven for real
+    # bots and not only for the throwaway test one.
+    from app.domains.botstation import registry as bot_registry
+    bot_registry.load_builtin_bots()
+
     prefix = settings.api_v1_prefix
     app.include_router(auth.router, prefix=prefix)
     app.include_router(tenants.router, prefix=prefix)
@@ -92,6 +99,9 @@ def create_app() -> FastAPI:
     app.include_router(positions.router, prefix=prefix)
     app.include_router(positions.credentials_router, prefix=prefix)
     app.include_router(bots.router, prefix=prefix)
+    app.include_router(desk.trades_router, prefix=prefix)
+    app.include_router(desk.market_router, prefix=prefix)
+    app.include_router(desk.desk36_router, prefix=prefix)
 
     @app.get("/health", operation_id="healthCheck")
     def health() -> dict:

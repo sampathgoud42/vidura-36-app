@@ -140,9 +140,23 @@ def test_tenant_scoped_endpoints_refuse_an_anonymous_caller(client, path):
 @pytest.mark.parametrize("path", [f"{V1}/auth/login", f"{V1}/auth/status",
                                   "/health"])
 def test_the_open_paths_stay_open(client, path):
+    """These paths must be reachable WITHOUT a session.
+
+    Checked by the login_required marker rather than by the status code. A
+    status code cannot express this: /auth/login answers 401 for a wrong
+    password, which is correct and has nothing to do with whether the path is
+    gated. Only the middleware attaches login_required, and the desk already
+    keys on exactly that distinction (viduraApi.js:99) for the same reason.
+    """
     r = client.get(path) if path != f"{V1}/auth/login" else client.post(
         path, json={"username": "x", "password": "y"})
-    assert r.status_code != 401
+
+    if r.status_code == 401:
+        body = r.json() if r.headers.get("content-type", "").startswith(
+            "application/json") else {}
+        assert not body.get("login_required"), (
+            f"{path} is gated by the session middleware but must be open"
+        )
 
 
 def test_the_shared_api_key_cannot_reach_tenant_data(client, monkeypatch):

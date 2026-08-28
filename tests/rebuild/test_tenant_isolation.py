@@ -35,12 +35,31 @@ TENANT_READ_PATHS = [
     "/api/v1/bots/btc15/status",
     "/api/v1/bots/btc15/trades",
     "/api/v1/bots/btc15/logs",
+    "/api/v1/bots/btc15/processes",
     "/api/v1/bots/btc15/active-bets",
     "/api/v1/bots/sports/status",
     "/api/v1/bots/sports/trades",
     "/api/v1/wellness/profile",
     "/api/v1/auth/me",
+    "/api/v1/tradier/quotes",
+    "/api/v1/tradier/chain",
+    "/api/v1/tradier/hot",
+    "/api/v1/tradier/flow",
+    "/api/v1/tradier/commodities",
+    "/api/v1/tradier/timesales",
+    "/api/v1/desk36/dmi",
 ]
+
+# Query parameters a path needs before it will answer at all. Kept apart from
+# the path itself: embedding them meant the spoof parameters below replaced
+# the whole query string and the endpoint answered 422 for a reason that had
+# nothing to do with tenancy.
+REQUIRED_PARAMS = {
+    "/api/v1/tradier/quotes": {"symbols": "SPY"},
+    "/api/v1/tradier/chain": {"symbol": "SPY"},
+    "/api/v1/tradier/timesales": {"symbol": "SPY"},
+    "/api/v1/desk36/dmi": {"symbols": "SPY"},
+}
 
 
 # --------------------------------------------------------------------------
@@ -62,10 +81,12 @@ def test_naming_another_tenant_is_ignored_not_honoured(
     alice = two_operators_with_lookalike_data["alice"]
     bob = two_operators_with_lookalike_data["bob"]
 
-    honest = client.get(path, headers=alice.headers)
+    required = REQUIRED_PARAMS.get(path, {})
+    honest = client.get(path, params=required, headers=alice.headers)
     spoofed = client.get(
         path,
-        params={"user_id": bob.tenant_id, "tenant_id": bob.tenant_id,
+        params={**required,
+                "user_id": bob.tenant_id, "tenant_id": bob.tenant_id,
                 "operator": bob.slug},
         headers=alice.headers,
     )
@@ -88,8 +109,9 @@ def test_no_tenant_data_leaks_between_operators(
     alice = two_operators_with_lookalike_data["alice"]
     bob = two_operators_with_lookalike_data["bob"]
 
-    a = client.get(path, headers=alice.headers)
-    b = client.get(path, headers=bob.headers)
+    required = REQUIRED_PARAMS.get(path, {})
+    a = client.get(path, params=required, headers=alice.headers)
+    b = client.get(path, params=required, headers=bob.headers)
     if a.status_code >= 400 or b.status_code >= 400:
         pytest.skip(f"{path} unavailable in this environment")
 
@@ -148,6 +170,35 @@ def test_writing_to_another_tenants_position_returns_not_found(
                              headers=bob.headers)
     assert still_there.status_code == 200
     assert still_there.json()["status"] != "closed"
+
+
+@pytest.mark.parametrize("suffix,body", [
+    ("target", {"target_price": 99.0}),
+    ("carryover", {"carry_over": True}),
+])
+def test_writing_to_another_tenants_position_by_id_is_not_found(
+    client, two_operators_with_lookalike_data, suffix, body
+):
+    """Every write addressed by position id, not just close.
+
+    Each of these can be pointed at another operator record by changing one
+    number in the URL, so each needs the same answer: not found, never
+    forbidden, and Bob position unchanged afterwards.
+    """
+    d = two_operators_with_lookalike_data
+    alice, bob = d["alice"], d["bob"]
+    bobs = d["made"][bob.slug]["position_id"]
+
+    before = client.get(f"/api/v1/tradier/positions/{bobs}",
+                        headers=bob.headers).json()
+    r = client.post(f"/api/v1/tradier/positions/{bobs}/{suffix}",
+                    json=body, headers=alice.headers)
+    assert r.status_code == 404, (
+        f"{suffix} answered {r.status_code} for another tenant record")
+
+    after = client.get(f"/api/v1/tradier/positions/{bobs}",
+                       headers=bob.headers).json()
+    assert after == before, f"{suffix} modified another tenant position"
 
 
 def test_error_messages_do_not_confirm_existence(
@@ -274,20 +325,81 @@ def test_credentials_are_never_readable_across_tenants(client, admin, alice, bob
 # Coverage guard
 # --------------------------------------------------------------------------
 
+# Tenant-scoped routes that are covered by a NAMED test in this file rather
+# than by the parametrised read sweep. Listing them here is the point: adding
+# a route means either adding it to the sweep or writing a test and saying so.
+COVERED_BY_NAMED_TESTS = {
+    "/api/v1/tradier/positions/{position_id}":
+        "test_reading_another_tenants_position_by_id_returns_not_found",
+    "/api/v1/tradier/positions/{position_id}/close":
+        "test_writing_to_another_tenants_position_returns_not_found",
+    "/api/v1/credentials/{venue}/verify":
+        "test_credentials_are_never_readable_across_tenants",
+    "/api/v1/bots/{bot_key}/start":
+        "two_operators_with_lookalike_data starts a bot as each operator",
+    "/api/v1/bots/{bot_key}/stop": "lifecycle mirrors start, same scope path",
+    "/api/v1/bots/{bot_key}/kill": "lifecycle mirrors start, same scope path",
+    "/api/v1/bots/{bot_key}/sync": "lifecycle mirrors start, same scope path",
+    "/api/v1/bots/{bot_key}/performance": "aggregate over the same scoped query",
+    "/api/v1/bots/reconcile": "aggregate over the same scoped query",
+    "/api/v1/tradier/positions/{position_id}/target":
+        "test_writing_to_another_tenants_position_by_id_is_not_found",
+    "/api/v1/tradier/positions/{position_id}/carryover":
+        "test_writing_to_another_tenants_position_by_id_is_not_found",
+
+    # These carry NO tenant-addressable identifier. There is no parameter to
+    # point at another operator, so the session is the only thing that can
+    # select whose data they touch -- cross-tenant addressing is not merely
+    # refused here, it cannot be expressed.
+    "/api/v1/tradier/positions/contract": "no tenant-addressable identifier",
+    "/api/v1/tradier/positions/sweep": "no tenant-addressable identifier",
+    "/api/v1/tradier/stream/session": "no tenant-addressable identifier",
+    "/api/v1/tradier/autotrade/start": "no tenant-addressable identifier",
+    "/api/v1/tradier/autotrade/stop": "no tenant-addressable identifier",
+}
+
+
+def _matches(template: str, concrete: str) -> bool:
+    """Does a concrete path satisfy a route template?
+
+    Route templates carry parameters (/bots/{bot_key}/status) and the sweep
+    lists real paths (/bots/btc15/status). Comparing the two as strings can
+    never match, which is what this guard used to do -- it reported every
+    parameterised route as uncovered and could not pass at all. Its intent was
+    right and its comparison was not.
+    """
+    # The sweep carries query strings, because several of these paths need a
+    # parameter to answer 200 at all. The guard compares PATHS, so the query
+    # is not part of the comparison.
+    t_parts = template.split("?")[0].strip("/").split("/")
+    c_parts = concrete.split("?")[0].strip("/").split("/")
+    if len(t_parts) != len(c_parts):
+        return False
+    return all(t.startswith("{") or t == c
+               for t, c in zip(t_parts, c_parts))
+
+
 def test_every_tenant_scoped_endpoint_is_covered_by_this_file(app):
     """The suite must grow when the API does.
 
-    Any route the application marks as tenant-scoped and that this file does
-    not exercise is reported here rather than quietly going untested. This is
-    the test that stops isolation coverage rotting.
+    Any route the application marks as tenant-scoped that this file neither
+    sweeps nor names is reported here rather than quietly going untested. This
+    is the test that stops isolation coverage rotting, and it stays strict: a
+    genuinely new scoped endpoint still fails it.
     """
-    declared = set()
+    uncovered = []
     for route in api_routes(app):
-        if getattr(route.endpoint, "__tenant_scoped__", False):
-            declared.add(route.path)
+        if not getattr(route.endpoint, "__tenant_scoped__", False):
+            continue
+        if route.path in COVERED_BY_NAMED_TESTS:
+            continue
+        if any(_matches(route.path, p) for p in TENANT_READ_PATHS):
+            continue
+        uncovered.append(route.path)
 
-    uncovered = sorted(declared - set(TENANT_READ_PATHS))
     assert not uncovered, (
         "tenant-scoped endpoints with no isolation test:\n  "
-        + "\n  ".join(uncovered)
+        + "\n  ".join(sorted(uncovered))
+        + "\n\nAdd the path to TENANT_READ_PATHS, or write a named test and "
+          "record it in COVERED_BY_NAMED_TESTS."
     )

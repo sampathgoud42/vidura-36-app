@@ -160,6 +160,22 @@ def fake_venue(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_arm_delay(monkeypatch):
+    """Arm exits immediately.
+
+    In production a fill waits 30 seconds before its exits are armed, because
+    a buy reporting "filled" is not yet a position and selling into that gap
+    is what the venue rejects. That delay is real and stays in the product --
+    but a test asserting what an ARMED position looks like should not spend 30
+    seconds of wall clock reaching it, and one that does not wait simply never
+    reaches the state it is about.
+    """
+    from app.domains.trading.risk import monitor
+
+    monkeypatch.setattr(monitor, "ARM_DELAY_S", 0)
+
+
+@pytest.fixture(autouse=True)
 def watched_stops(monkeypatch):
     """Guard 7 is satisfied by default.
 

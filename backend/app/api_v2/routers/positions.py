@@ -316,6 +316,172 @@ def close_position(position_id: int,
                             detail="the venue could not be reached") from None
 
 
+class ContractRequest(BaseModel):
+    """Buy one NAMED contract. The flow board already chose it."""
+    occ_symbol: str
+    underlying: str
+    contracts: int = Field(ge=1)
+    limit_price: float = Field(gt=0)
+    tp_pct: float = 15.0
+    sl_pct: float = 30.0
+    live: bool = False
+    strategy: str = "Flow"
+    allow_add: bool = False
+
+
+class TargetRequest(BaseModel):
+    target_price: float = Field(gt=0)
+
+
+class CarryOverRequest(BaseModel):
+    carry_over: bool = True
+
+
+@router.post("/positions/contract", operation_id="openTradierContract")
+@deps.tenant_scoped
+def open_contract(payload: ContractRequest,
+                  idempotency_key: str | None = Header(default=None,
+                                                       alias="Idempotency-Key"),
+                  tenant: Tenant = Depends(deps.current_tenant),
+                  db: DbSession = Depends(deps.get_db),
+                  kr: Keyring = Depends(deps.keyring)) -> dict:
+    """A different operation from /positions, not a mode of it.
+
+    /positions searches a delta band and picks; this one is handed the
+    contract. Phase 4 kept them apart deliberately -- merging would need a
+    flag that changes what the body means, which is the anti-pattern.
+    """
+    try:
+        attempt = idempotency.begin(
+            db, tenant_id=tenant.id, intent="open_contract",
+            payload=payload.model_dump(), client_key=idempotency_key)
+    except idempotency.DuplicateRequest as dup:
+        db.commit()
+        return idempotency.stored_result(dup.attempt)
+    except idempotency.KeyReused as exc:
+        db.commit()
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+    cred = _credential(db, tenant, kr, live=payload.live)
+    try:
+        pos = orders.open_position(
+            db, tenant_id=tenant.id, cred=cred, symbol=payload.underlying,
+            side="call" if "C" in payload.occ_symbol[-9:] else "put",
+            occ_symbol=payload.occ_symbol, underlying=payload.underlying,
+            strike=0.0, expiration=_expiration_from(payload.occ_symbol),
+            delta=None, contracts=payload.contracts,
+            limit_price=payload.limit_price, buy_pct=0.0, tolerance_pct=0.0,
+            tp_pct=payload.tp_pct, sl_pct=payload.sl_pct,
+            sandbox=not payload.live, strategy=payload.strategy,
+            allow_add=payload.allow_add,
+        )
+        result = _serialise(pos)
+        idempotency.succeed(db, attempt, result=result, position_id=pos.id)
+        db.commit()
+        return result
+    except (ExecutionRefused, RiskRefused, leases.LeaseUnavailable) as exc:
+        idempotency.fail(db, attempt, reason=str(exc))
+        db.commit()
+        raise HTTPException(status_code=getattr(exc, "status_code", 409),
+                            detail=str(exc)) from None
+
+
+def _expiration_from(occ_symbol: str) -> str:
+    """OCC symbols carry YYMMDD after the root. Best effort, and it only
+    feeds the expired-contract check -- a symbol we cannot parse is not
+    rejected on that basis alone."""
+    import re
+
+    match = re.search(r"(\d{6})[CP]\d", occ_symbol)
+    if not match:
+        return ""
+    yy, mm, dd = match.group(1)[:2], match.group(1)[2:4], match.group(1)[4:]
+    return f"20{yy}-{mm}-{dd}"
+
+
+@router.post("/positions/sweep", operation_id="sweepTradierPositions")
+@deps.tenant_scoped
+def sweep(idempotency_key: str | None = Header(default=None,
+                                               alias="Idempotency-Key"),
+          tenant: Tenant = Depends(deps.current_tenant),
+          db: DbSession = Depends(deps.get_db),
+          kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Flatten everything.
+
+    Each position is closed independently and a failure on one does not
+    abandon the rest -- a sweep that stops halfway leaves the operator worse
+    off than one that never started, because they now believe they are flat.
+    """
+    rows = list(db.scalars(select(Position).where(
+        Position.tenant_id == tenant.id,
+        Position.status.in_(("pending", "open")),
+    )).all())
+
+    closed, failed = [], []
+    for pos in rows:
+        try:
+            cred = _credential(db, tenant, kr, live=not pos.venue_sandbox)
+            orders.close_position(db, tenant_id=tenant.id, cred=cred, pos=pos)
+            closed.append(pos.id)
+        except Exception as exc:                        # noqa: BLE001
+            logger.warning("sweep: position %s: %s", pos.id, exc)
+            failed.append({"id": pos.id, "detail": str(exc)})
+    db.commit()
+    return {"closed": closed, "failed": failed, "considered": len(rows)}
+
+
+@router.post("/positions/{position_id}/target", operation_id="setTradierTarget")
+@deps.tenant_scoped
+def set_target(position_id: int, payload: TargetRequest,
+               tenant: Tenant = Depends(deps.current_tenant),
+               db: DbSession = Depends(deps.get_db),
+               kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Move the take-profit. Re-rests the sell at the venue.
+
+    The operator named a price, so it wins over the percentage -- the
+    percentage was only ever a way of reaching one.
+    """
+    pos = db.get(Position, position_id)
+    if pos is None or pos.tenant_id != tenant.id:
+        raise HTTPException(status_code=404, detail="Not found")
+    if pos.entry_price and payload.target_price <= pos.entry_price:
+        raise HTTPException(
+            status_code=422,
+            detail=f"a target of {payload.target_price:.2f} is at or below the "
+                   f"entry of {pos.entry_price:.2f}")
+
+    cred = _credential(db, tenant, kr, live=not pos.venue_sandbox)
+    if pos.tp_order_id:
+        venue_mod.cancel_order(pos.tp_order_id, cred=cred,
+                               sandbox=pos.venue_sandbox)
+        placed = venue_mod.place_sell(
+            cred=cred, underlying=pos.underlying, occ_symbol=pos.occ_symbol,
+            quantity=pos.contracts, price=payload.target_price,
+            sandbox=pos.venue_sandbox)
+        pos.tp_order_id = placed.order_id
+    pos.tp_price = payload.target_price
+    if pos.entry_price:
+        pos.tp_pct = round((payload.target_price / pos.entry_price - 1) * 100, 2)
+    db.commit()
+    return _serialise(pos)
+
+
+@router.post("/positions/{position_id}/carryover",
+             operation_id="setTradierCarryOver")
+@deps.tenant_scoped
+def set_carry_over(position_id: int, payload: CarryOverRequest,
+                   tenant: Tenant = Depends(deps.current_tenant),
+                   db: DbSession = Depends(deps.get_db)) -> dict:
+    """Hold this position overnight rather than flattening it at the close."""
+    pos = db.get(Position, position_id)
+    if pos is None or pos.tenant_id != tenant.id:
+        raise HTTPException(status_code=404, detail="Not found")
+    strategy = pos.strategy.replace(" +carry", "")
+    pos.strategy = f"{strategy} +carry" if payload.carry_over else strategy
+    db.commit()
+    return _serialise(pos)
+
+
 # ---- credential health ----------------------------------------------------
 
 credentials_router = APIRouter(prefix="/credentials", tags=["tenancy"])

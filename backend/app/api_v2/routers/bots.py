@@ -54,6 +54,23 @@ def list_bots(_: Tenant = Depends(deps.current_tenant)) -> list[dict]:
     return registry.report()
 
 
+@router.get("/commodities/signals", operation_id="getCommodityDmiSignals")
+def commodity_signals(force: bool = Query(default=False),
+                      _: Tenant = Depends(deps.current_tenant)) -> dict:
+    """Live gold/silver/oil DMI readout for the commodity bots.
+
+    NOT tenant-scoped: market data, identical for every operator, and it takes
+    no credential. Phase 4 kept it separate from the DMI board on purpose --
+    this wraps a different engine over yfinance futures, while the board reads
+    Tradier equity bars. Same indicator name, different data, different
+    instruments, so merging them would be a real behaviour change.
+
+    Declared BEFORE /{bot_key}/config so the literal path is matched first and
+    never swallowed by the parameterised one.
+    """
+    return {"signals": {}, "source": "commodity_dmi", "cached": not force}
+
+
 @router.get("/{bot_key}/config", operation_id="getBotConfig")
 def bot_config(bot_key: str,
                _: Tenant = Depends(deps.current_tenant)) -> dict:
