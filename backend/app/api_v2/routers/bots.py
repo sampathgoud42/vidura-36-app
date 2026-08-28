@@ -86,8 +86,15 @@ def bot_config(bot_key: str,
         "category": config.category,
         "cadence": config.cadence,
         "launch_style": config.launch_style,
-        "versions": [{"version": v.version, "default": v.default}
-                     for v in config.versions],
+        # Each MODEL carries its own resolved values, not just its name. btc15
+        # v2 and v5 are different engines with different risk profiles, so a
+        # form that showed one take-profit for the whole bot would be showing
+        # a number that is wrong for at least one of them.
+        "versions": [
+            {"version": v.version, "default": v.default,
+             "defaults": registry.effective_defaults(config, v)}
+            for v in config.versions
+        ],
         "options_schema": config.options_schema,
     }
 
@@ -281,6 +288,70 @@ def start_bot(bot_key: str, payload: StartRequest,
         logger.exception("start %s failed", bot_key)
         raise HTTPException(status_code=500,
                             detail=f"could not start {bot_key}") from None
+
+
+class LaunchEntry(BaseModel):
+    bot_key: str
+    version: str | None = None
+    mode: str = "paper"
+    # Per-bot overrides. Anything omitted falls through to the shared block,
+    # then to the model's own defaults, then to the bot's.
+    options: dict = Field(default_factory=dict)
+
+
+class MultiLaunchRequest(BaseModel):
+    bots: list[LaunchEntry] = Field(min_length=1, max_length=20)
+    # Set once at the centre and applied to every bot that does not override
+    # it -- which is the point of launching from one place.
+    shared_options: dict = Field(default_factory=dict)
+    mode: str = "paper"
+
+
+@router.post("/launch", operation_id="launchBots")
+@deps.tenant_scoped
+def launch_bots(payload: MultiLaunchRequest,
+                idempotency_key: str | None = Header(default=None,
+                                                     alias="Idempotency-Key"),
+                tenant: Tenant = Depends(deps.current_tenant),
+                db: DbSession = Depends(deps.get_db)) -> dict:
+    """Start several bots from one place, with per-bot overrides.
+
+    Every bot is attempted, and one failure does NOT abandon the rest. A
+    partial launch reported honestly is better than an all-or-nothing that
+    silently starts three of five and then rolls back two that are already
+    holding positions -- there is no rollback for an order that has been
+    placed.
+
+    Options resolve in four layers, outermost last:
+        bot schema default -> model default -> shared_options -> per-bot
+    """
+    for entry in payload.bots:
+        _config_or_404(entry.bot_key)
+
+    started, failed = [], []
+    for entry in payload.bots:
+        options = {**payload.shared_options, **entry.options}
+        mode = entry.mode if entry.mode != "paper" else payload.mode
+        try:
+            run = lifecycle.start(db, tenant_id=tenant.id,
+                                  tenant_slug=tenant.slug,
+                                  bot_key=entry.bot_key, version=entry.version,
+                                  options=options, mode=mode)
+            started.append({"bot_key": entry.bot_key, "run_id": run.id,
+                            "version": run.bot_version, "mode": run.mode})
+        except lifecycle.BotBusy as exc:
+            failed.append({"bot_key": entry.bot_key, "reason": str(exc),
+                           "already_running": True})
+        except (ValueError, KeyError, FileNotFoundError) as exc:
+            failed.append({"bot_key": entry.bot_key, "reason": str(exc)})
+        except Exception as exc:                        # noqa: BLE001
+            logger.exception("multi-launch: %s", entry.bot_key)
+            failed.append({"bot_key": entry.bot_key, "reason": str(exc)})
+
+    db.commit()
+    return {"requested": len(payload.bots), "started": started,
+            "failed": failed,
+            "all_started": not failed}
 
 
 @router.post("/{bot_key}/stop", operation_id="stopBot")

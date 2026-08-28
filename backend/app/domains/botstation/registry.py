@@ -13,6 +13,7 @@ the two things the onboarding contract forbids by name.
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,10 @@ class BotVersion:
     version: str
     rel_script: str          # relative to the vendored runtime root
     default: bool = False
+    # Per-MODEL overrides. btc15 v2 and v5 are different engines with
+    # different risk profiles, so "take-profit 15%" is not one number shared
+    # across them. A version that says nothing inherits the bot defaults.
+    option_defaults: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -150,18 +155,35 @@ def report() -> list[dict]:
     return out
 
 
-def validate_options(config: BotConfig, options: dict) -> dict:
+def effective_defaults(config: BotConfig, version: BotVersion | None) -> dict:
+    """Bot defaults, with this model's overrides on top.
+
+    Three layers, resolved in one place: the schema default, then the
+    version's own, then whatever the operator typed. Resolving them anywhere
+    else means two callers disagreeing about which wins.
+    """
+    out = {name: spec["default"] for name, spec in config.options_schema.items()
+           if "default" in spec}
+    if version is not None:
+        out.update({k: v for k, v in version.option_defaults.items()
+                    if k in config.options_schema})
+    return out
+
+
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+def validate_options(config: BotConfig, options: dict,
+                     version: BotVersion | None = None) -> dict:
     """Check launch options against the bot's OWN declared schema.
 
     One validator, every bot. The alternative is a hand-written validator per
     family, which is how four families ended up with four slightly different
     ideas of what a bankroll is.
     """
-    cleaned: dict[str, Any] = {}
+    cleaned: dict[str, Any] = dict(effective_defaults(config, version))
     for name, spec in config.options_schema.items():
         if name not in options or options[name] is None:
-            if "default" in spec:
-                cleaned[name] = spec["default"]
             continue
         value = options[name]
         kind = spec.get("type", "string")
@@ -182,7 +204,29 @@ def validate_options(config: BotConfig, options: dict) -> dict:
                 raise ValueError(f"{name} must be at least {spec['min']}, got {value:g}")
             if "max" in spec and value > spec["max"]:
                 raise ValueError(f"{name} must be at most {spec['max']}, got {value:g}")
+
+        # A time field that is empty means NO curfew, which for the sports and
+        # BTC families is the normal case. Only a non-empty value has to be a
+        # time, and a malformed one is refused rather than silently ignored --
+        # a bot that quietly trades around the clock because "9am" did not
+        # parse is the worst version of this.
+        if spec.get("format") == "HH:MM" and value:
+            if not _HHMM.match(str(value)):
+                raise ValueError(
+                    f"{name} must be HH:MM in 24-hour CST, got {value!r}")
+
         cleaned[name] = value
+
+    # Both ends or neither: half a window is ambiguous, and guessing which
+    # half the operator meant is how a bot ends up trading at 3am.
+    start, end = cleaned.get("time_start"), cleaned.get("time_end")
+    if bool(start) != bool(end):
+        raise ValueError(
+            "time_start and time_end must be given together, or both left "
+            "empty for no curfew")
+    if start and end and start >= end:
+        raise ValueError(
+            f"time_start {start} is not before time_end {end}")
 
     unknown = set(options) - set(config.options_schema)
     if unknown:

@@ -146,7 +146,8 @@ def start(db: Session, *, tenant_id: str, tenant_slug: str, bot_key: str,
             f"{bot_key} is already running for this operator (run "
             f"{existing.id}, started {existing.started_at:%Y-%m-%d %H:%M})")
 
-    cleaned = registry.validate_options(config, options or {})
+    # version passed through: a model's own TP/SL defaults beat the bot's
+    cleaned = registry.validate_options(config, options or {}, spec_version)
     settings = get_settings()
     if mode == "live" and settings.paper_only:
         raise ValueError(
@@ -175,8 +176,8 @@ def start(db: Session, *, tenant_id: str, tenant_slug: str, bot_key: str,
                  mode="live" if live else "paper",
                  status="running", pid=pid, started_at=utcnow(),
                  bankroll=cleaned.get("bankroll"),
-                 target_pct=cleaned.get("target_pct"),
-                 stop_pct=cleaned.get("stop_pct"),
+                 target_pct=cleaned.get("bank_tp_pct"),
+                 stop_pct=cleaned.get("bank_sl_pct"),
                  options_json=json.dumps(cleaned, default=str))
     db.add(run)
     db.flush()

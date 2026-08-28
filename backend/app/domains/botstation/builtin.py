@@ -22,18 +22,46 @@ _BTC60 = "prediction-trade/kalshi/btc/btc60"
 _SPORTS = "prediction-trade/kalshi/sports"
 _COMMOD = "prediction-trade/kalshi/commodities"
 
-# Options every Kalshi bot accepts. Declared once and shared by value, not by
-# inheritance -- a bot that wants different bounds writes its own dict rather
-# than overriding a base class nobody can see the shape of.
+# Every knob a bot launch accepts, declared once and shared BY VALUE rather
+# than by inheritance -- a bot that wants different bounds writes its own dict
+# instead of overriding a base class nobody can see the shape of.
+#
+# Two different levels of risk live here and the names say which is which:
+#
+#   tp_pct / sl_pct              per TRADE, against the entry price
+#   bank_tp_pct / bank_sl_pct    per BANKROLL, against the bot own capital
+#
+# They were conflated in the old build -- "target_pct" meant the bankroll one
+# and "stop loss" meant the trade one, in the same form. Two things called
+# roughly the same thing, doing different jobs, one of which halts the bot.
 _RISK_OPTIONS = {
+    # --- per-trade exits ---------------------------------------------------
+    "tp_pct": {"type": "number", "min": 0.1, "max": 500, "default": 15,
+               "label": "Take-profit (% per trade)", "group": "Per trade"},
+    "sl_pct": {"type": "number", "min": 0.1, "max": 99, "default": 30,
+               "label": "Stop-loss (% per trade)", "group": "Per trade"},
+    "contracts": {"type": "integer", "min": 1, "max": 500, "default": 1,
+                  "label": "Contracts per trade", "group": "Per trade"},
+
+    # --- bankroll ----------------------------------------------------------
     "bankroll": {"type": "number", "min": 1, "default": 50,
-                 "label": "Bankroll ($)"},
-    "target_pct": {"type": "number", "min": 1, "max": 500, "default": 25,
-                   "label": "Target (% of bankroll)"},
-    "stop_pct": {"type": "number", "min": 1, "max": 100, "default": 50,
-                 "label": "Bank stop-loss (%)"},
-    "contracts": {"type": "integer", "min": 1, "default": 1,
-                  "label": "Contracts per trade"},
+                 "label": "Bankroll ($)", "group": "Bankroll"},
+    "bank_tp_pct": {"type": "number", "min": 1, "max": 1000, "default": 25,
+                    "label": "Halt on bankroll gain (%)", "group": "Bankroll"},
+    "bank_sl_pct": {"type": "number", "min": 1, "max": 100, "default": 50,
+                    "label": "Halt on bankroll loss (%)", "group": "Bankroll"},
+
+    # --- when it may trade -------------------------------------------------
+    # A bot with no curfew trades overnight, which for the sports and BTC
+    # families is exactly what it is FOR. So the range is optional and empty
+    # means "no curfew" rather than "never".
+    "time_start": {"type": "string", "default": "", "format": "HH:MM",
+                   "label": "Trade from (CST)", "group": "Schedule"},
+    "time_end": {"type": "string", "default": "", "format": "HH:MM",
+                 "label": "Trade until (CST)", "group": "Schedule"},
+    "no_trade_times": {"type": "string", "default": "",
+                       "label": "Blackout windows (CST, comma separated)",
+                       "group": "Schedule"},
 }
 
 

@@ -69,6 +69,11 @@ CONTRACT: list[tuple[str, str]] = [
     # bots
     ("GET", f"{V1}/bots"),
     ("POST", f"{V1}/bots/reconcile"),
+    # Multi-bot launch from one place, added on request after the Phase 4
+    # freeze. Recorded here deliberately: the contract is the baseline, so
+    # a new endpoint is a visible edit to this list rather than a router
+    # change nobody reviews.
+    ("POST", f"{V1}/bots/launch"),
     ("GET", f"{V1}/bots/commodities/signals"),
     # desk + wellness + worlds
     ("GET", f"{V1}/desk36/dmi"),
