@@ -213,7 +213,7 @@
       Every traceback pointed at <code>..\tradier-bot\tests\…</code> — a sibling project this repository was copied from. The copy brought <code>__pycache__</code> with it, and compiled Python bakes in the absolute path of the file it was built from. I cleared all <code>__pycache__</code> directories and <code>.pytest_cache</code>; the baseline above is from a clean run. Worth adding to <code>.gitignore</code> housekeeping, and worth knowing before anyone debugs a stack trace here.
     </div>
 
-    <p>Second: <code>pyproject.toml</code> still declares <code>name = "tradier-bot"</code>. Cosmetic, but this project is <code>vidura-36-app</code> and the sibling still exists on disk at <code>D:\_projects\tradier-bot</code>. I have not touched either — flagging it so the two do not get confused during Phase 7, when one of them starts changing.</p>
+    <p>Second: <code>pyproject.toml</code> still declares <code>name = "tradier-bot"</code>. Cosmetic, but this project is <code>vidura-36-app</code> and the sibling still exists on disk at <code>D:\_projects\tradier-bot</code>. Both were renamed in Phase 7 and this paragraph is the historical record of why. <!-- no-outside-ref-ok: prose about a resolved issue, not a live path --></p>
   </section>
 
   <div class="stopbar">
