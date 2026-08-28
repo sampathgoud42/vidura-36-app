@@ -94,7 +94,15 @@ class BotTrade(Base, TenantOwned, Timestamped):
     __table_args__ = (
         UniqueConstraint("tenant_id", "bot_key", "external_id",
                          name="tenant_bot_external"),
-        CheckConstraint("status in ('open','closed','cancelled')",
-                        name="status_known"),
+        # The real vocabulary, profiled from the data rather than invented.
+        # A Kalshi contract RESOLVES -- it does not merely close -- and the
+        # ledger holds 244 won, 118 lost and 5 settled. Collapsing those into
+        # "closed" would throw away the win/loss record, which is most of what
+        # a prediction-market ledger is for. My first enum allowed only
+        # open/closed/cancelled and the import failed against it, which is the
+        # constraint doing its job.
+        CheckConstraint(
+            "status in ('open','closed','cancelled','won','lost','settled')",
+            name="status_known"),
         Index("ix_bot_trade_tenant_bot_opened", "tenant_id", "bot_key", "opened_at"),
     )

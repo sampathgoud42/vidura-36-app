@@ -42,13 +42,33 @@ DEFAULT_WORLDS = {"tradier-platform": True, "36-trade-desk": True,
 # Which .env keys belong to which venue. Anything not listed is reported as
 # unrecognised rather than swept into a bucket -- an unknown key in a
 # credential file is a question, not a default.
+# env-var name -> the CANONICAL field the credential store reads.
+#
+# This map used to be a plain list of env names, and the secret was stored
+# under those names verbatim. load_credential() reads "token" / "account_id" /
+# "base_url" / "private_key_pem", so every imported credential decrypted
+# perfectly into an object whose token was the empty string. It failed at the
+# venue with "401 Invalid access token" -- which reads like a bad key, not a
+# bad import, and is why it survived the dry run: the dry run counted rows and
+# never asked whether the values were usable.
 VENUE_KEYS = {
-    "tradier": ("TRADIER_PROD_TOKEN", "TRADIER_PROD_ACCOUNT_ID",
-                "TRADIER_PROD_URI", "TRADIER_ACCESS_TOKEN",
-                "TRADIER_ACCOUNT_ID"),
-    "tradier_sandbox": ("TRADIER_SANDBOX_TOKEN", "TRADIER_SANDBOX_ACCOUNT_ID",
-                        "TRADIER_SANDBOX_URI"),
-    "kalshi": ("KALSHI_API_KEY_ID", "KALSHI_PRIVATE_KEY", "BASE_URI"),
+    "tradier": {
+        "TRADIER_PROD_TOKEN": "token",
+        "TRADIER_ACCESS_TOKEN": "token",          # pre-2026-08 name
+        "TRADIER_PROD_ACCOUNT_ID": "account_id",
+        "TRADIER_ACCOUNT_ID": "account_id",       # pre-2026-08 name
+        "TRADIER_PROD_URI": "base_url",
+    },
+    "tradier_sandbox": {
+        "TRADIER_SANDBOX_TOKEN": "token",
+        "TRADIER_SANDBOX_ACCOUNT_ID": "account_id",
+        "TRADIER_SANDBOX_URI": "base_url",
+    },
+    "kalshi": {
+        "KALSHI_API_KEY_ID": "token",             # the key id IS the identity
+        "BASE_URI": "base_url",
+        # KALSHI_PRIVATE_KEY names a FILE; the PEM itself is read below.
+    },
 }
 
 
@@ -150,16 +170,25 @@ def main() -> int:
             # means this importer does not know where a value belongs. Calling
             # both "unrecognised" sends whoever reads this hunting the wrong
             # thing.
-            known = {k for keys in VENUE_KEYS.values() for k in keys}
+            known = {k for keymap in VENUE_KEYS.values() for k in keymap}
             empty = sorted(k for k, v in env.items() if k in known and not v)
             stored, unknown = [], {k for k, v in env.items()
                                    if v and k not in known}
-            for venue, keys in VENUE_KEYS.items():
-                secret = {k: env[k] for k in keys if env.get(k)}
+            for venue, keymap in VENUE_KEYS.items():
+                # Canonical names, not env names. The first env var that has a
+                # value wins, so the modern name beats the legacy alias.
+                secret: dict[str, str] = {}
+                for env_name, canonical in keymap.items():
+                    value = env.get(env_name, "").strip()
+                    if value and canonical not in secret:
+                        secret[canonical] = value
                 if venue == "kalshi" and pem is not None and secret:
                     secret["private_key_pem"] = pem.read_text(
                         encoding="utf-8", errors="replace")
-                if not secret:
+                if not secret.get("token") and not secret.get("private_key_pem"):
+                    # Nothing usable. A credential row with no material is
+                    # worse than none: it looks configured and fails at the
+                    # venue.
                     continue
                 tenants.store_credential(
                     db, tenant, venue=venue, label="default",
