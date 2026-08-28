@@ -5,8 +5,8 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from sqlalchemy import (Boolean, CheckConstraint, DateTime, Float, Index,
-                        Integer, String, Text, UniqueConstraint)
+from sqlalchemy import (Boolean, CheckConstraint, DateTime, Float, ForeignKey,
+                        Index, Integer, String, Text, UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.db.base import Base, TenantOwned, Timestamped, tenant_fk
@@ -161,7 +161,13 @@ class RiskHeartbeat(Base, TenantOwned):
 
     __tablename__ = "risk_heartbeat"
 
-    tenant_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    # A real foreign key, not just a column that happens to hold a tenant id.
+    # It was NOT NULL and scope-enforced but unreferenced, so a heartbeat could
+    # outlive the operator it described -- and a stale row for a deleted tenant
+    # reads as "recently swept" to the guard that refuses entries.
+    tenant_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("tenant.id", ondelete="CASCADE"),
+        primary_key=True)
     last_pass_at: Mapped[datetime | None] = mapped_column(DateTime)
     last_ok_at: Mapped[datetime | None] = mapped_column(DateTime)
     consecutive_failures: Mapped[int] = mapped_column(

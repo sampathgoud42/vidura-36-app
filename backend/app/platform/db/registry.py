@@ -70,4 +70,12 @@ def is_scope_enforced(model: type) -> bool:
     table = getattr(model, "__table__", None)
     if table is None or "tenant_id" not in table.columns:
         return False
-    return not table.columns["tenant_id"].nullable
+    column = table.columns["tenant_id"]
+    if column.nullable:
+        return False
+    # And it must actually REFERENCE a tenant. A non-null column holding a
+    # tenant id is not the same as a foreign key: without one the row can
+    # outlive its operator, and risk_heartbeat did exactly that -- a stale
+    # row for a deleted tenant reads as "recently swept" to the guard that
+    # refuses entries when nobody is watching a stop.
+    return any(fk.column.table.name == "tenant" for fk in column.foreign_keys)
