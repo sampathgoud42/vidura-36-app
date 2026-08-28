@@ -39,16 +39,30 @@ class KalshiClient:
     def __init__(
         self,
         api_key_id: str,
-        private_key_path: str | Path,
+        private_key_path: str | Path | None = None,
         base_uri: str = DEFAULT_BASE,
         *,
+        private_key_pem: str | bytes | None = None,
         pem_password: str | None = None,
         timeout: float = 15.0,
     ):
         self.api_key_id = api_key_id
         self.base_uri = base_uri.rstrip("/")
         self.timeout = timeout
-        raw = Path(private_key_path).read_bytes()
+        # The key may arrive as CONTENT rather than a path. Credentials now
+        # live encrypted in the database, and the only way to hand this a path
+        # would be to decrypt the key and write it to disk -- which would
+        # undo the encryption for as long as that file existed, and longer if
+        # anything went wrong before it was cleaned up.
+        if private_key_pem is not None:
+            raw = (private_key_pem.encode() if isinstance(private_key_pem, str)
+                   else private_key_pem)
+        elif private_key_path is not None:
+            raw = Path(private_key_path).read_bytes()
+        else:
+            raise KalshiAuthError(
+                "no private key given: pass private_key_pem or "
+                "private_key_path")
         password = pem_password.encode() if pem_password else None
         try:
             key = serialization.load_pem_private_key(raw, password=password)

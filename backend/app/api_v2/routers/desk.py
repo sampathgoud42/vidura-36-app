@@ -126,24 +126,32 @@ def record_trade(payload: TradeIn,
 def portfolio(tenant: Tenant = Depends(deps.current_tenant),
               db: DbSession = Depends(deps.get_db),
               kr: Keyring = Depends(deps.keyring)) -> dict:
-    """Account value, from the venue.
+    """KALSHI portfolio value: settled cash plus open-position mark-to-market.
 
-    Best-effort by construction: a venue hiccup must not make the desk look
+    This is the Bot Station's headline number, and it is a KALSHI figure. I
+    had it returning Tradier's option buying power -- a real number from the
+    wrong venue, which is worse than an empty panel because it looks right.
+    The two are not comparable: one is what a broker will lend against
+    options, the other is what a prediction-market account is worth.
+
+    Best-effort by construction. A venue hiccup must not make the desk look
     broken, so an unreachable account reports as unavailable rather than
-    failing the request.
+    failing the request and blanking the panel.
     """
+    from app.domains.botstation import venue as kalshi
+
     try:
-        cred = _credential(db, tenant, kr, live=False)
-        balance = venue_mod.balance(cred=cred, sandbox=True) or {}
-    except HTTPException:
-        return {"available": False, "detail": "no credential for this operator"}
+        cred = tenants.load_credential(db, tenant.id, "kalshi", kr)
     except Exception:                                   # noqa: BLE001
-        logger.info("portfolio unavailable for %s", tenant.slug)
-        return {"available": False, "detail": "the venue could not be reached"}
-    return {"available": True,
-            "option_buying_power": balance.get("option_buying_power"),
-            "total_equity": balance.get("total_equity"),
-            "cash": balance.get("cash")}
+        return {"available": False, "venue": "kalshi",
+                "detail": "no Kalshi credential for this operator"}
+    try:
+        pv = kalshi.portfolio(cred)
+    except Exception:                                   # noqa: BLE001
+        logger.info("kalshi portfolio unavailable for %s", tenant.slug)
+        return {"available": False, "venue": "kalshi",
+                "detail": "Kalshi could not be reached"}
+    return {"available": True, "venue": "kalshi", **pv}
 
 
 @trades_router.get("/portfolio/history", operation_id="getPortfolioHistory")
