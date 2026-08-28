@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.rebuild._routes import api_routes, served as _served_set
+
 V1 = "/api/v1"
 
 # ---- the approved surface ------------------------------------------------
@@ -80,13 +82,9 @@ CONTRACT: list[tuple[str, str]] = [
 
 
 def _served(app) -> set[tuple[str, str]]:
-    out = set()
-    for route in app.routes:
-        for method in getattr(route, "methods", set()) or set():
-            if method in ("HEAD", "OPTIONS"):
-                continue
-            out.add((method, route.path))
-    return out
+    # Recurses into included routers. Iterating app.routes directly sees 2 of
+    # 16 routes on FastAPI 0.141 -- see tests/rebuild/_routes.py.
+    return _served_set(app)
 
 
 @pytest.mark.parametrize("method,path", CONTRACT)
@@ -116,13 +114,9 @@ def test_no_endpoint_accepts_a_tenant_selector(app):
     have no input surface at all — this is stronger than testing that they
     are ignored, because it proves they cannot be expressed.
     """
-    from fastapi.routing import APIRoute
-
     banned = {"user_id", "tenant_id", "operator", "username", "customer"}
     offenders = []
-    for route in app.routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for route in api_routes(app):
         # tenancy admin legitimately addresses a tenant by path
         if route.path.startswith(f"{V1}/tenants"):
             continue
@@ -164,14 +158,12 @@ def test_the_shared_api_key_cannot_reach_tenant_data(client, monkeypatch):
 def test_execution_endpoints_advertise_idempotency(app):
     """Every money-moving endpoint must accept an Idempotency-Key header, or
     the guarantee is optional in practice."""
-    from fastapi.routing import APIRoute
-
     money = {f"{V1}/tradier/positions", f"{V1}/tradier/positions/contract",
              f"{V1}/tradier/positions/{{position_id}}/close",
              f"{V1}/tradier/positions/sweep"}
     missing = []
-    for route in app.routes:
-        if isinstance(route, APIRoute) and route.path in money and "POST" in route.methods:
+    for route in api_routes(app):
+        if route.path in money and "POST" in route.methods:
             names = {h.name.lower().replace("_", "-")
                      for h in route.dependant.header_params}
             if "idempotency-key" not in names:

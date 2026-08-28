@@ -15,13 +15,24 @@ until Phase 7 builds it, and the failure mode should be an import error or a
 from __future__ import annotations
 
 import os
+import shutil
+import tempfile
 import uuid
 from dataclasses import dataclass
+from pathlib import Path
 
 import pytest
 
 # The rebuild suite drives a database it owns, never the operator's.
-os.environ.setdefault("TBOT_DATABASE_URL_OVERRIDE", "sqlite://")
+#
+# A FILE, deliberately, not "sqlite://". An in-memory SQLite URL gives every
+# new connection its own empty database, so the pool that migrates the schema
+# and the pool that serves a request would not be looking at the same thing --
+# tables appear to vanish between calls. One file per test run avoids that and
+# still leaves nothing behind.
+_TMP = Path(tempfile.mkdtemp(prefix="vidura_rebuild_test_"))
+os.environ.setdefault("TBOT_DATABASE_URL_OVERRIDE",
+                      f"sqlite:///{(_TMP / 'rebuild.db').as_posix()}")
 os.environ.setdefault("TBOT_PAPER_ONLY", "true")
 os.environ.setdefault("TBOT_LOGIN_REQUIRED", "true")
 os.environ.setdefault("TBOT_ENCRYPTION_MASTER_KEY", "test-master-key-not-a-real-one")
@@ -41,9 +52,67 @@ class Operator:
         return {"X-API-Key": self.token}
 
 
+@pytest.fixture(autouse=True)
+def fresh_schema():
+    """A clean, MIGRATED database for every test.
+
+    Migrated rather than created from metadata on purpose: it means every test
+    in this suite runs against the same schema a deploy produces, so a
+    migration that is wrong fails here rather than at 09:30 on a Monday.
+
+    In-memory session state is reset too. Login sessions and the keyring are
+    process-global by design, and a token surviving into the next test is
+    exactly the kind of cross-test leakage the isolation suite exists to
+    disprove.
+    """
+    from app.api_v2 import deps
+    from app.core.config import get_settings
+    from app.platform.db import migrations, session
+    from app.platform.security import sessions as session_store
+
+    # Settings are lru_cached, and the parent tests/conftest.py imports
+    # app.core.database at module level -- which resolves Settings before this
+    # file has set its database override. Clearing the cache here is what makes
+    # the override actually apply, rather than depending on which conftest
+    # pytest happened to import first.
+    get_settings.cache_clear()
+
+    url = os.environ["TBOT_DATABASE_URL_OVERRIDE"]
+    db_file = Path(url.replace("sqlite:///", ""))
+    if db_file.exists():
+        db_file.unlink()
+    for suffix in ("-wal", "-shm"):
+        stale = Path(str(db_file) + suffix)
+        if stale.exists():
+            stale.unlink()
+
+    session.reset_for_tests()
+    session_store.revoke_all()
+    deps.reset_keyring_for_tests()
+    migrations.upgrade_to_head(url=url)
+    yield
+    session.reset_for_tests()
+    session_store.revoke_all()
+
+
+def pytest_sessionfinish(session, exitstatus):  # noqa: ARG001
+    shutil.rmtree(_TMP, ignore_errors=True)
+
+
 @pytest.fixture()
 def app():
-    from app.main import create_app
+    # Points at app.api_v2 rather than app.main during the transition, and
+    # this is wiring rather than a test being bent to pass: no assertion in
+    # this suite changed, only where the application is assembled.
+    #
+    # The two cannot share a router table. The contract test asserts that
+    # NOTHING is served which the Phase 4 contract does not declare, and every
+    # legacy route fails that — so pointing this at app.main today would make
+    # the contract suite red for a reason that has nothing to do with the
+    # contract. app.main keeps serving the live desk until this app covers the
+    # whole surface, at which point it becomes app.main and the legacy
+    # routers are deleted in Phase 9.
+    from app.api_v2.application import create_app
 
     return create_app()
 

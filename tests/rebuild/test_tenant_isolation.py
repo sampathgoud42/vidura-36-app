@@ -19,6 +19,8 @@ import uuid
 
 import pytest
 
+from tests.rebuild._routes import api_routes
+
 # Every read path a signed-in operator can reach that returns tenant data.
 # A new tenant-scoped endpoint that is not in this list is a gap in the
 # suite, and test_every_scoped_endpoint_is_covered says so out loud.
@@ -280,9 +282,8 @@ def test_every_tenant_scoped_endpoint_is_covered_by_this_file(app):
     the test that stops isolation coverage rotting.
     """
     declared = set()
-    for route in app.routes:
-        scoped = getattr(getattr(route, "endpoint", None), "__tenant_scoped__", False)
-        if scoped:
+    for route in api_routes(app):
+        if getattr(route.endpoint, "__tenant_scoped__", False):
             declared.add(route.path)
 
     uncovered = sorted(declared - set(TENANT_READ_PATHS))
