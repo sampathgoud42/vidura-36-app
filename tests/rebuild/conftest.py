@@ -144,6 +144,34 @@ def admin(client) -> Operator:
                     token=r.json()["token"])
 
 
+@pytest.fixture(autouse=True)
+def fake_venue(monkeypatch):
+    """Substitute the venue seam for the whole suite.
+
+    Nothing outbound is real. The seam is one module of plain functions
+    precisely so this is one call rather than a dependency-injection story.
+    """
+    from tests.rebuild import fakes
+
+    fakes.reset()
+    fakes.install(monkeypatch)
+    yield fakes
+    fakes.reset()
+
+
+@pytest.fixture(autouse=True)
+def watched_stops(monkeypatch):
+    """Guard 7 is satisfied by default.
+
+    The risk monitor is not running in a test, so every entry would otherwise
+    be refused 503 for the right reason at the wrong time. Tests that care
+    about the guard override this themselves -- and one of them does.
+    """
+    from app.domains.trading.risk import heartbeat
+
+    monkeypatch.setattr(heartbeat, "seconds_since_last_pass", lambda tenant_id: 0.0)
+
+
 def _make_operator(client, admin: Operator, slug: str) -> Operator:
     """Create a tenant entirely at runtime and sign in as them.
 
@@ -165,6 +193,16 @@ def _make_operator(client, admin: Operator, slug: str) -> Operator:
         json={"worlds": {"tradier-platform": True, "36-trade-desk": True,
                          "bot-station": True},
               "default": "tradier-platform"},
+        headers=admin.headers,
+    ).raise_for_status()
+
+    # A sandbox credential, because an operator without one cannot trade and
+    # every execution test would fail 424 for a reason it is not testing.
+    client.post(
+        f"/api/v1/tenants/{tenant_id}/credentials",
+        json={"venue": "tradier_sandbox", "label": "default",
+              "secret": {"token": f"fake-token-{slug}",
+                         "account_id": f"ACCT-{slug}"}},
         headers=admin.headers,
     ).raise_for_status()
 
