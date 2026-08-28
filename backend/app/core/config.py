@@ -302,6 +302,17 @@ class Settings(BaseSettings):
 
     # By default user_root_folder must live under customers_root so the API
     # cannot be pointed at arbitrary filesystem folders holding secrets.
+    # --- tenant credential encryption ------------------------------------
+    # The ONLY credential material in this file. Every per-customer secret is
+    # sealed with a per-record data key, and that key is wrapped by this one.
+    # Empty is fatal at the point of use, never defaulted: a generated key
+    # would silently make every stored credential unreadable.
+    #
+    # IF THIS KEY IS LOST, EVERY TENANT CREDENTIAL IS UNRECOVERABLE. There is
+    # no recovery path by design. See docs/ops/secrets.md.
+    encryption_master_key: str = ""
+    encryption_key_version: int = 1
+
     allow_any_root: bool = False
 
     @property
