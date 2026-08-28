@@ -180,6 +180,22 @@ def option_chain(symbol: str, expiration: str, *, cred: VenueCredential,
         client.close()
 
 
+def timesales(symbol: str, *, cred: VenueCredential, interval: str = "5min",
+              start: str | None = None, sandbox: bool = True) -> list[dict]:
+    """Intraday bars.
+
+    Only the intervals the venue serves natively are passed through. Anything
+    coarser is folded from these by indicators.aggregate -- asking the venue
+    for a 2-minute bar returns nothing useful, and doing the fold at each call
+    site is how two boards end up disagreeing about the same instrument.
+    """
+    client = _client(cred, sandbox=sandbox)
+    try:
+        return list(client.timesales(symbol, interval, start=start))
+    finally:
+        client.close()
+
+
 def balance(*, cred: VenueCredential, sandbox: bool = True) -> dict:
     client = _client(cred, sandbox=sandbox)
     try:

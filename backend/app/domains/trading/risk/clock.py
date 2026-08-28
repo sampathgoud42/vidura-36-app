@@ -46,3 +46,31 @@ def within_window(open_hhmm: str, close_hhmm: str,
     """Is the desk clock inside a configured CST window."""
     moment = (at or now()).timetz().replace(tzinfo=None)
     return time.fromisoformat(open_hhmm) <= moment <= time.fromisoformat(close_hhmm)
+
+
+# The desk's regular session, in its own timezone. Commodity signals are read
+# from the venue inside this window and from the off-hours engine outside it,
+# so this is the switch between two different data sources rather than a
+# cosmetic label.
+SESSION_OPEN = time(8, 30)
+SESSION_CLOSE = time(15, 0)
+
+
+def is_weekday(at: datetime | None = None) -> bool:
+    return (at or now()).weekday() < 5          # Mon-Fri
+
+
+def is_regular_session(at: datetime | None = None) -> bool:
+    """08:30-15:00 CST, Monday to Friday.
+
+    Does NOT know about market holidays. A holiday reads as in-session and the
+    venue simply returns no bars for it, which the caller reports as "no
+    reading" -- the honest outcome. Hard-coding a holiday calendar that goes
+    stale would be worse: it would claim the market is shut on a day it is
+    open, and the operator would not know why the board was empty.
+    """
+    moment = at or now()
+    if not is_weekday(moment):
+        return False
+    clock_time = moment.timetz().replace(tzinfo=None)
+    return SESSION_OPEN <= clock_time <= SESSION_CLOSE

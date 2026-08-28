@@ -22,6 +22,7 @@ from app.api_v2 import deps
 from app.domains.botstation import lifecycle, registry
 from app.domains.botstation.models import BotTrade
 from app.domains.trading.execution import idempotency
+from app.tenancy import repository as tenants
 from app.tenancy.models import Tenant
 
 logger = logging.getLogger(__name__)
@@ -55,20 +56,49 @@ def list_bots(_: Tenant = Depends(deps.current_tenant)) -> list[dict]:
 
 
 @router.get("/commodities/signals", operation_id="getCommodityDmiSignals")
-def commodity_signals(force: bool = Query(default=False),
-                      _: Tenant = Depends(deps.current_tenant)) -> dict:
-    """Live gold/silver/oil DMI readout for the commodity bots.
+@deps.tenant_scoped
+def commodity_signals(interval: str = Query(default="5min"),
+                      live: bool = Query(default=False),
+                      force: bool = Query(default=False),
+                      tenant: Tenant = Depends(deps.current_tenant),
+                      db: DbSession = Depends(deps.get_db),
+                      kr=Depends(deps.keyring)) -> dict:
+    """Gold, silver and oil DMI for the commodity bots.
 
-    NOT tenant-scoped: market data, identical for every operator, and it takes
-    no credential. Phase 4 kept it separate from the DMI board on purpose --
-    this wraps a different engine over yfinance futures, while the board reads
-    Tradier equity bars. Same indicator name, different data, different
-    instruments, so merging them would be a real behaviour change.
+    Inside 08:30-15:00 CST Mon-Fri the reading comes from Tradier bars on the
+    ETF that tracks each underlying (GLD, SLV, USO), through the SAME indicator
+    the desk uses -- so the board and the bot agree about what the market is
+    doing. Outside that window those ETFs are shut and their last bar is
+    stale, so the futures engine answers instead.
 
-    Declared BEFORE /{bot_key}/config so the literal path is matched first and
+    Every row says which source produced it. An operator looking at a gold
+    signal at 7pm needs to know it came from futures rather than a closed ETF:
+    they are not the same number and they do not move together overnight.
+
+    Tenant-scoped because it now spends a credential. It did not before, which
+    is why Phase 4 listed it as unscoped -- reading the venue changed that, and
+    the isolation guard is what noticed.
+
+    Declared BEFORE /{bot_key}/config so the literal path matches first and is
     never swallowed by the parameterised one.
     """
-    return {"signals": {}, "source": "commodity_dmi", "cached": not force}
+    from app.domains.trading.market import commodities
+
+    cred = None
+    try:
+        cred = tenants.load_credential(
+            db, tenant.id, "tradier" if live else "tradier_sandbox", kr)
+    except Exception:                                   # noqa: BLE001
+        # No credential is not an error here: the off-hours engine needs none,
+        # and a board that 424s at 7pm would be refusing to show the data it
+        # can actually get.
+        pass
+
+    try:
+        return commodities.snapshot(cred, interval=interval,
+                                    sandbox=not live, force=force)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
 @router.get("/{bot_key}/config", operation_id="getBotConfig")

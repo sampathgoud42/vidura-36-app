@@ -156,10 +156,11 @@ class _CsvLedgerAdapter:
 
 
 def _bot(key, name, category, cadence, versions, launch_style,
-         filename="", options=None) -> tuple[BotConfig, object]:
+         filename="", options=None, extra=None) -> tuple[BotConfig, object]:
     config = BotConfig(key=key, name=name, category=category, cadence=cadence,
                        versions=versions, launch_style=launch_style,
-                       options_schema=options or dict(_RISK_OPTIONS))
+                       options_schema=options or dict(_RISK_OPTIONS),
+                       extra=extra or {})
     adapter = type(f"{key.title()}Adapter", (_CsvLedgerAdapter,),
                    {"config": config, "filename": filename})()
     return config, adapter
@@ -187,15 +188,27 @@ BUILTIN = [
     _bot("gold15", "Kalshi Gold 15-minute bot", "commodities", "15m",
          (BotVersion("v1", f"{_COMMOD}/gold15/bot_kalshi_gold15.py"),
           BotVersion("v2", f"{_COMMOD}/gold15/v2_bot_kalshi_gold15.py", default=True)),
-         "cwd_customer"),
+         # Kalshi publishes no price series to compute an indicator from, so
+         # the signal comes from the liquid ETF that tracks the same
+         # underlying. Declared here as CONFIG: a fourth commodity bot names
+         # its proxy and appears on the board with no code change.
+         "cwd_customer", extra={"proxy_symbol": "GLD"}),
     _bot("silver15", "Kalshi Silver 15-minute bot", "commodities", "15m",
          (BotVersion("v1", f"{_COMMOD}/silver15/bot_kalshi_silver15.py"),
           BotVersion("v2", f"{_COMMOD}/silver15/v2_bot_kalshi_silver15.py", default=True)),
-         "cwd_customer"),
+         # Kalshi publishes no price series to compute an indicator from, so
+         # the signal comes from the liquid ETF that tracks the same
+         # underlying. Declared here as CONFIG: a fourth commodity bot names
+         # its proxy and appears on the board with no code change.
+         "cwd_customer", extra={"proxy_symbol": "SLV"}),
     _bot("oil15", "Kalshi WTI Oil 15-minute bot", "commodities", "15m",
          (BotVersion("v1", f"{_COMMOD}/oil15/bot_kalshi_oil15.py"),
           BotVersion("v2", f"{_COMMOD}/oil15/v2_bot_kalshi_oil15.py", default=True)),
-         "cwd_customer"),
+         # Kalshi publishes no price series to compute an indicator from, so
+         # the signal comes from the liquid ETF that tracks the same
+         # underlying. Declared here as CONFIG: a fourth commodity bot names
+         # its proxy and appears on the board with no code change.
+         "cwd_customer", extra={"proxy_symbol": "USO"}),
 ]
 
 

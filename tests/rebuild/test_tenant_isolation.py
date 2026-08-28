@@ -48,6 +48,7 @@ TENANT_READ_PATHS = [
     "/api/v1/tradier/commodities",
     "/api/v1/tradier/timesales",
     "/api/v1/desk36/dmi",
+    "/api/v1/bots/commodities/signals",
 ]
 
 # Query parameters a path needs before it will answer at all. Kept apart from

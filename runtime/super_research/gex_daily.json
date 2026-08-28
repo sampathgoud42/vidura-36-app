@@ -1,39 +1,39 @@
 {
- "fetched_at": "2026-08-27 09:00:26",
+ "fetched_at": "2026-08-28 14:33:17",
  "stale": false,
  "tickers": {
   "SPY": {
-   "as_of": "2026-08-27T14:00:25.826Z",
-   "price": 768.27,
-   "net_gex": 618856771,
+   "as_of": "2026-08-28T19:33:17.085Z",
+   "price": 769.36,
+   "net_gex": -1316315510,
    "regime": "negative_gamma",
-   "gamma_flip": 768.48,
+   "gamma_flip": 769.76,
    "call_wall": 770,
-   "put_wall": 760,
+   "put_wall": 765,
    "gamma_note": "Dealers short gamma \u2014 moves amplified, trend following likely",
-   "atm_iv": 10.73,
-   "pc_ratio_volume": 0.957
+   "atm_iv": 9.94,
+   "pc_ratio_volume": 1.956
   },
   "QQQ": {
-   "as_of": "2026-08-27T14:00:26.63Z",
-   "price": 715.99,
-   "net_gex": 3044779280,
-   "regime": "positive_gamma",
-   "gamma_flip": 714.23,
+   "as_of": "2026-08-28T19:33:17.029Z",
+   "price": 716.49,
+   "net_gex": -611589186,
+   "regime": "negative_gamma",
+   "gamma_flip": 718.36,
    "call_wall": 720,
    "put_wall": 700,
-   "gamma_note": "Dealers long gamma \u2014 moves dampened, mean reversion likely",
-   "atm_iv": 16.83,
-   "pc_ratio_volume": 1.465
+   "gamma_note": "Dealers short gamma \u2014 moves amplified, trend following likely",
+   "atm_iv": 14.86,
+   "pc_ratio_volume": 1.249
   }
  },
  "macro": {
-  "vix": 14.88,
-  "vix_chg_pct": -2.17,
-  "vvix": 84.34,
-  "skew": 142.96,
-  "move": 69.438,
+  "vix": 14.45,
+  "vix_chg_pct": -0.41,
+  "vvix": 86.18,
+  "skew": 144.05,
+  "move": 69.859,
   "term": "contango",
-  "fear_greed": 58
+  "fear_greed": 54
  }
 }
