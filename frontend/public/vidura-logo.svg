@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Vidura World mark: a lotus-cup V holding a bindu (the counselor's third
+     eye) inside a thin golden ring. Scales to any size; transparent
+     background. Same mark the app header wears. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="512" height="512">
+  <defs>
+    <linearGradient id="vw-gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffd166"/>
+      <stop offset="1" stop-color="#ff8a2b"/>
+    </linearGradient>
+  </defs>
+  <circle cx="24" cy="24" r="21" fill="none" stroke="url(#vw-gold)" stroke-width="2" opacity="0.85"/>
+  <path d="M13.5 16 Q17.5 30 24 36.5 Q30.5 30 34.5 16" fill="none"
+        stroke="url(#vw-gold)" stroke-width="3.4" stroke-linecap="round"/>
+  <circle cx="24" cy="12.6" r="2.7" fill="url(#vw-gold)"/>
+</svg>

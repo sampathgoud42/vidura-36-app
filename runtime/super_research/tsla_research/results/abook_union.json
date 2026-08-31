@@ -1,0 +1,170 @@
+{
+ "picked": [
+  {
+   "d": "LONG",
+   "combo": [
+    "above_vwap",
+    "adi_up",
+    "ylow_reclaim"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 1.2,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 9
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "macd_x_up",
+    "rsi_thrust_up"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 8
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss",
+    "below_pivot",
+    "macd_x_dn",
+    "cvd_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "vwap_reclaim",
+    "delta_surge"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 7
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "mom_ignite_up",
+    "rsi_thrust_up"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "above_vwap",
+    "yhigh_break"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.8,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "above_vwap",
+    "ylow_reclaim"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "above_pivot",
+    "macd_x_up_neg"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 1.2,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss",
+    "delta_dump",
+    "below_pivot",
+    "cvd_dn"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "above_vwap",
+    "s1_bounce",
+    "strong_close"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.8,
+   "vm": 1.2,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "below_vwap",
+    "below_pivot",
+    "macd_x_dn",
+    "hist_turn_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  }
+ ],
+ "union": {
+  "trades": 54,
+  "wins": 54,
+  "stops": 0,
+  "scratch": 0,
+  "win_rate": 100.0,
+  "tp_before_sl": 100.0,
+  "days": 30,
+  "per_day": 0.9,
+  "net_pct": 16.2
+ },
+ "ok": false,
+ "n_days": 60,
+ "bot": "tsla_intraday_bot.py",
+ "target_freq": 10.0
+}

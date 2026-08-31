@@ -1,0 +1,199 @@
+{
+  "generated": "2026-07-11T03:24:08.217193+00:00",
+  "data_span": [
+    "2026-05-26 03:25:00+00:00",
+    "2026-07-11 03:15:00+00:00"
+  ],
+  "bars": 13247,
+  "acc_min_pct": 54.0,
+  "members": {
+    "S1": {
+      "direction": "SHORT",
+      "n": 85,
+      "acc": 62.4,
+      "enabled": true
+    },
+    "S2": {
+      "direction": "LONG",
+      "n": 47,
+      "acc": 57.4,
+      "enabled": true
+    },
+    "S3": {
+      "direction": "LONG",
+      "n": 79,
+      "acc": 48.1,
+      "enabled": false
+    }
+  },
+  "boxes_1h": [
+    {
+      "utc_hour": 0,
+      "n": 6,
+      "acc": 45.5,
+      "enabled": false,
+      "basis": "3h[00-03]"
+    },
+    {
+      "utc_hour": 1,
+      "n": 4,
+      "acc": 45.5,
+      "enabled": false,
+      "basis": "3h[00-03]"
+    },
+    {
+      "utc_hour": 2,
+      "n": 1,
+      "acc": 45.5,
+      "enabled": false,
+      "basis": "3h[00-03]"
+    },
+    {
+      "utc_hour": 3,
+      "n": 4,
+      "acc": 68.8,
+      "enabled": true,
+      "basis": "3h[03-06]"
+    },
+    {
+      "utc_hour": 4,
+      "n": 6,
+      "acc": 68.8,
+      "enabled": true,
+      "basis": "3h[03-06]"
+    },
+    {
+      "utc_hour": 5,
+      "n": 6,
+      "acc": 68.8,
+      "enabled": true,
+      "basis": "3h[03-06]"
+    },
+    {
+      "utc_hour": 6,
+      "n": 4,
+      "acc": 66.7,
+      "enabled": true,
+      "basis": "3h[06-09]"
+    },
+    {
+      "utc_hour": 7,
+      "n": 7,
+      "acc": 66.7,
+      "enabled": true,
+      "basis": "3h[06-09]"
+    },
+    {
+      "utc_hour": 8,
+      "n": 13,
+      "acc": 76.9,
+      "enabled": true,
+      "basis": "1h"
+    },
+    {
+      "utc_hour": 9,
+      "n": 5,
+      "acc": 60.0,
+      "enabled": true,
+      "basis": "3h[09-12]"
+    },
+    {
+      "utc_hour": 10,
+      "n": 7,
+      "acc": 60.0,
+      "enabled": true,
+      "basis": "3h[09-12]"
+    },
+    {
+      "utc_hour": 11,
+      "n": 13,
+      "acc": 61.5,
+      "enabled": true,
+      "basis": "1h"
+    },
+    {
+      "utc_hour": 12,
+      "n": 8,
+      "acc": 62.5,
+      "enabled": true,
+      "basis": "1h"
+    },
+    {
+      "utc_hour": 13,
+      "n": 2,
+      "acc": 66.7,
+      "enabled": true,
+      "basis": "3h[12-15]"
+    },
+    {
+      "utc_hour": 14,
+      "n": 5,
+      "acc": 66.7,
+      "enabled": true,
+      "basis": "3h[12-15]"
+    },
+    {
+      "utc_hour": 15,
+      "n": 5,
+      "acc": 66.7,
+      "enabled": true,
+      "basis": "3h[15-18]"
+    },
+    {
+      "utc_hour": 16,
+      "n": 1,
+      "acc": 66.7,
+      "enabled": true,
+      "basis": "3h[15-18]"
+    },
+    {
+      "utc_hour": 17,
+      "n": 3,
+      "acc": 66.7,
+      "enabled": true,
+      "basis": "3h[15-18]"
+    },
+    {
+      "utc_hour": 18,
+      "n": 11,
+      "acc": 45.5,
+      "enabled": false,
+      "basis": "1h"
+    },
+    {
+      "utc_hour": 19,
+      "n": 3,
+      "acc": 56.5,
+      "enabled": true,
+      "basis": "3h[18-21]"
+    },
+    {
+      "utc_hour": 20,
+      "n": 9,
+      "acc": 55.6,
+      "enabled": true,
+      "basis": "1h"
+    },
+    {
+      "utc_hour": 21,
+      "n": 6,
+      "acc": 44.4,
+      "enabled": false,
+      "basis": "3h[21-24]"
+    },
+    {
+      "utc_hour": 22,
+      "n": 1,
+      "acc": 44.4,
+      "enabled": false,
+      "basis": "3h[21-24]"
+    },
+    {
+      "utc_hour": 23,
+      "n": 2,
+      "acc": 44.4,
+      "enabled": false,
+      "basis": "3h[21-24]"
+    }
+  ]
+}

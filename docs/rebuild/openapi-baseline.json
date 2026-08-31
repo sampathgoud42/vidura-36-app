@@ -1,0 +1,8129 @@
+{
+ "openapi": "3.1.0",
+ "info": {
+  "title": "Tradier Bot API",
+  "description": "Standalone backend for three worlds on one process: the Tradier options desk (balance, chain preview, managed positions with TP/SL, the opening-range and A/B auto-traders, the HOT scan and the options-flow board), the 36 Trade Desk that fronts it on a phone, and the Bot Station that launches, supervises and settles the vendored Kalshi bots (btc15, btc60, sports, parlay, gold15, silver15, oil15). Plus the super_research signal engines and the SPY/QQQ/SPX level watcher they read. SQLite persistence, per-user credential folders, paper-only by default.",
+  "version": "1.0.0"
+ },
+ "paths": {
+  "/api/v1/auth/login": {
+   "post": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Login",
+    "operationId": "login",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/LoginRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/LoginResponse"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/auth/me": {
+   "get": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Me",
+    "description": "Used by the desk on load to decide whether to show the login screen.",
+    "operationId": "whoami",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "X-Api-Key"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Whoami"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/auth/logout": {
+   "post": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Logout",
+    "operationId": "logout",
+    "parameters": [
+     {
+      "name": "x-api-key",
+      "in": "header",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "",
+       "title": "X-Api-Key"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Logout"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/auth/status": {
+   "get": {
+    "tags": [
+     "auth"
+    ],
+    "summary": "Auth Status",
+    "description": "Open endpoint: lets the desk know whether to ask for a password at\nall before it has any credential to present.",
+    "operationId": "getAuthStatus",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getauthstatus"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/users": {
+   "get": {
+    "tags": [
+     "users"
+    ],
+    "summary": "Get Users",
+    "operationId": "getUsers",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/UserOut"
+         },
+         "type": "array",
+         "title": "Response Getusers"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "users"
+    ],
+    "summary": "Create User",
+    "operationId": "createUser",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/UserCreate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UserOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/users/{user_id}": {
+   "get": {
+    "tags": [
+     "users"
+    ],
+    "summary": "Get User",
+    "operationId": "getUser",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/UserOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/users/{user_id}/kalshi-client": {
+   "post": {
+    "tags": [
+     "kalshi"
+    ],
+    "summary": "Get Kalshi Client",
+    "description": "Read credentials from the user's root folder, authenticate against\nKalshi (read-only balance + exchange status), and return connection state.\nNever places orders.",
+    "operationId": "getKalshiClient",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/KalshiClientRequest"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Payload"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/KalshiClientState"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/users/{user_id}/portfolio": {
+   "get": {
+    "tags": [
+     "kalshi"
+    ],
+    "summary": "Get Portfolio Value",
+    "description": "Live portfolio value: settled cash + mark-to-market on open positions.\n\nRead-only, and the same figure the bots print as [TARGET-PV], so the desk\nand the bot logs agree. Cached briefly so a polling UI cannot turn into a\nrequest per viewer per second against Kalshi. Every FRESH fetch also\nfiles today's value into daily_snapshots for the PV progress graph.",
+    "operationId": "getPortfolioValue",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Getportfoliovalue"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/users/{user_id}/portfolio/history": {
+   "get": {
+    "tags": [
+     "kalshi"
+    ],
+    "summary": "Get Portfolio History",
+    "description": "Daily portfolio values (kind 'pv' snapshots), oldest first.\n\nOne row per CST calendar day, written by every fresh /portfolio fetch \u2014\nfeeds the desk's pixel progress graph.",
+    "operationId": "getPortfolioHistory",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "days",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "default": 366,
+       "title": "Days"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Getportfoliohistory"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/users/{user_id}/verify-password": {
+   "post": {
+    "tags": [
+     "kalshi"
+    ],
+    "summary": "Verify Password",
+    "description": "Timing-safe check against the folder's .sam password file (legacy\nwellness/sports app login contract).",
+    "operationId": "verifyUserPassword",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/PasswordCheck"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Verifyuserpassword"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/btc/processes": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Btc Processes",
+    "description": "Stray-process check: what is actually running on this machine.",
+    "operationId": "getBtcBotProcesses",
+    "parameters": [
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "description": "btc15 or btc60",
+       "default": "btc15",
+       "title": "Bot"
+      },
+      "description": "btc15 or btc60"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Getbtcbotprocesses"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/btc/kill": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Btc Kill",
+    "description": "Kill every process running this BTC bot \u2014 including copies the API did\nnot start. Use when a stray run blocks a start.",
+    "operationId": "killBtcBotProcesses",
+    "parameters": [
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "btc15",
+       "title": "Bot"
+      }
+     },
+     {
+      "name": "pids",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "comma-separated; omit to kill all",
+       "title": "Pids"
+      },
+      "description": "comma-separated; omit to kill all"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Killbtcbotprocesses"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/processes": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Processes",
+    "operationId": "getSportsBotProcesses",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getsportsbotprocesses"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/kill": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Kill",
+    "operationId": "killSportsBotProcesses",
+    "parameters": [
+     {
+      "name": "pids",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "comma-separated; omit to kill all",
+       "title": "Pids"
+      },
+      "description": "comma-separated; omit to kill all"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Killsportsbotprocesses"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Get Bots",
+    "operationId": "getBots",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/BotInfo"
+         },
+         "type": "array",
+         "title": "Response Getbots"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/btc/status": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Btc Status",
+    "operationId": "getBtcBotStatus",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/BotStatusOut"
+         },
+         "title": "Response Getbtcbotstatus"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/btc/start": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Btc Start",
+    "operationId": "startBtcBot",
+    "parameters": [
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "description": "btc15 or btc60",
+       "default": "btc15",
+       "title": "Bot"
+      },
+      "description": "btc15 or btc60"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BotStartRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotRunOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/btc/stop": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Btc Stop",
+    "operationId": "stopBtcBot",
+    "parameters": [
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "description": "btc15 or btc60",
+       "default": "btc15",
+       "title": "Bot"
+      },
+      "description": "btc15 or btc60"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BotStopRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/BotRunOut"
+         },
+         "title": "Response Stopbtcbot"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/btc/logs": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Btc Logs",
+    "operationId": "getBtcBotLogs",
+    "parameters": [
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "btc15",
+       "title": "Bot"
+      }
+     },
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "run_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Run Id"
+      }
+     },
+     {
+      "name": "lines",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 2000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Lines"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotLogsOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/btc/trades": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Btc Trades",
+    "operationId": "getBtcTrades",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "filter: btc15 or btc60",
+       "title": "Bot"
+      },
+      "description": "filter: btc15 or btc60"
+     },
+     {
+      "name": "days",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer",
+         "maximum": 3660,
+         "minimum": 1
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Days"
+      }
+     },
+     {
+      "name": "mode",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(live|paper|all)$",
+       "description": "live = real money only (default), paper, or all",
+       "default": "live",
+       "title": "Mode"
+      },
+      "description": "live = real money only (default), paper, or all"
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 1000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TradeHistoryPage"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/btc/sync-trades": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Btc Sync Trades",
+    "operationId": "syncBtcTrades",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Bot"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "additionalProperties": true
+         },
+         "title": "Response Syncbtctrades"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/config": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Config",
+    "description": "Non-secret sports engine configuration, served from the DB mirror of\nthe tracked env file (ingested by the sync bridge; secret-looking keys\nare stripped at ingest).",
+    "operationId": "getSportsBotConfig",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getsportsbotconfig"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/status": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Status",
+    "operationId": "getSportsBotStatus",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotStatusOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/start": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Start",
+    "operationId": "startSportsBot",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BotStartRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotRunOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/stop": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Stop",
+    "operationId": "stopSportsBot",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BotStopRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/BotRunOut"
+         },
+         "type": "array",
+         "title": "Response Stopsportsbot"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/logs": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Logs",
+    "operationId": "getSportsBotLogs",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "run_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Run Id"
+      }
+     },
+     {
+      "name": "lines",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 2000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Lines"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotLogsOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/active-bets": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Active Bets",
+    "operationId": "getSportsActiveBets",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/TradeOut"
+         },
+         "title": "Response Getsportsactivebets"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/reconcile": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Reconcile Open Trades",
+    "description": "Close ledger rows still `open` that Kalshi says are finished.\n\nCovers every family on the Kalshi account (btc15, btc60, btcperp, sports).\nA row is only touched when it is BOTH older than `hours` AND absent from\nthe account's active positions; its P&L is then taken from fills +\nsettlements, not from the bot's own estimate.\n\nPreviews by default \u2014 it rewrites booked P&L, so seeing the plan and\napplying it are deliberately two calls.",
+    "operationId": "reconcileOpenTrades",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "whose ledger to reconcile",
+       "title": "User Id"
+      },
+      "description": "whose ledger to reconcile"
+     },
+     {
+      "name": "hours",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 720,
+       "minimum": 1,
+       "description": "only rows open longer than this are checked",
+       "default": 24,
+       "title": "Hours"
+      },
+      "description": "only rows open longer than this are checked"
+     },
+     {
+      "name": "apply",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "false previews the plan; true writes it",
+       "default": false,
+       "title": "Apply"
+      },
+      "description": "false previews the plan; true writes it"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Reconcileopentrades"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/performance": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Performance",
+    "operationId": "getSportsPerformance",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "days",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer",
+         "maximum": 3660,
+         "minimum": 1
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Days"
+      }
+     },
+     {
+      "name": "mode",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(live|paper|all)$",
+       "description": "must match the trade-history view, or the scoreboard totals a different set of rows than it lists",
+       "default": "live",
+       "title": "Mode"
+      },
+      "description": "must match the trade-history view, or the scoreboard totals a different set of rows than it lists"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/PerformanceSummary"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/trades": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Trades",
+    "operationId": "getSportsTrades",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "days",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer",
+         "maximum": 3660,
+         "minimum": 1
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Days"
+      }
+     },
+     {
+      "name": "mode",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(live|paper|all)$",
+       "description": "live = real money only (default), paper, or all",
+       "default": "live",
+       "title": "Mode"
+      },
+      "description": "live = real money only (default), paper, or all"
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 1000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TradeHistoryPage"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/sports/sync-trades": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Sports Sync Trades",
+    "operationId": "syncSportsTrades",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Syncsportstrades"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/parley/processes": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Parley Processes",
+    "operationId": "getParleyBotProcesses",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getparleybotprocesses"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/parley/kill": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Parley Kill",
+    "operationId": "killParleyBotProcesses",
+    "parameters": [
+     {
+      "name": "pids",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "comma-separated; omit to kill all",
+       "title": "Pids"
+      },
+      "description": "comma-separated; omit to kill all"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Killparleybotprocesses"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/parley/status": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Parley Status",
+    "operationId": "getParleyBotStatus",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotStatusOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/parley/start": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Parley Start",
+    "operationId": "startParleyBot",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BotStartRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "201": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotRunOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/parley/stop": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Parley Stop",
+    "operationId": "stopParleyBot",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BotStopRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "items": {
+          "$ref": "#/components/schemas/BotRunOut"
+         },
+         "type": "array",
+         "title": "Response Stopparleybot"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/parley/logs": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Parley Logs",
+    "operationId": "getParleyBotLogs",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "run_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Run Id"
+      }
+     },
+     {
+      "name": "lines",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 2000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Lines"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotLogsOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/parley/trades": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Parley Trades",
+    "operationId": "getParleyTrades",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "days",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer",
+         "maximum": 3660,
+         "minimum": 1
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Days"
+      }
+     },
+     {
+      "name": "mode",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(live|paper|all)$",
+       "description": "live = real money only (default), paper, or all",
+       "default": "live",
+       "title": "Mode"
+      },
+      "description": "live = real money only (default), paper, or all"
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 1000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TradeHistoryPage"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/parley/active-bets": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Parley Active Bets",
+    "operationId": "getParleyActiveBets",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/TradeOut"
+         },
+         "title": "Response Getparleyactivebets"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/parley/sync-trades": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Parley Sync Trades",
+    "operationId": "syncParleyTrades",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Syncparleytrades"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/commodities/processes": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Commodity Processes",
+    "operationId": "getCommodityBotProcesses",
+    "parameters": [
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "description": "gold15 or silver15",
+       "default": "gold15",
+       "title": "Bot"
+      },
+      "description": "gold15 or silver15"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Getcommoditybotprocesses"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/commodities/signals": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Commodity Signals",
+    "description": "Live gold/silver/oil DMI call-put readout \u2014 the v2 engine's signal,\nread-only, for the bot-station desk (no process control involved).",
+    "operationId": "getCommodityDmiSignals",
+    "parameters": [
+     {
+      "name": "force",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "default": false,
+       "title": "Force"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Getcommoditydmisignals"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/commodities/kill": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Commodity Kill",
+    "operationId": "killCommodityBotProcesses",
+    "parameters": [
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "gold15",
+       "title": "Bot"
+      }
+     },
+     {
+      "name": "pids",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "comma-separated; omit to kill all",
+       "title": "Pids"
+      },
+      "description": "comma-separated; omit to kill all"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Killcommoditybotprocesses"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/commodities/status": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Commodity Status",
+    "operationId": "getCommodityBotStatus",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/BotStatusOut"
+         },
+         "title": "Response Getcommoditybotstatus"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/commodities/start": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Commodity Start",
+    "operationId": "startCommodityBot",
+    "parameters": [
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "description": "gold15 or silver15",
+       "default": "gold15",
+       "title": "Bot"
+      },
+      "description": "gold15 or silver15"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BotStartRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotRunOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/commodities/stop": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Commodity Stop",
+    "operationId": "stopCommodityBot",
+    "parameters": [
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "description": "gold15 or silver15",
+       "default": "gold15",
+       "title": "Bot"
+      },
+      "description": "gold15 or silver15"
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/BotStopRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/BotRunOut"
+         },
+         "title": "Response Stopcommoditybot"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/commodities/logs": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Commodity Logs",
+    "operationId": "getCommodityBotLogs",
+    "parameters": [
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "default": "gold15",
+       "title": "Bot"
+      }
+     },
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "run_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Run Id"
+      }
+     },
+     {
+      "name": "lines",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 2000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Lines"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/BotLogsOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/commodities/trades": {
+   "get": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Commodity Trades",
+    "operationId": "getCommodityTrades",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "filter: gold15 or silver15",
+       "title": "Bot"
+      },
+      "description": "filter: gold15 or silver15"
+     },
+     {
+      "name": "days",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer",
+         "maximum": 3660,
+         "minimum": 1
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Days"
+      }
+     },
+     {
+      "name": "mode",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(live|paper|all)$",
+       "default": "live",
+       "title": "Mode"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 1000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TradeHistoryPage"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/bots/commodities/sync-trades": {
+   "post": {
+    "tags": [
+     "bots"
+    ],
+    "summary": "Commodity Sync Trades",
+    "operationId": "syncCommodityTrades",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "bot",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Bot"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "type": "object",
+          "additionalProperties": true
+         },
+         "title": "Response Synccommoditytrades"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/users/{user_id}/trades": {
+   "post": {
+    "tags": [
+     "trades"
+    ],
+    "summary": "Record Trade",
+    "operationId": "recordTrade",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TradeCreate"
+       }
+      }
+     }
+    },
+    "responses": {
+     "201": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TradeOut"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "get": {
+    "tags": [
+     "trades"
+    ],
+    "summary": "Get Trades",
+    "operationId": "getTradeHistory",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "bot_key",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Bot Key"
+      }
+     },
+     {
+      "name": "bot_version",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Bot Version"
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Status"
+      }
+     },
+     {
+      "name": "days",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer",
+         "maximum": 3660,
+         "minimum": 1
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Days"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 1000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/TradeHistoryPage"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/state": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get State",
+    "description": "Full desk state served from SQLite (config mirror, signal rows,\ngex/econ snapshots) \u2014 the source repo is not needed at request time.\nPass ?all=1 to include the archived ledger rows.",
+    "operationId": "getSuperState",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getsuperstate"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/on": {
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Super On",
+    "description": "Start missing category supervisors (detached; they survive API\nrestarts). Categories with zero enabled tickers are skipped.",
+    "operationId": "superOn",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Superon"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/off": {
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Super Off",
+    "description": "Stop supervisors (all, or one category). The legacy stack has no stop\nendpoint \u2014 this replaces `python bots.py stop`.",
+    "operationId": "superOff",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "anyOf": [
+         {
+          "$ref": "#/components/schemas/SuperStopRequest"
+         },
+         {
+          "type": "null"
+         }
+        ],
+        "title": "Payload"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Superoff"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/config": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Config",
+    "operationId": "getSuperConfig",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getsuperconfig"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Set Config",
+    "operationId": "setSuperConfig",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/SuperConfigUpdate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Setsuperconfig"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/quote/{ticker}": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Quote",
+    "description": "Live price + classic pivot points for a desk ticker (yfinance,\nkeyless, cached 60s). Includes the TradingView chart URL.",
+    "operationId": "getTickerQuote",
+    "parameters": [
+     {
+      "name": "ticker",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Ticker"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Gettickerquote"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/gex": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Gex",
+    "description": "Latest merged GEX view, served from the DB snapshot mirror. This\nbackend never calls the flashAlpha API \u2014 the 09:00 CST scheduled job\nowns the 5-requests/day free-tier budget.",
+    "operationId": "getGex",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getgex"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/econ": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Econ",
+    "operationId": "getEcon",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getecon"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/gex0dte": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Gex0Dte",
+    "description": "Latest stored SPY 0DTE dealer-gamma view, with its own timestamp.\n\nRead-only and cheap: the desk polls this every minute and it never\ntouches the vendor. Refreshing is an explicit POST.",
+    "operationId": "getGex0dte",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getgex0Dte"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/gex0dte/refresh": {
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Refresh Gex0Dte",
+    "operationId": "refreshGex0dte",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/Gex0dteRefresh"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Refreshgex0Dte"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/engine-pct": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Engine Pct",
+    "description": "Per-category TP/SL race targets, read from each ticker's config.py.\n\n``mixed: true`` means the tickers in that category disagree \u2014 reported\nrather than averaged, because it usually means a folder was hand-edited.",
+    "operationId": "getEnginePct",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getenginepct"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Set Engine Pct",
+    "description": "Rewrite TP_PCT/SL_PCT for every ticker in a category.\n\nTakes effect on the next scan cycle. The engine-score cache is\nfingerprinted on tp/sl so it re-scores itself; the B-book candidate set is\nnot re-discovered, which the response says explicitly.",
+    "operationId": "setEnginePct",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/EnginePctUpdate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Setenginepct"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/engine-gates": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Engine Gates",
+    "description": "A-book / B-book tp-before-sl admission gates (desk-wide).\n\nThese are module-level constants in engine_common.py shared by every\nticker, so there is one pair of numbers, not one per category.",
+    "operationId": "getEngineGates",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getenginegates"
+        }
+       }
+      }
+     }
+    }
+   },
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Set Engine Gates",
+    "description": "Set the A/B admission gates. Applies on the next scan; no re-scoring.",
+    "operationId": "setEngineGates",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/EngineGatesUpdate"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Setenginegates"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/regenerate/status": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Regenerate Status",
+    "description": "Whether the last regenerate has finished \u2014 the launch itself is detached.",
+    "operationId": "getRegenerateStatus",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getregeneratestatus"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/gex0dte/heartbeat": {
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Gex0Dte Heartbeat",
+    "description": "Record that a push cycle happened, whatever its outcome.\n\nStrictly separate from the data path: it never fetches the vendor, never\nstores a snapshot and never fills an hour slot. Routing liveness through\n/refresh would make the SERVER call getgamma on every failed cycle \u2014 the\none thing this design does not do \u2014 and would stamp a stalled feed as\nfresh.",
+    "operationId": "gex0dtePusherHeartbeat",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/HeartbeatIn"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Gex0Dtepusherheartbeat"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/tickers": {
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Add Ticker",
+    "description": "Scaffold, register and bootstrap a new ticker in a category.\n\nReturns as soon as the folder and registry entry exist; the B-book build\n(60 days of bars) runs detached, so poll ``/tickers/{id}/status`` for it.\nThe supervisors pick the ticker up on their next cycle \u2014 they re-read the\nregistry \u2014 and unconditionally after a restart.",
+    "operationId": "addSuperTicker",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AddTickerRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Addsuperticker"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/tickers/{ticker_id}/status": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Ticker Status",
+    "description": "Whether the background bootstrap has produced a playbook yet.",
+    "operationId": "getSuperTickerStatus",
+    "parameters": [
+     {
+      "name": "ticker_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "Ticker Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Getsupertickerstatus"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/gex0dte/history": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Gex0Dte History",
+    "description": "Hourly SPY 0DTE net gamma for one trading day, 08:00-16:00 CST.\n\nAll nine hours come back every time; ones never captured read 0 and carry\n``captured: false``, so a quiet hour is distinguishable from a flat one.",
+    "operationId": "getGex0dteHistory",
+    "parameters": [
+     {
+      "name": "date",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "YYYY-MM-DD (CST); omit for today",
+       "title": "Date"
+      },
+      "description": "YYYY-MM-DD (CST); omit for today"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Getgex0Dtehistory"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/gex0dte/history/dates": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Gex0Dte History Dates",
+    "description": "Dates with at least one captured hour, newest first.",
+    "operationId": "getGex0dteHistoryDates",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getgex0Dtehistorydates"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/earnings": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Earnings",
+    "description": "Scheduled earnings for the large-cap universe inside the next `hours`.\n\nKeyless (yfinance) so there is no budget to protect, but a sweep is ~100\nHTTP calls \u2014 the result is cached in daily_snapshots and only refetched\nwhen older than 12h, so polling this is cheap.",
+    "operationId": "getEarnings",
+    "parameters": [
+     {
+      "name": "hours",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 168,
+       "minimum": 1,
+       "description": "look-ahead window",
+       "default": 24,
+       "title": "Hours"
+      },
+      "description": "look-ahead window"
+     },
+     {
+      "name": "refresh",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "force a re-sweep, ignoring the cache",
+       "default": false,
+       "title": "Refresh"
+      },
+      "description": "force a re-sweep, ignoring the cache"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Getearnings"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/regenerate": {
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Regenerate",
+    "description": "Re-run every enabled engine for today (--once --backfill-today per\ncategory). Results land in the ledgers within minutes and the auto-sync\nloop stores them in SQLite; watch /super/sync/status.\n\nIf the engines already regenerated in the past 24h, this returns\n``recent: true`` without launching \u2014 pass ``force=true`` after the user\nconfirms, or skip regeneration and turn on the live watcher instead.",
+    "operationId": "regenerateEngines",
+    "parameters": [
+     {
+      "name": "categories",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "comma-separated: etf,stock,crypto,india; omit for all",
+       "title": "Categories"
+      },
+      "description": "comma-separated: etf,stock,crypto,india; omit for all"
+     },
+     {
+      "name": "force",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "launch even if the last regenerate was under 24h ago",
+       "default": false,
+       "title": "Force"
+      },
+      "description": "launch even if the last regenerate was under 24h ago"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Regenerateengines"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/gex/refresh": {
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Refresh Gex",
+    "description": "LIVE-fetch gamma exposure from flashAlpha (ported FlashAlphaGEX_Daily\nlogic) and store it as the new snapshot.\n\nSpends real API quota: the FREE plan allows 5 requests/day. Calls are\nmetered in the DB and refused past TBOT_FLASHALPHA_DAILY_CAP. Use\nPOST /super/gex/reload (free) when you only need to re-read what is\nalready stored.",
+    "operationId": "refreshGex",
+    "parameters": [
+     {
+      "name": "tickers",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "comma-separated, default spy,qqq \u2014 ONE API call each",
+       "title": "Tickers"
+      },
+      "description": "comma-separated, default spy,qqq \u2014 ONE API call each"
+     },
+     {
+      "name": "persist",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "false = ad-hoc lookup: metered and archived, but the desk's SPY/QQQ snapshot and gex_daily.json are left untouched",
+       "default": true,
+       "title": "Persist"
+      },
+      "description": "false = ad-hoc lookup: metered and archived, but the desk's SPY/QQQ snapshot and gex_daily.json are left untouched"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Refreshgex"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/gex/quota": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Gex Quota",
+    "description": "How much flashAlpha budget the API has spent today.",
+    "operationId": "getGexQuota",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getgexquota"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/gex/reload": {
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Reload Gex",
+    "description": "Re-ingest gex_daily.json from disk (when the source repo is present)\nand serve the latest DB snapshot. Deliberately does NOT call the\nflashAlpha API (free tier is 5 requests/day, owned by the 09:00 CST\nscheduled job).",
+    "operationId": "reloadGex",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Reloadgex"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/econ/refresh": {
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Refresh Econ",
+    "description": "Regenerate econ_today.json (keyless: hardcoded calendar + one\nyfinance yields fetch, cached per day by the script itself).",
+    "operationId": "refreshEcon",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Refreshecon"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/sync": {
+   "post": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Sync All",
+    "description": "Full forced ingest of every signal source (central ledgers, worker\nCSVs, gex/econ snapshots) into SQLite. The background auto-sync loop\nruns the same pass continuously; this endpoint forces one now.",
+    "operationId": "syncSuperData",
+    "parameters": [
+     {
+      "name": "include_archive",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "default": true,
+       "title": "Include Archive"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Syncsuperdata"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/sync/status": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Sync Status",
+    "description": "Health of the background ingest loop that guarantees every generated\nsignal lands in the database.",
+    "operationId": "getSuperSyncStatus",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getsupersyncstatus"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/signals": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Signals",
+    "operationId": "getSuperSignals",
+    "parameters": [
+     {
+      "name": "book",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^[abAB]$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Book"
+      }
+     },
+     {
+      "name": "category",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Category"
+      }
+     },
+     {
+      "name": "ticker",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Ticker"
+      }
+     },
+     {
+      "name": "grade_min",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer",
+         "maximum": 5,
+         "minimum": 2
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "min eng_hot grade",
+       "title": "Grade Min"
+      },
+      "description": "min eng_hot grade"
+     },
+     {
+      "name": "days",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "integer",
+         "maximum": 3660,
+         "minimum": 1
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Days"
+      }
+     },
+     {
+      "name": "central",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "only merged A/B ledger rows (no per-engine worker rows)",
+       "default": false,
+       "title": "Central"
+      },
+      "description": "only merged A/B ledger rows (no per-engine worker rows)"
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 2000,
+       "minimum": 1,
+       "default": 100,
+       "title": "Limit"
+      }
+     },
+     {
+      "name": "offset",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "minimum": 0,
+       "default": 0,
+       "title": "Offset"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/SuperSignalPage"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/super/snapshots": {
+   "get": {
+    "tags": [
+     "super-research"
+    ],
+    "summary": "Get Snapshots",
+    "operationId": "getDailySnapshots",
+    "parameters": [
+     {
+      "name": "kind",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "examples": [
+        "gex",
+        "econ",
+        "gex_raw_spy"
+       ],
+       "default": "gex",
+       "title": "Kind"
+      }
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 366,
+       "minimum": 1,
+       "default": 30,
+       "title": "Limit"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "array",
+         "items": {
+          "$ref": "#/components/schemas/SnapshotOut"
+         },
+         "title": "Response Getdailysnapshots"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/venue": {
+   "get": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Venue",
+    "description": "Which venues this operator can reach, for the desk's LIVE toggle.\n\nReports configuration only \u2014 no order can be placed from here, and the\ntokens themselves never leave the server.",
+    "operationId": "getTradierVenue",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Gettradiervenue"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/balance": {
+   "get": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Balance",
+    "description": "Account equity and option buying power \u2014 the sizing base.",
+    "operationId": "getTradierBalance",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "live",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "true reads the PRODUCTION account",
+       "default": false,
+       "title": "Live"
+      },
+      "description": "true reads the PRODUCTION account"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Gettradierbalance"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/stream/session": {
+   "post": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Stream Session",
+    "description": "Short-lived credential for Tradier's market WebSocket, plus a seed snapshot.\n\nStreaming is PRODUCTION-ONLY \u2014 the sandbox token is rejected with\n\"Required scope(s): scope-stream\", so this always uses the live keys. That\nis safe and deliberate: a market session can only read quotes, never place\nan order, and paper trading against real prices is the point.\n\nThe account token never reaches the browser. What is returned is Tradier's\nsession id, which is market-data-only and must be connected within five\nminutes; the page reconnects by asking for a fresh one.",
+    "operationId": "createTradierStreamSession",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Createtradierstreamsession"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/timesales": {
+   "get": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Timesales",
+    "description": "Intraday bars and the prior close the day is measured against.\n\nSeeds the desk's charts: a WebSocket only produces from the moment it\nconnects, so without this the chart would start blank every reload.\n\n``days`` exists for indicators rather than for the picture. ADX(14) needs\nroughly 28 bars before it means anything, and a 15-minute session only\nyields ~26 \u2014 so the caller asks for earlier sessions to warm the maths up\nand still draws only the latest day.",
+    "operationId": "getTradierTimesales",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "symbol",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 12,
+       "title": "Symbol"
+      }
+     },
+     {
+      "name": "interval",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(1min|5min|15min)$",
+       "default": "1min",
+       "title": "Interval"
+      }
+     },
+     {
+      "name": "days",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 30,
+       "minimum": 1,
+       "description": "sessions of history; >1 is warmup for indicators, not extra chart",
+       "default": 1,
+       "title": "Days"
+      },
+      "description": "sessions of history; >1 is warmup for indicators, not extra chart"
+     },
+     {
+      "name": "live",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "true reads bars from the PRODUCTION venue",
+       "default": false,
+       "title": "Live"
+      },
+      "description": "true reads bars from the PRODUCTION venue"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Gettradiertimesales"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/hot": {
+   "get": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Hot Scan",
+    "description": "Top-100 names in a strong one-sided uptrend, by Wilder DMI/ADX.\n\nThe gates: +DI above 25, +DI at least twice -DI, ADX above 34. The middle\none is the point \u2014 a +DI/-DI crossover happens constantly and reverses\njust as often, while TWICE -DI says the buyers are not being answered.\n\nReturns the last good snapshot immediately and refreshes in the background\nwhen stale; a 100-name bar sweep must never sit in front of the render.",
+    "operationId": "getTradierHotScan",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "live",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "true reads bars from the PRODUCTION venue",
+       "default": false,
+       "title": "Live"
+      },
+      "description": "true reads bars from the PRODUCTION venue"
+     },
+     {
+      "name": "interval",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^(5min|15min|30min|1h)$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "description": "bar size the DMI is computed on. All four are served natively by Tradier \u2014 none is resampled \u2014 and each carries its own lookback so every choice lands on a comparable number of bars.",
+       "examples": [
+        "5min"
+       ],
+       "title": "Interval"
+      },
+      "description": "bar size the DMI is computed on. All four are served natively by Tradier \u2014 none is resampled \u2014 and each carries its own lookback so every choice lands on a comparable number of bars."
+     },
+     {
+      "name": "refresh",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "force a sweep now",
+       "default": false,
+       "title": "Refresh"
+      },
+      "description": "force a sweep now"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Gettradierhotscan"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/commodities": {
+   "get": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Commodities",
+    "description": "Gold / Silver / WTI 1m + 2m DMI readings for binary trading signals.",
+    "operationId": "getTradierCommodities",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "live",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "default": false,
+       "title": "Live"
+      }
+     },
+     {
+      "name": "refresh",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "force a fresh scan",
+       "default": false,
+       "title": "Refresh"
+      },
+      "description": "force a fresh scan"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Gettradiercommodities"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/flow": {
+   "get": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Options Flow",
+    "description": "Top option contracts by volume across the large-cap universe.\n\nReturns the last good snapshot immediately and refreshes in the\nbackground when it is stale \u2014 a 50-name chain sweep takes seconds and\nmust never sit in front of the desk's render.",
+    "operationId": "getTradierOptionsFlow",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "live",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "true reads chains from the PRODUCTION venue",
+       "default": false,
+       "title": "Live"
+      },
+      "description": "true reads chains from the PRODUCTION venue"
+     },
+     {
+      "name": "refresh",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "force a sweep now",
+       "default": false,
+       "title": "Refresh"
+      },
+      "description": "force a sweep now"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Gettradieroptionsflow"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/quotes": {
+   "get": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Desk Quotes",
+    "description": "Live prices for the desk's ticker rail, in the requested order.\n\nTradier batch quotes first (one request for the whole rail); any symbol\nTradier does not return \u2014 indices on the sandbox, or the whole set when\nthe account has no Tradier keys yet \u2014 is filled from a one-call yfinance\nbatch, so the rail renders before the operator ever adds keys.",
+    "operationId": "getTradierQuotes",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "symbols",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "maxLength": 500,
+       "default": "SPX,SPY,QQQ,VIX,IWM,GLD,AAPL,TSLA,NVDA,MSFT,AMZN,MU,SNDK,AVGO,META,GOOGL,LLY,JPM,ORCL,IBM,ONDS,IONQ,QBTS",
+       "title": "Symbols"
+      }
+     },
+     {
+      "name": "live",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "true quotes from the PRODUCTION venue",
+       "default": false,
+       "title": "Live"
+      },
+      "description": "true quotes from the PRODUCTION venue"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Gettradierquotes"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/chain": {
+   "get": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Chain Preview",
+    "description": "What WOULD be traded: the delta-band candidates and the pick.\n\nExists so the desk can show the contract before any money moves \u2014 an\nexecutor that only reveals its choice after the fill is not operable.",
+    "operationId": "previewTradierChain",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "symbol",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "maxLength": 12,
+       "title": "Symbol"
+      }
+     },
+     {
+      "name": "side",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(call|put)$",
+       "default": "call",
+       "title": "Side"
+      }
+     },
+     {
+      "name": "delta_min",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "number",
+       "exclusiveMaximum": 1,
+       "exclusiveMinimum": 0,
+       "default": 0.25,
+       "title": "Delta Min"
+      }
+     },
+     {
+      "name": "delta_max",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "number",
+       "maximum": 1,
+       "exclusiveMinimum": 0,
+       "default": 0.5,
+       "title": "Delta Max"
+      }
+     },
+     {
+      "name": "expiration",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string",
+         "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Expiration"
+      }
+     },
+     {
+      "name": "expiries",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 6,
+       "minimum": 1,
+       "description": "how many expirations to try before giving up on the delta band",
+       "default": 1,
+       "title": "Expiries"
+      },
+      "description": "how many expirations to try before giving up on the delta band"
+     },
+     {
+      "name": "zero_dte",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "include today's expiration; off by default, so same-day contracts are only ever traded deliberately",
+       "default": false,
+       "title": "Zero Dte"
+      },
+      "description": "include today's expiration; off by default, so same-day contracts are only ever traded deliberately"
+     },
+     {
+      "name": "live",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "true prices from the PRODUCTION venue",
+       "default": false,
+       "title": "Live"
+      },
+      "description": "true prices from the PRODUCTION venue"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Previewtradierchain"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/positions": {
+   "post": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Open Position",
+    "description": "Pick by delta, size by balance %, buy, then manage TP/SL.\n\nSandbox unless ``live`` is explicitly true \u2014 the desk's LIVE toggle is the\nonly thing that routes an order to the production account.",
+    "operationId": "openTradierPosition",
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/OpenRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Opentradierposition"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   },
+   "get": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "List Positions",
+    "operationId": "listTradierPositions",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "status",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(all|active|pending|open|tp_filled|sl_sold|closed|failed)$",
+       "default": "all",
+       "title": "Status"
+      }
+     },
+     {
+      "name": "venue",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "string",
+       "pattern": "^(all|live|sandbox)$",
+       "description": "filter by the venue the position was opened on",
+       "default": "all",
+       "title": "Venue"
+      },
+      "description": "filter by the venue the position was opened on"
+     },
+     {
+      "name": "marks",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "attach live bid + unrealized P&L for active rows",
+       "default": false,
+       "title": "Marks"
+      },
+      "description": "attach live bid + unrealized P&L for active rows"
+     },
+     {
+      "name": "limit",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "integer",
+       "maximum": 500,
+       "minimum": 1,
+       "default": 100,
+       "title": "Limit"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Listtradierpositions"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/positions/contract": {
+   "post": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Open Contract",
+    "description": "Buy a specific option contract as a managed position.\n\nSame sizing, TP and SL as a hand-placed trade \u2014 the only difference is\nthat the contract came from the flow board instead of the delta search.",
+    "operationId": "openTradierContract",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/ContractRequest"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Opentradiercontract"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/positions/{position_id}/target": {
+   "post": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Set Target",
+    "description": "Move a live position's take-profit to an explicit price.\n\nReplaces the resting sell on the venue so the exit still happens without\nthe desk running. Refuses if the old take-profit filled mid-edit, rather\nthan stacking a second sell on a position that is already closing.",
+    "operationId": "setTradierTarget",
+    "parameters": [
+     {
+      "name": "position_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Position Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/TargetRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Settradiertarget"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/positions/{position_id}/carryover": {
+   "post": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Set Carry Over",
+    "description": "Toggle carry-over on a live position.\n\nCarry-over removes the stop-loss watch and skips the EOD auto-close,\nletting the position hold overnight. The take-profit order stays on\nthe venue.",
+    "operationId": "setTradierCarryOver",
+    "parameters": [
+     {
+      "name": "position_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Position Id"
+      }
+     }
+    ],
+    "requestBody": {
+     "required": true,
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/CarryOverRequest"
+       }
+      }
+     }
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Settradiercarryover"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/positions/sweep": {
+   "post": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Sweep",
+    "description": "Run one monitor pass now \u2014 the same sweep the background loop runs.\n\nThe desk calls this on refresh so what it renders is the venue's current\ntruth, not the state as of the last 10-second tick.",
+    "operationId": "sweepTradierPositions",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Sweeptradierpositions"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/positions/{position_id}/close": {
+   "post": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Close Position",
+    "description": "Manual exit: cancel resting orders, sell at market.",
+    "operationId": "closeTradierPosition",
+    "parameters": [
+     {
+      "name": "position_id",
+      "in": "path",
+      "required": true,
+      "schema": {
+       "type": "integer",
+       "title": "Position Id"
+      }
+     },
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "force",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "description": "sandbox only: stop tracking a pending row whose cancel the venue refuses",
+       "default": false,
+       "title": "Force"
+      },
+      "description": "sandbox only: stop tracking a pending row whose cancel the venue refuses"
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Closetradierposition"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/autotrade/start": {
+   "post": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Autotrade Start",
+    "description": "Arm the opening-range auto-trader for this user.\n\nWatches the configured tickers' level crosses stamped inside the CST\nwindow; a new above_10min_high (CALL) / below_10min_low (PUT) must still\nhold after the confirmation delay, then the desk's normal managed 0DTE\nposition is opened \u2014 TP rests on the venue, SL is the monitor loop.\nSizing below min_contracts skips the trade.",
+    "operationId": "startTradierAutoTrade",
+    "requestBody": {
+     "content": {
+      "application/json": {
+       "schema": {
+        "$ref": "#/components/schemas/AutoTradeStart"
+       }
+      }
+     },
+     "required": true
+    },
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Starttradierautotrade"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/autotrade/stop": {
+   "post": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Autotrade Stop",
+    "operationId": "stopTradierAutoTrade",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Stoptradierautotrade"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/tradier/autotrade/status": {
+   "get": {
+    "tags": [
+     "tradier"
+    ],
+    "summary": "Autotrade Status",
+    "operationId": "getTradierAutoTradeStatus",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Gettradierautotradestatus"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/levels/status": {
+   "get": {
+    "tags": [
+     "levels"
+    ],
+    "summary": "Levels Status",
+    "description": "Marked levels + latest cross per level, plus watcher liveness.",
+    "operationId": "getLevelsStatus",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Getlevelsstatus"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/levels/start": {
+   "post": {
+    "tags": [
+     "levels"
+    ],
+    "summary": "Levels Start",
+    "operationId": "startLevelsWatcher",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Startlevelswatcher"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/levels/stop": {
+   "post": {
+    "tags": [
+     "levels"
+    ],
+    "summary": "Levels Stop",
+    "operationId": "stopLevelsWatcher",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "additionalProperties": true,
+         "type": "object",
+         "title": "Response Stoplevelswatcher"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/desk36/dmi": {
+   "get": {
+    "tags": [
+     "desk36"
+    ],
+    "summary": "Dmi",
+    "description": "Latest +DI / -DI / ADX per symbol.\n\nMissing symbols are returned with nulls rather than omitted: the board\nlays out one row per ticker the operator asked for, and a silently\ndropped row would look like a rendering bug rather than \"no reading yet\".",
+    "operationId": "getDesk36Dmi",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     },
+     {
+      "name": "symbols",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "description": "comma-separated, max 24",
+       "title": "Symbols"
+      },
+      "description": "comma-separated, max 24"
+     },
+     {
+      "name": "live",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "type": "boolean",
+       "default": false,
+       "title": "Live"
+      }
+     },
+     {
+      "name": "interval",
+      "in": "query",
+      "required": false,
+      "schema": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "null"
+        }
+       ],
+       "title": "Interval"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Getdesk36Dmi"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/api/v1/worlds": {
+   "get": {
+    "tags": [
+     "worlds"
+    ],
+    "summary": "Get Worlds",
+    "operationId": "getWorlds",
+    "parameters": [
+     {
+      "name": "user_id",
+      "in": "query",
+      "required": true,
+      "schema": {
+       "type": "string",
+       "title": "User Id"
+      }
+     }
+    ],
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {
+         "type": "object",
+         "additionalProperties": true,
+         "title": "Response Getworlds"
+        }
+       }
+      }
+     },
+     "422": {
+      "description": "Validation Error",
+      "content": {
+       "application/json": {
+        "schema": {
+         "$ref": "#/components/schemas/HTTPValidationError"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "/health": {
+   "get": {
+    "tags": [
+     "system"
+    ],
+    "summary": "Health",
+    "operationId": "healthCheck",
+    "responses": {
+     "200": {
+      "description": "Successful Response",
+      "content": {
+       "application/json": {
+        "schema": {}
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "components": {
+  "schemas": {
+   "AddTickerRequest": {
+    "properties": {
+     "category": {
+      "type": "string",
+      "title": "Category"
+     },
+     "ticker": {
+      "type": "string",
+      "title": "Ticker"
+     },
+     "label": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Label"
+     }
+    },
+    "type": "object",
+    "required": [
+     "category",
+     "ticker"
+    ],
+    "title": "AddTickerRequest",
+    "description": "Onboard one ticker into an existing category, on the default engines."
+   },
+   "AutoTradeStart": {
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "strategy": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Strategy",
+      "examples": [
+       "10min_intraday_move"
+      ]
+     },
+     "tickers": {
+      "anyOf": [
+       {
+        "type": "string",
+        "maxLength": 120
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tickers",
+      "description": "comma-separated, e.g. SPY,QQQ,SPX"
+     },
+     "window_open": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^\\d{2}:\\d{2}$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Window Open",
+      "description": "HH:MM CST"
+     },
+     "window_close": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^\\d{2}:\\d{2}$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Window Close",
+      "description": "HH:MM CST"
+     },
+     "buy_pct": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 100.0,
+        "exclusiveMinimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Buy Pct"
+     },
+     "tolerance_pct": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 100.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tolerance Pct",
+      "description": "how far either side of the buy_pct budget a total may land; 0 makes the budget a hard cap"
+     },
+     "tp_pct": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 500.0,
+        "exclusiveMinimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tp Pct"
+     },
+     "sl_pct": {
+      "anyOf": [
+       {
+        "type": "number",
+        "exclusiveMaximum": 100.0,
+        "exclusiveMinimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sl Pct"
+     },
+     "delta_min": {
+      "anyOf": [
+       {
+        "type": "number",
+        "exclusiveMaximum": 1.0,
+        "exclusiveMinimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Delta Min"
+     },
+     "delta_max": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 1.0,
+        "exclusiveMinimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Delta Max"
+     },
+     "min_contracts": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 1000.0,
+        "minimum": 1.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Contracts"
+     },
+     "books": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Books",
+      "description": "which super-signal books to act on",
+      "examples": [
+       "A,B"
+      ]
+     },
+     "dte_max": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 30.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Dte Max",
+      "description": "furthest expiration to consider, in days"
+     },
+     "zero_dte_cutoff": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Zero Dte Cutoff",
+      "description": "CST time after which same-day expirations are not entered",
+      "examples": [
+       "13:00"
+      ]
+     },
+     "cooldown_min": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 1440.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cooldown Min",
+      "description": "minutes this strategy must wait before re-entering the same ticker (0 disables)",
+      "examples": [
+       60
+      ]
+     },
+     "discount_pct": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 50.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Discount Pct",
+      "description": "limit-order discount off the mid/ask; 0 for market-price limit (smart_limit)"
+     },
+     "top_n": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 20.0,
+        "minimum": 1.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Top N",
+      "description": "super_hot_tickers: how many top superhot names to trade"
+     },
+     "zero_dte": {
+      "type": "boolean",
+      "title": "Zero Dte",
+      "description": "true allows same-day expirations; false skips today and picks the next expiry",
+      "default": true
+     },
+     "live": {
+      "type": "boolean",
+      "title": "Live",
+      "description": "false (default) arms the watcher on the SANDBOX venue; true trades real money",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "user_id"
+    ],
+    "title": "AutoTradeStart",
+    "description": "Omitted fields fall back to Settings (env: TBOT_TRADIER_*)."
+   },
+   "BotInfo": {
+    "properties": {
+     "key": {
+      "type": "string",
+      "title": "Key"
+     },
+     "name": {
+      "type": "string",
+      "title": "Name"
+     },
+     "category": {
+      "type": "string",
+      "title": "Category"
+     },
+     "cadence": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cadence"
+     },
+     "versions": {
+      "items": {
+       "$ref": "#/components/schemas/BotVersionInfo"
+      },
+      "type": "array",
+      "title": "Versions"
+     },
+     "running": {
+      "type": "boolean",
+      "title": "Running"
+     },
+     "active_run_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Active Run Id"
+     }
+    },
+    "type": "object",
+    "required": [
+     "key",
+     "name",
+     "category",
+     "versions",
+     "running"
+    ],
+    "title": "BotInfo"
+   },
+   "BotLogsOut": {
+    "properties": {
+     "bot_key": {
+      "type": "string",
+      "title": "Bot Key"
+     },
+     "run_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Run Id"
+     },
+     "log_file": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Log File"
+     },
+     "lines": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array",
+      "title": "Lines"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bot_key",
+     "run_id",
+     "log_file",
+     "lines"
+    ],
+    "title": "BotLogsOut"
+   },
+   "BotRunOut": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "bot_key": {
+      "type": "string",
+      "title": "Bot Key"
+     },
+     "bot_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bot Version"
+     },
+     "script_path": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Script Path"
+     },
+     "pid": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pid"
+     },
+     "mode": {
+      "type": "string",
+      "title": "Mode"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status"
+     },
+     "exit_code": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Exit Code"
+     },
+     "log_file": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Log File"
+     },
+     "extra": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Extra"
+     },
+     "started_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Started At"
+     },
+     "stopped_at": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stopped At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "user_id",
+     "bot_key",
+     "bot_version",
+     "script_path",
+     "pid",
+     "mode",
+     "status",
+     "exit_code",
+     "log_file",
+     "started_at",
+     "stopped_at"
+    ],
+    "title": "BotRunOut"
+   },
+   "BotStartRequest": {
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Version",
+      "examples": [
+       "v2"
+      ]
+     },
+     "mode": {
+      "type": "string",
+      "pattern": "^(paper|mock|live)$",
+      "title": "Mode",
+      "default": "paper"
+     },
+     "sports": {
+      "anyOf": [
+       {
+        "items": {
+         "type": "string"
+        },
+        "type": "array"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sports",
+      "description": "active sports for the main bot, e.g. ['tennis','baseball']",
+      "examples": [
+       [
+        "tennis",
+        "baseball"
+       ]
+      ]
+     },
+     "sport_settings": {
+      "anyOf": [
+       {
+        "additionalProperties": {
+         "$ref": "#/components/schemas/SportSettings"
+        },
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sport Settings",
+      "description": "per-sport contracts/bank, keyed by sport name",
+      "examples": [
+       {
+        "tennis": {
+         "bank": 300,
+         "contracts": 20
+        }
+       }
+      ]
+     },
+     "parley": {
+      "anyOf": [
+       {
+        "$ref": "#/components/schemas/ParleySettings"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "description": "parlay-bot selection and execution knobs (ignored by every other bot). Its sports list reuses `sports` \u2014 but only tennis has a leg qualifier, so anything else is refused."
+     },
+     "target_pct": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 1000.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Target Pct",
+      "description": "profit target % on the bankroll/portfolio (TARGET_PORTFOLIO_PCT); bot halts when reached"
+     },
+     "tp_pct": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 500.0,
+        "exclusiveMinimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tp Pct",
+      "description": "PER-TRADE profit target, % over the entry price \u2014 distinct from target_pct, which is a whole-session halt. Routed to whichever knob the chosen BTC engine reads: KALSHI_PROFIT_PCT (btc15 v2/v3/v4), BOT152_TP_PCT (btc15 v5), BTC60_TP_PCT (btc60 fable5/burst). On btc60 fable5 it also pins the learner so the target cannot drift.",
+      "examples": [
+       15
+      ]
+     },
+     "sl_pct": {
+      "anyOf": [
+       {
+        "type": "number",
+        "exclusiveMaximum": 100.0,
+        "exclusiveMinimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sl Pct",
+      "description": "PER-TRADE stop loss, % BELOW the entry price. Routed to KALSHI_STOP_PCT (btc15 v2/v3/v4, which share one _tp_sl) and BTC60_SL_PCT (btc60 burst uses a percent instead of its fixed 15c offset; fable5 pins its learner so the stop cannot drift). Setting it also turns the v2/v3/v4 stop monitor on. Rejected for btc15 v5, which has no stop loss by design \u2014 it holds to settlement. Must be under 100: a 100% stop is the position going to zero.",
+      "examples": [
+       30
+      ]
+     },
+     "bank_sl_pct": {
+      "anyOf": [
+       {
+        "type": "number",
+        "exclusiveMaximum": 100.0,
+        "exclusiveMinimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bank Sl Pct",
+      "description": "Bank STOP-LOSS, % below the bank typed at launch \u2014 the capital-protection mirror of target_pct. bank=100, target_pct=50, bank_sl_pct=20: the bot stops at 150 (TP reached on bank) or at 80 (SL HIT on Bank). Routed to BTC15_BANK_SL_PCT / BTC60_BANK_SL_PCT.",
+      "examples": [
+       20
+      ]
+     },
+     "no_trade_times": {
+      "anyOf": [
+       {
+        "type": "string",
+        "maxLength": 200,
+        "pattern": "^$|^\\s*\\d{1,2}:\\d{2}\\s*-\\s*\\d{1,2}:\\d{2}(\\s*,\\s*\\d{1,2}:\\d{2}\\s*-\\s*\\d{1,2}:\\d{2})*\\s*$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "No Trade Times",
+      "description": "Quiet hours in HALT_TIMEZONE local time, comma-separated HH:MM-HH:MM ranges (end before start wraps midnight). The bot stays RUNNING \u2014 monitors and TP management continue \u2014 but enters no NEW trade inside a window. Engines default to '17:00-19:30,05:00-08:00'; send an empty string to disable.",
+      "examples": [
+       "17:00-19:30, 05:00-08:00"
+      ]
+     },
+     "bank": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 1000000.0,
+        "exclusiveMinimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bank",
+      "description": "Bankroll for THIS bot, in dollars. Risk is per bot, not on the shared Kalshi account: btc60 reseeds its own ledger from this and target_pct is then measured on it. Sports uses sport_settings[].bank.",
+      "examples": [
+       250
+      ]
+     },
+     "kill_existing": {
+      "type": "boolean",
+      "title": "Kill Existing",
+      "description": "kill any process already running this bot \u2014 including copies the API did not start (orphans, legacy scheduler, manual launches) \u2014 then start fresh",
+      "default": false
+     },
+     "contracts": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 1000.0,
+        "minimum": 1.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Contracts",
+      "description": "fixed contracts per order (BTC bots: KALSHI_CONTRACTS/BOT152_CONTRACTS; sports: applied to every selected sport unless sport_settings overrides it)"
+     }
+    },
+    "type": "object",
+    "required": [
+     "user_id"
+    ],
+    "title": "BotStartRequest"
+   },
+   "BotStatusOut": {
+    "properties": {
+     "bot_key": {
+      "type": "string",
+      "title": "Bot Key"
+     },
+     "running": {
+      "type": "boolean",
+      "title": "Running"
+     },
+     "runs": {
+      "items": {
+       "$ref": "#/components/schemas/BotRunOut"
+      },
+      "type": "array",
+      "title": "Runs"
+     },
+     "session": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Session"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bot_key",
+     "running",
+     "runs"
+    ],
+    "title": "BotStatusOut"
+   },
+   "BotStopRequest": {
+    "properties": {
+     "user_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Id"
+     },
+     "run_id": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Run Id"
+     }
+    },
+    "type": "object",
+    "title": "BotStopRequest"
+   },
+   "BotVersionInfo": {
+    "properties": {
+     "version": {
+      "type": "string",
+      "title": "Version"
+     },
+     "script": {
+      "type": "string",
+      "title": "Script"
+     },
+     "exists": {
+      "type": "boolean",
+      "title": "Exists"
+     },
+     "default": {
+      "type": "boolean",
+      "title": "Default",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "version",
+     "script",
+     "exists"
+    ],
+    "title": "BotVersionInfo"
+   },
+   "CarryOverRequest": {
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "carry_over": {
+      "type": "boolean",
+      "title": "Carry Over",
+      "description": "true enables carry-over (no SL, no EOD close); false re-enables them",
+      "default": true
+     }
+    },
+    "type": "object",
+    "required": [
+     "user_id"
+    ],
+    "title": "CarryOverRequest"
+   },
+   "ContractRequest": {
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "occ_symbol": {
+      "type": "string",
+      "maxLength": 32,
+      "title": "Occ Symbol",
+      "examples": [
+       "TSLA260814C00350000"
+      ]
+     },
+     "buy_pct": {
+      "type": "number",
+      "maximum": 100.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Buy Pct",
+      "default": 50.0
+     },
+     "tolerance_pct": {
+      "type": "number",
+      "maximum": 100.0,
+      "minimum": 0.0,
+      "title": "Tolerance Pct",
+      "description": "how far either side of the buy_pct budget the total may land",
+      "default": 25.0
+     },
+     "tp_pct": {
+      "type": "number",
+      "maximum": 500.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Tp Pct",
+      "default": 15.0
+     },
+     "sl_pct": {
+      "type": "number",
+      "exclusiveMaximum": 100.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Sl Pct",
+      "default": 30.0
+     },
+     "discount_pct": {
+      "type": "number",
+      "maximum": 50.0,
+      "minimum": 0.0,
+      "title": "Discount Pct",
+      "description": "limit-price discount: 0 = market (smart_limit), 5/10/20 = that % below",
+      "default": 0
+     },
+     "live": {
+      "type": "boolean",
+      "title": "Live",
+      "description": "false (default) buys on the Tradier sandbox",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "user_id",
+     "occ_symbol"
+    ],
+    "title": "ContractRequest",
+    "description": "Buy one named contract \u2014 the flow board already chose it."
+   },
+   "EngineGatesUpdate": {
+    "properties": {
+     "a_tpsl": {
+      "type": "number",
+      "title": "A Tpsl"
+     },
+     "b_tpsl": {
+      "type": "number",
+      "title": "B Tpsl"
+     }
+    },
+    "type": "object",
+    "required": [
+     "a_tpsl",
+     "b_tpsl"
+    ],
+    "title": "EngineGatesUpdate",
+    "description": "``b_tpsl`` is the floor to emit at all; ``a_tpsl`` promotes to A-book."
+   },
+   "EnginePctUpdate": {
+    "properties": {
+     "category": {
+      "type": "string",
+      "title": "Category"
+     },
+     "tp_pct": {
+      "type": "number",
+      "title": "Tp Pct"
+     },
+     "sl_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Sl Pct"
+     }
+    },
+    "type": "object",
+    "required": [
+     "category",
+     "tp_pct"
+    ],
+    "title": "EnginePctUpdate",
+    "description": "Retarget one category. ``sl_pct`` defaults to ``tp_pct`` (symmetric)."
+   },
+   "Gex0dteRefresh": {
+    "properties": {
+     "payload": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Payload"
+     },
+     "ticker": {
+      "type": "string",
+      "title": "Ticker",
+      "default": "SPY"
+     },
+     "client": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Client"
+     }
+    },
+    "type": "object",
+    "title": "Gex0dteRefresh",
+    "description": "Give it a chain captured from a getgamma.io tab, or nothing to make the\nserver try the vendor directly. No credentials either way \u2014 the endpoint\nneeds none; its edge simply refuses non-browser clients."
+   },
+   "HTTPValidationError": {
+    "properties": {
+     "detail": {
+      "items": {
+       "$ref": "#/components/schemas/ValidationError"
+      },
+      "type": "array",
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "title": "HTTPValidationError"
+   },
+   "HeartbeatIn": {
+    "properties": {
+     "session": {
+      "type": "string",
+      "title": "Session",
+      "default": "?"
+     },
+     "seq": {
+      "type": "integer",
+      "title": "Seq",
+      "default": 0
+     },
+     "ok": {
+      "type": "boolean",
+      "title": "Ok",
+      "default": false
+     },
+     "reason": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Reason"
+     },
+     "wall": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Wall"
+     },
+     "mono": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Mono"
+     }
+    },
+    "type": "object",
+    "title": "HeartbeatIn",
+    "description": "One push cycle reported by the browser pusher, successful or not."
+   },
+   "KalshiClientRequest": {
+    "properties": {
+     "pem_password": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pem Password"
+     }
+    },
+    "type": "object",
+    "title": "KalshiClientRequest"
+   },
+   "KalshiClientState": {
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "environment": {
+      "type": "string",
+      "title": "Environment"
+     },
+     "api_key_id_masked": {
+      "type": "string",
+      "title": "Api Key Id Masked"
+     },
+     "authenticated": {
+      "type": "boolean",
+      "title": "Authenticated"
+     },
+     "balance_cents": {
+      "anyOf": [
+       {
+        "type": "integer"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Balance Cents"
+     },
+     "exchange_active": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Exchange Active"
+     },
+     "trading_active": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Trading Active"
+     },
+     "checked_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Checked At"
+     },
+     "detail": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Detail"
+     }
+    },
+    "type": "object",
+    "required": [
+     "user_id",
+     "environment",
+     "api_key_id_masked",
+     "authenticated",
+     "checked_at"
+    ],
+    "title": "KalshiClientState",
+    "description": "Connection state returned by POST /users/{user_id}/kalshi-client."
+   },
+   "LoginRequest": {
+    "properties": {
+     "username": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "title": "Username"
+     },
+     "password": {
+      "type": "string",
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Password"
+     }
+    },
+    "type": "object",
+    "required": [
+     "username",
+     "password"
+    ],
+    "title": "LoginRequest"
+   },
+   "LoginResponse": {
+    "properties": {
+     "token": {
+      "type": "string",
+      "title": "Token"
+     },
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "username": {
+      "type": "string",
+      "title": "Username"
+     },
+     "expires_at": {
+      "type": "number",
+      "title": "Expires At"
+     },
+     "expires_in_s": {
+      "type": "integer",
+      "title": "Expires In S"
+     }
+    },
+    "type": "object",
+    "required": [
+     "token",
+     "user_id",
+     "username",
+     "expires_at",
+     "expires_in_s"
+    ],
+    "title": "LoginResponse"
+   },
+   "OpenRequest": {
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "symbol": {
+      "type": "string",
+      "maxLength": 12,
+      "title": "Symbol",
+      "examples": [
+       "SPY"
+      ]
+     },
+     "side": {
+      "type": "string",
+      "pattern": "^(call|put)$",
+      "title": "Side"
+     },
+     "buy_pct": {
+      "type": "number",
+      "maximum": 100.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Buy Pct",
+      "description": "% of option buying power to spend",
+      "default": 50.0
+     },
+     "tolerance_pct": {
+      "type": "number",
+      "maximum": 100.0,
+      "minimum": 0.0,
+      "title": "Tolerance Pct",
+      "description": "how far either side of the buy_pct budget the total may land. Contracts are indivisible, so the budget is a target: at 50% of $100 with +/-25% the window is $37.50-$62.50, which buys one contract at 0.60 (a strict budget buys none) and two at 0.30 (a strict budget buys one and parks $20). 0 restores the strict behaviour.",
+      "default": 25.0,
+      "examples": [
+       25
+      ]
+     },
+     "delta_min": {
+      "type": "number",
+      "exclusiveMaximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Delta Min",
+      "default": 0.25
+     },
+     "delta_max": {
+      "type": "number",
+      "maximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Delta Max",
+      "default": 0.5
+     },
+     "tp_pct": {
+      "type": "number",
+      "maximum": 500.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Tp Pct",
+      "description": "sell when the premium is this % above entry",
+      "default": 15.0
+     },
+     "sl_pct": {
+      "type": "number",
+      "exclusiveMaximum": 100.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Sl Pct",
+      "description": "cancel the TP and sell when the bid is this % below entry",
+      "default": 30.0
+     },
+     "expiration": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Expiration",
+      "description": "YYYY-MM-DD; omit for the nearest listed"
+     },
+     "zero_dte": {
+      "type": "boolean",
+      "title": "Zero Dte",
+      "description": "allow today's expiration; off by default, so 0DTE is deliberate",
+      "default": false
+     },
+     "discount_pct": {
+      "type": "number",
+      "maximum": 50.0,
+      "minimum": 0.0,
+      "title": "Discount Pct",
+      "description": "limit-price discount: 0 = market (smart_limit), 5/10/20 = that % below",
+      "default": 0
+     },
+     "live": {
+      "type": "boolean",
+      "title": "Live",
+      "description": "false (default) places a MOCK order on the Tradier sandbox; true spends real money on the production account",
+      "default": false
+     }
+    },
+    "type": "object",
+    "required": [
+     "user_id",
+     "symbol",
+     "side"
+    ],
+    "title": "OpenRequest"
+   },
+   "ParleySettings": {
+    "properties": {
+     "min_prob_c": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 99.0,
+        "minimum": 50.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Prob C",
+      "description": "a leg needs a YES price strictly ABOVE this (80 = 'odds > 80%')",
+      "examples": [
+       80
+      ]
+     },
+     "min_set": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 5.0,
+        "minimum": 1.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Set",
+      "description": "match must be at least in this set",
+      "examples": [
+       2
+      ]
+     },
+     "lead_scope": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^(current|second|off)$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Lead Scope",
+      "description": "which set the above-threshold participant must LEAD: current (the set in progress) | second | off (price only)",
+      "examples": [
+       "current"
+      ]
+     },
+     "min_legs": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 12.0,
+        "minimum": 2.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Min Legs",
+      "description": "fewer qualifying legs than this \u2192 no parlay (2 is also the exchange's own collection minimum)"
+     },
+     "max_legs": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 12.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Legs",
+      "description": "0 = take every qualifying live match"
+     },
+     "max_open": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 10.0,
+        "minimum": 1.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Open",
+      "description": "concurrent open parlays"
+     },
+     "cooldown_min": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 1440.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cooldown Min",
+      "description": "minimum gap between two parlays, minutes (PARLEY_COOLDOWN_S)",
+      "examples": [
+       15
+      ]
+     },
+     "slippage_c": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 20.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Slippage C",
+      "description": "cents crossed above the ask. The V2 order API has no market order type, so a market order is sent as a marketable immediate-or-cancel at ask + this."
+     },
+     "max_price_c": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 99.0,
+        "minimum": 2.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Max Price C",
+      "description": "never pay more than this per combo contract"
+     },
+     "tp_ceiling_c": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 99.0,
+        "minimum": 2.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Tp Ceiling C",
+      "description": "resting take-profit sell, in cents"
+     },
+     "stop_loss_c": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 99.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Stop Loss C",
+      "description": "entry-relative stop: exit once the bid is this many cents under the entry (0 disables)"
+     },
+     "limit_fallback": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Limit Fallback",
+      "description": "A freshly created combined market has an EMPTY book, so a market order fills nothing and the bot takes no position. True instead rests a good-till-cancelled maker buy at the theoretical price (the product of the leg probabilities)."
+     }
+    },
+    "type": "object",
+    "title": "ParleySettings",
+    "description": "Parlay-bot tuning (maps to PARLEY_* env).\n\nDeliberately in cents and counts rather than percentages: this bot prices\nin cents \u2014 a 97c take-profit ceiling, a stop 20c under entry \u2014 so a\npercent knob would read differently than it acts. Bankroll, contracts and\nthe bank stop come from the shared top-level fields, since they go through\nthe same SportConfig/SportBook the per-sport banks use."
+   },
+   "PasswordCheck": {
+    "properties": {
+     "password": {
+      "type": "string",
+      "title": "Password"
+     }
+    },
+    "type": "object",
+    "required": [
+     "password"
+    ],
+    "title": "PasswordCheck"
+   },
+   "PerformanceSummary": {
+    "properties": {
+     "bot_key": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bot Key"
+     },
+     "trades": {
+      "type": "integer",
+      "title": "Trades"
+     },
+     "settled": {
+      "type": "integer",
+      "title": "Settled"
+     },
+     "wins": {
+      "type": "integer",
+      "title": "Wins"
+     },
+     "losses": {
+      "type": "integer",
+      "title": "Losses"
+     },
+     "win_rate": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Win Rate"
+     },
+     "total_cost_usd": {
+      "type": "number",
+      "title": "Total Cost Usd"
+     },
+     "total_pnl_usd": {
+      "type": "number",
+      "title": "Total Pnl Usd"
+     },
+     "by_status": {
+      "additionalProperties": {
+       "type": "integer"
+      },
+      "type": "object",
+      "title": "By Status"
+     }
+    },
+    "type": "object",
+    "required": [
+     "bot_key",
+     "trades",
+     "settled",
+     "wins",
+     "losses",
+     "win_rate",
+     "total_cost_usd",
+     "total_pnl_usd",
+     "by_status"
+    ],
+    "title": "PerformanceSummary"
+   },
+   "SnapshotOut": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "kind": {
+      "type": "string",
+      "title": "Kind"
+     },
+     "snapshot_date": {
+      "type": "string",
+      "title": "Snapshot Date"
+     },
+     "payload": {
+      "additionalProperties": true,
+      "type": "object",
+      "title": "Payload"
+     },
+     "source_file": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Source File"
+     },
+     "fetched_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Fetched At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "kind",
+     "snapshot_date",
+     "payload",
+     "source_file",
+     "fetched_at"
+    ],
+    "title": "SnapshotOut"
+   },
+   "SportSettings": {
+    "properties": {
+     "contracts": {
+      "anyOf": [
+       {
+        "type": "integer",
+        "maximum": 1000.0,
+        "minimum": 1.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Contracts",
+      "description": "contracts per order"
+     },
+     "bank": {
+      "anyOf": [
+       {
+        "type": "number",
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bank",
+      "description": "session bankroll $ (0 = unlimited)"
+     },
+     "model": {
+      "anyOf": [
+       {
+        "type": "string",
+        "pattern": "^v[1-6]$"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Model",
+      "description": "prediction model version for this sport (tennis: v1-v6). Omit it to get the default, v5 \u2014 the forensics-validated 50-62c whitelist. Naming any other model also hands it the 68-84c band from kaslhi_sports.env, which only v5 ignores.",
+      "examples": [
+       "v5"
+      ]
+     }
+    },
+    "type": "object",
+    "title": "SportSettings",
+    "description": "Per-sport tuning for the main sports bot (maps to <SPORT>_* env)."
+   },
+   "SuperConfigUpdate": {
+    "properties": {
+     "enabled": {
+      "additionalProperties": {
+       "type": "boolean"
+      },
+      "type": "object",
+      "title": "Enabled",
+      "description": "tickerId -> enabled flag, matched across all categories",
+      "examples": [
+       {
+        "btc": false,
+        "spy": true
+       }
+      ]
+     }
+    },
+    "type": "object",
+    "required": [
+     "enabled"
+    ],
+    "title": "SuperConfigUpdate"
+   },
+   "SuperSignalOut": {
+    "properties": {
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "book": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Book"
+     },
+     "category": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Category"
+     },
+     "ticker": {
+      "type": "string",
+      "title": "Ticker"
+     },
+     "direction": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Direction"
+     },
+     "grade": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Grade"
+     },
+     "combo": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Combo"
+     },
+     "price": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Price"
+     },
+     "accuracy_pct": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Accuracy Pct"
+     },
+     "bar_time": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bar Time"
+     },
+     "logged_at": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Logged At"
+     },
+     "raw": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Raw"
+     }
+    },
+    "type": "object",
+    "required": [
+     "id",
+     "book",
+     "category",
+     "ticker",
+     "direction",
+     "grade",
+     "combo",
+     "price",
+     "accuracy_pct",
+     "bar_time",
+     "logged_at",
+     "raw"
+    ],
+    "title": "SuperSignalOut"
+   },
+   "SuperSignalPage": {
+    "properties": {
+     "total": {
+      "type": "integer",
+      "title": "Total"
+     },
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/SuperSignalOut"
+      },
+      "type": "array",
+      "title": "Items"
+     }
+    },
+    "type": "object",
+    "required": [
+     "total",
+     "items"
+    ],
+    "title": "SuperSignalPage"
+   },
+   "SuperStopRequest": {
+    "properties": {
+     "category": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Category",
+      "description": "etf | stock | crypto; omit to stop all"
+     }
+    },
+    "type": "object",
+    "title": "SuperStopRequest"
+   },
+   "TargetRequest": {
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "target_price": {
+      "type": "number",
+      "maximum": 10000.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Target Price",
+      "description": "new take-profit price for this contract"
+     }
+    },
+    "type": "object",
+    "required": [
+     "user_id",
+     "target_price"
+    ],
+    "title": "TargetRequest"
+   },
+   "TradeCreate": {
+    "properties": {
+     "bot_key": {
+      "type": "string",
+      "enum": [
+       "btc15",
+       "btc60",
+       "sports",
+       "parley",
+       "gold15",
+       "silver15",
+       "oil15",
+       "manual"
+      ],
+      "title": "Bot Key",
+      "default": "manual"
+     },
+     "bot_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bot Version"
+     },
+     "external_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "External Id"
+     },
+     "ticker": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Ticker"
+     },
+     "market_title": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Market Title"
+     },
+     "side": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "yes",
+         "no"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Side"
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "buy",
+       "sell"
+      ],
+      "title": "Action",
+      "default": "buy"
+     },
+     "contracts": {
+      "type": "integer",
+      "minimum": 0.0,
+      "title": "Contracts",
+      "default": 1
+     },
+     "price_cents": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 100.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Price Cents"
+     },
+     "cost_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cost Usd"
+     },
+     "fees_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fees Usd"
+     },
+     "pnl_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pnl Usd"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status",
+      "default": "open"
+     },
+     "is_mock": {
+      "type": "boolean",
+      "title": "Is Mock",
+      "default": true
+     },
+     "is_live": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Is Live"
+     },
+     "opened_at": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Opened At"
+     },
+     "closed_at": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Closed At"
+     },
+     "raw": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Raw"
+     }
+    },
+    "type": "object",
+    "required": [
+     "ticker"
+    ],
+    "title": "TradeCreate"
+   },
+   "TradeHistoryPage": {
+    "properties": {
+     "total": {
+      "type": "integer",
+      "title": "Total"
+     },
+     "items": {
+      "items": {
+       "$ref": "#/components/schemas/TradeOut"
+      },
+      "type": "array",
+      "title": "Items"
+     }
+    },
+    "type": "object",
+    "required": [
+     "total",
+     "items"
+    ],
+    "title": "TradeHistoryPage"
+   },
+   "TradeOut": {
+    "properties": {
+     "bot_key": {
+      "type": "string",
+      "enum": [
+       "btc15",
+       "btc60",
+       "sports",
+       "parley",
+       "gold15",
+       "silver15",
+       "oil15",
+       "manual"
+      ],
+      "title": "Bot Key",
+      "default": "manual"
+     },
+     "bot_version": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Bot Version"
+     },
+     "external_id": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "External Id"
+     },
+     "ticker": {
+      "type": "string",
+      "maxLength": 128,
+      "minLength": 1,
+      "title": "Ticker"
+     },
+     "market_title": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Market Title"
+     },
+     "side": {
+      "anyOf": [
+       {
+        "type": "string",
+        "enum": [
+         "yes",
+         "no"
+        ]
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Side"
+     },
+     "action": {
+      "type": "string",
+      "enum": [
+       "buy",
+       "sell"
+      ],
+      "title": "Action",
+      "default": "buy"
+     },
+     "contracts": {
+      "type": "integer",
+      "minimum": 0.0,
+      "title": "Contracts",
+      "default": 1
+     },
+     "price_cents": {
+      "anyOf": [
+       {
+        "type": "number",
+        "maximum": 100.0,
+        "minimum": 0.0
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Price Cents"
+     },
+     "cost_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Cost Usd"
+     },
+     "fees_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Fees Usd"
+     },
+     "pnl_usd": {
+      "anyOf": [
+       {
+        "type": "number"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Pnl Usd"
+     },
+     "status": {
+      "type": "string",
+      "title": "Status",
+      "default": "open"
+     },
+     "is_mock": {
+      "type": "boolean",
+      "title": "Is Mock",
+      "default": true
+     },
+     "is_live": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Is Live"
+     },
+     "opened_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Opened At"
+     },
+     "closed_at": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "date-time"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Closed At"
+     },
+     "raw": {
+      "anyOf": [
+       {
+        "additionalProperties": true,
+        "type": "object"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Raw"
+     },
+     "id": {
+      "type": "integer",
+      "title": "Id"
+     },
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Created At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "ticker",
+     "opened_at",
+     "id",
+     "user_id",
+     "created_at"
+    ],
+    "title": "TradeOut"
+   },
+   "UserCreate": {
+    "properties": {
+     "username": {
+      "type": "string",
+      "maxLength": 64,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]{1,64}$",
+      "title": "Username"
+     },
+     "email": {
+      "anyOf": [
+       {
+        "type": "string",
+        "format": "email"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Email"
+     },
+     "user_root_folder": {
+      "anyOf": [
+       {
+        "type": "string",
+        "maxLength": 1024,
+        "minLength": 1
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "User Root Folder",
+      "description": "Windows (D:\\...) or POSIX (/home/...) path to the user's secrets folder (API keys, PEM, wellness profile). Omit it and the server defaults to <TBOT_CUSTOMERS_ROOT>/<username> \u2014 clients should NOT hardcode machine paths."
+     }
+    },
+    "type": "object",
+    "required": [
+     "username"
+    ],
+    "title": "UserCreate"
+   },
+   "UserOut": {
+    "properties": {
+     "user_id": {
+      "type": "string",
+      "title": "User Id"
+     },
+     "username": {
+      "type": "string",
+      "title": "Username"
+     },
+     "email": {
+      "anyOf": [
+       {
+        "type": "string"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Email"
+     },
+     "user_root_folder": {
+      "type": "string",
+      "title": "User Root Folder"
+     },
+     "root_folder_exists": {
+      "anyOf": [
+       {
+        "type": "boolean"
+       },
+       {
+        "type": "null"
+       }
+      ],
+      "title": "Root Folder Exists"
+     },
+     "created_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Created At"
+     },
+     "updated_at": {
+      "type": "string",
+      "format": "date-time",
+      "title": "Updated At"
+     }
+    },
+    "type": "object",
+    "required": [
+     "user_id",
+     "username",
+     "email",
+     "user_root_folder",
+     "created_at",
+     "updated_at"
+    ],
+    "title": "UserOut"
+   },
+   "ValidationError": {
+    "properties": {
+     "loc": {
+      "items": {
+       "anyOf": [
+        {
+         "type": "string"
+        },
+        {
+         "type": "integer"
+        }
+       ]
+      },
+      "type": "array",
+      "title": "Location"
+     },
+     "msg": {
+      "type": "string",
+      "title": "Message"
+     },
+     "type": {
+      "type": "string",
+      "title": "Error Type"
+     },
+     "input": {
+      "title": "Input"
+     },
+     "ctx": {
+      "type": "object",
+      "title": "Context"
+     }
+    },
+    "type": "object",
+    "required": [
+     "loc",
+     "msg",
+     "type"
+    ],
+    "title": "ValidationError"
+   }
+  }
+ }
+}

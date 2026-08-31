@@ -1,0 +1,918 @@
+/* 36 Trade Desk — market snapshot board.
+   Built phone-first and specifically for iOS Safari, which is the hardest
+   target here and the one it is judged on. Every rule that looks
+   over-specified below is guarding a real WebKit behaviour, noted inline. */
+
+.d36 {
+  --d36-bg: #08080c;
+  --d36-panel: #0f0f15;
+  --d36-line: rgba(255, 255, 255, 0.07);
+  --d36-ink: #e8e8ef;
+  --d36-dim: #8a8a9c;
+  --d36-faint: #55556a;
+  --d36-green: #86efac;
+  --d36-green-bg: #b7f7cf;
+  --d36-red: #ff5c7a;
+  --d36-red-bg: #ff4d6d;
+  --d36-amber: #fbbf24;
+  --d36-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  min-height: 100vh;          /* fallback first: iOS < 15.4 has no dvh */
+  min-height: 100dvh;
+  background: var(--d36-bg);
+  color: var(--d36-ink);
+  font-family: var(--d36-mono);
+  /* The notch and the home indicator. Without this the last row sits under
+     the gesture bar and cannot be tapped. */
+  padding: 0 0 calc(18px + env(safe-area-inset-bottom));
+  /* Stops a scroll at the end of this list from dragging the whole page
+     (and, in a standalone PWA, from triggering pull-to-refresh). */
+  overscroll-behavior-y: contain;
+  -webkit-text-size-adjust: 100%;   /* iOS inflates text in landscape without it */
+}
+
+/* Every interactive element: kill the grey flash and the 300ms delay. */
+.d36 button,
+.d36 input {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  font-family: inherit;
+}
+
+/* ── header ─────────────────────────────────────────────────────────────── */
+.d36-hd {
+  /* Wraps to a second line on a phone: the title, the venue toggle and the
+     two stats do not fit on one 393px row without shrinking the numbers
+     past reading. */
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: calc(10px + env(safe-area-inset-top)) 12px 9px;
+  border-bottom: 1px solid var(--d36-line);
+  background: var(--d36-bg);
+  z-index: 20;
+  /* NOT sticky on a phone. With the title, two stats, the gamma readout and
+     seven tabs it stands 207px tall at 393px wide — a quarter of an iPhone
+     screen, permanently, for a board you scroll. It scrolls away here and
+     pins itself only where it is short enough to be worth pinning. */
+  position: static;
+}
+@media (min-width: 620px) {
+  .d36-hd { position: sticky; top: 0; }
+}
+.d36-title {
+  font-size: 11px; letter-spacing: 0.34em; text-transform: uppercase;
+  color: var(--d36-dim); margin: 0; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0;
+}
+/* The operator, at the size the username was already shown at — smaller
+   than the title it follows. */
+.d36-who {
+  font-size: 8.5px; letter-spacing: 0.14em;
+  color: var(--d36-faint); font-weight: 600;
+}
+
+/* ── buying power + today's P&L ─────────────────────────────────────────── */
+.d36-stats {
+  flex: 1 0 100%;           /* its own line under the title */
+  /* wrap, or the tabs inside cannot break onto a line of their own however
+     they are sized — they just overflow the row */
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding-top: 2px;
+  min-width: 0;
+}
+.d36-stat { display: inline-flex; align-items: baseline; gap: 5px; min-width: 0; }
+.d36-statk {
+  font-size: 8px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--d36-faint);
+}
+/* Title size, as asked — these are the two numbers worth reading from
+   across the room. */
+.d36-statv {
+  font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+}
+.d36-statv.bp { color: var(--d36-ink); }
+.d36-statv.up { color: var(--d36-green); }
+.d36-statv.down { color: var(--d36-red); }
+/* The percent rides with the amount and inherits its colour, a step down in
+   size so the dollar figure stays the thing you read first. */
+.d36-statpct {
+  margin-left: 5px; font-size: 8.5px; font-weight: 700; opacity: 0.85;
+}
+
+/* ── section tabs ───────────────────────────────────────────────────────── */
+/* Mobile first: the tabs take their own line and wrap within it. Six chips
+   plus two numbers do not fit across a phone, and the earlier max-width
+   rule was not reliably winning — a default that needs no query cannot
+   fail to apply. */
+.d36-tabs {
+  display: flex; align-items: center; gap: 4px; flex-wrap: wrap;
+  flex: 1 0 100%;
+  min-width: 0;
+  padding-top: 6px;
+}
+.d36-tab {
+  background: none; border: 1px solid var(--d36-line);
+  color: var(--d36-faint); border-radius: 999px;
+  padding: 3px 8px; cursor: pointer;
+  font-size: 8px; font-weight: 700;
+  letter-spacing: 0.1em; text-transform: uppercase;
+  white-space: nowrap;
+}
+.d36-tab.on {
+  color: var(--d36-green);
+  border-color: rgba(134, 239, 172, 0.45);
+  background: rgba(134, 239, 172, 0.1);
+}
+.d36-tab:active { transform: scale(0.94); }
+@media (hover: hover) {
+  .d36-tab:hover { color: var(--d36-ink); border-color: rgba(255, 255, 255, 0.2); }
+}
+
+/* With real width to spare, they move up beside the two numbers, which is
+   where they belong when they fit. */
+@media (min-width: 620px) {
+  .d36-tabs {
+    flex: 0 1 auto; margin-left: auto; padding-top: 0;
+  }
+}
+/* space-between is gone now that the header wraps, so the controls claim
+   the right edge themselves. */
+.d36-hd-right {
+  display: flex; align-items: center; gap: 6px; flex: none; margin-left: auto;
+}
+.d36-venue {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 4px;
+  min-width: 30px; height: 28px; padding: 0 7px;
+  font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  border-radius: 8px; border: 1px solid var(--d36-line);
+  background: none; color: var(--d36-dim); cursor: pointer;
+}
+.d36-venue svg { display: block; }
+.d36-venue.live {
+  color: var(--d36-red); border-color: rgba(255, 92, 122, 0.45);
+  background: rgba(255, 77, 109, 0.08);
+}
+.d36-venue.paper { color: var(--d36-green); border-color: rgba(134, 239, 172, 0.35); }
+.d36-venue-live { display: inline-flex; align-items: center; gap: 4px; }
+.d36-venue-live span { font-size: 8.5px; font-weight: 700; }
+
+/* ── venue switch confirmation ──────────────────────────────────────────── */
+.d36-venueblink {
+  display: grid; place-items: center;
+  padding: 16px 0 6px;
+}
+/* The mark alternates between the two venues' colours while the question is
+   open, so the thing being changed is on screen and moving before anyone
+   taps yes. Direction matters: going TO live rests on red, coming BACK to
+   paper rests on green. */
+.d36-blink {
+  border-radius: 50%;
+  animation: d36-blink-live 1.05s steps(1, end) infinite;
+}
+.d36-blink.to-paper { animation-name: d36-blink-paper; }
+@keyframes d36-blink-live {
+  0%, 49% {
+    filter: drop-shadow(0 0 12px rgba(255, 77, 109, 0.95));
+    box-shadow: 0 0 0 3px rgba(255, 77, 109, 0.55);
+  }
+  50%, 100% {
+    filter: drop-shadow(0 0 6px rgba(134, 239, 172, 0.6));
+    box-shadow: 0 0 0 3px rgba(134, 239, 172, 0.3);
+  }
+}
+@keyframes d36-blink-paper {
+  0%, 49% {
+    filter: drop-shadow(0 0 12px rgba(134, 239, 172, 0.9));
+    box-shadow: 0 0 0 3px rgba(134, 239, 172, 0.5);
+  }
+  50%, 100% {
+    filter: drop-shadow(0 0 6px rgba(255, 77, 109, 0.6));
+    box-shadow: 0 0 0 3px rgba(255, 77, 109, 0.3);
+  }
+}
+/* Anyone who asked not to be moved gets the destination colour, held. */
+@media (prefers-reduced-motion: reduce) {
+  .d36-blink { animation: none; box-shadow: 0 0 0 3px rgba(255, 77, 109, 0.55); }
+  .d36-blink.to-paper { box-shadow: 0 0 0 3px rgba(134, 239, 172, 0.5); }
+}
+.d36-iconbtn {
+  background: none; border: 1px solid var(--d36-line); color: var(--d36-dim);
+  border-radius: 8px; width: 30px; height: 28px; font-size: 13px;
+  display: inline-flex; align-items: center; justify-content: center;
+  cursor: pointer; padding: 0;
+}
+.d36-iconbtn.on { color: var(--d36-amber); border-color: rgba(251, 191, 36, 0.4); }
+/* Sign-out is the one control here that ENDS something, so it reads in
+   the warning colour instead of the desk's accent. */
+.d36-iconbtn.signout { color: rgba(255, 122, 138, 0.85); border-color: rgba(255, 92, 122, 0.32); }
+.d36-iconbtn.signout:active { color: var(--d36-red); border-color: var(--d36-red); }
+@media (hover: hover) {
+  .d36-iconbtn.signout:hover { color: var(--d36-red); border-color: var(--d36-red); }
+}
+
+.d36-sub {
+  padding: 7px 12px 3px;
+  font-size: 9px; letter-spacing: 0.2em; text-transform: uppercase;
+  color: var(--d36-faint);
+  display: flex; justify-content: space-between; gap: 8px;
+}
+
+/* ── the board ──────────────────────────────────────────────────────────── */
+.d36-rows { padding: 4px 8px 0; }
+
+/* One grid so every row's centre column lines up regardless of bar length —
+   that shared spine is what makes a diverging chart readable.
+   put | left field | SYMBOL | right field | call */
+.d36-row {
+  display: grid;
+  grid-template-columns: var(--d36-btn) 1fr var(--d36-sym) 1fr var(--d36-btn);
+  align-items: center;
+  gap: 4px;
+  min-height: 38px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.035);
+}
+.d36 { --d36-btn: 30px; --d36-sym: 58px; }
+
+.d36-sym {
+  text-align: center;
+  font-size: 13px; font-weight: 700; letter-spacing: 0.04em;
+  color: var(--d36-ink);
+  padding: 0 2px;
+  background: none; border: 0; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.d36-sym.locked { color: var(--d36-ink); cursor: default; }
+.d36-sym.editable { color: #cfd0e4; }
+.d36-sym.editable::after {
+  content: '';
+  display: block; height: 1px; margin: 1px auto 0; width: 60%;
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.d36-syminput {
+  width: 100%; min-width: 0; text-align: center;
+  /* 16px exactly: below this iOS Safari zooms the page on focus and never
+     zooms back, which strands the operator mid-edit. */
+  font-size: 16px;
+  background: #1a1a24; color: var(--d36-ink);
+  border: 1px solid var(--d36-amber); border-radius: 6px;
+  padding: 3px 2px; outline: none;
+  -webkit-appearance: none; appearance: none;
+}
+
+/* ── the bars ───────────────────────────────────────────────────────────── */
+.d36-field { min-width: 0; display: flex; align-items: center; overflow: hidden; }
+.d36-field.left { justify-content: flex-end; }
+.d36-field.right { justify-content: flex-start; }
+
+.d36-bar {
+  display: flex; align-items: center;
+  height: 21px; border-radius: 3px;
+  padding: 0 5px;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+  /* Must not be shrinkable. The bar sizes itself to hold its own label, but
+     it shares the field with the outside-fallback span and (on SPY) the
+     gamma strip — as a shrinkable flex item it gave up width to them, which
+     made the label stop fitting, which rendered the fallback, which took
+     more width still. The bar owns its width; the others get what is left. */
+  flex: 0 0 auto;
+  /* A transition on width alone; nothing here animates transform, so there
+     is no compositing layer for WebKit to lose the contents behind. */
+  transition: width 320ms cubic-bezier(0.22, 0.7, 0.3, 1);
+}
+.d36-bar.up {
+  background: var(--d36-green-bg); color: #06251a;
+  justify-content: flex-start;
+  box-shadow: 0 0 14px rgba(134, 239, 172, 0.16);
+}
+.d36-bar.down {
+  background: var(--d36-red-bg); color: #2b0410;
+  justify-content: flex-end;
+  box-shadow: 0 0 14px rgba(255, 77, 109, 0.16);
+}
+.d36-bar-label {
+  white-space: nowrap;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+/* When even the smallest size will not fit, the label steps outside the bar
+   rather than being clipped into nonsense. */
+.d36-out {
+  white-space: nowrap; font-weight: 700; font-variant-numeric: tabular-nums;
+  padding: 0 4px; line-height: 1;
+}
+.d36-out.up { color: var(--d36-green); }
+.d36-out.down { color: var(--d36-red); }
+
+/* ── DI readings, on whichever side the bar left empty ───────────────────── */
+.d36-di {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 8.5px; letter-spacing: 0.02em;
+  color: var(--d36-faint);
+  padding: 0 5px;
+  white-space: nowrap;
+  min-width: 0; overflow: hidden;
+}
+.d36-di b { font-weight: 700; font-variant-numeric: tabular-nums; }
+.d36-di .pdi { color: rgba(134, 239, 172, 0.75); }
+.d36-di .adx { color: rgba(251, 191, 36, 0.75); }
+.d36-di .mdi { color: rgba(255, 92, 122, 0.75); }
+.d36-di.strong .adx { color: var(--d36-amber); }
+
+/* ── put / call ─────────────────────────────────────────────────────────── */
+.d36-pc {
+  width: 100%; height: 26px;
+  border-radius: 6px; border: 1px solid transparent;
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.d36-pc.put {
+  color: var(--d36-red); border-color: rgba(255, 92, 122, 0.28);
+  background: rgba(255, 77, 109, 0.07);
+}
+.d36-pc.call {
+  color: var(--d36-green); border-color: rgba(134, 239, 172, 0.28);
+  background: rgba(134, 239, 172, 0.07);
+}
+.d36-pc:active { transform: scale(0.94); }
+/* Hover styles only where a real pointer exists — on a phone :hover sticks
+   after a tap and leaves the button looking permanently pressed. */
+@media (hover: hover) {
+  .d36-pc.put:hover { background: rgba(255, 77, 109, 0.18); }
+  .d36-pc.call:hover { background: rgba(134, 239, 172, 0.18); }
+}
+
+/* ── add / remove ───────────────────────────────────────────────────────── */
+.d36-addrow { display: flex; gap: 6px; padding: 12px 10px 4px; }
+.d36-add {
+  flex: 1 1 auto; min-width: 0;
+  font-size: 16px;                     /* see .d36-syminput */
+  background: #14141c; color: var(--d36-ink);
+  border: 1px solid var(--d36-line); border-radius: 8px;
+  padding: 8px 10px; outline: none;
+  -webkit-appearance: none; appearance: none;
+}
+.d36-add::placeholder { color: var(--d36-faint); font-size: 13px; }
+.d36-addbtn {
+  flex: none; padding: 0 14px; border-radius: 8px;
+  background: rgba(134, 239, 172, 0.12); color: var(--d36-green);
+  border: 1px solid rgba(134, 239, 172, 0.3);
+  font-size: 11px; font-weight: 700; letter-spacing: 0.08em; cursor: pointer;
+}
+.d36-del {
+  flex: none;
+  background: rgba(255, 77, 109, 0.1); border: 1px solid rgba(255, 92, 122, 0.3);
+  color: var(--d36-red); border-radius: 5px;
+  font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  line-height: 1; padding: 4px 5px; margin-left: 4px; cursor: pointer;
+}
+
+/* ── the Vidura mark, back to the Tradier desk ──────────────────────────── */
+.d36-mark {
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: 8px;
+  -webkit-tap-highlight-color: transparent;
+}
+.d36-mark img { display: block; width: 26px; height: 26px; }
+@media (hover: hover) { .d36-mark:hover { background: rgba(255, 255, 255, 0.06); } }
+.d36-mark:active { transform: scale(0.92); }
+
+/* Bot Station. Drawn at 30px so it sits level with the home mark beside it,
+   but the TAP target is grown with a transparent, centred ::after rather
+   than a bigger box, so the header row does not grow and the two marks stay
+   aligned.
+   40px wide, not 44: the two marks sit on a 40px pitch (30px + the header's
+   10px gap), so 44 would overlap by 4px and the seam between them would
+   silently resolve to whichever is later in the DOM. 40 x 44 gives each mark
+   the full vertical reach and everything horizontally up to its neighbour —
+   the largest target here that is never ambiguous. */
+.d36-mark { position: relative; }
+.d36-mark::after {
+  content: ''; position: absolute; top: 50%; left: 50%;
+  width: 40px; height: 44px; transform: translate(-50%, -50%);
+}
+.d36-bots {
+  color: var(--d36-dim);
+  border: 1px solid var(--d36-line);
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+.d36-bots svg { display: block; }
+@media (hover: hover) {
+  .d36-bots:hover { color: var(--d36-green); border-color: rgba(134, 239, 172, 0.35); }
+}
+.d36-bots:active { color: var(--d36-green); }
+
+/* ── section headers (snapshot / hot / charts all share these) ──────────── */
+.d36-secthd,
+.d36-charthd {
+  display: flex; align-items: baseline; gap: 10px;
+  padding: 14px 12px 6px;
+  border-top: 1px solid var(--d36-line); margin-top: 8px;
+}
+/* The first one sits directly under the sticky header, so it needs no rule
+   above it. */
+.d36-secthd:first-of-type { border-top: 0; margin-top: 0; padding-top: 8px; }
+.d36-charttoggle {
+  background: none; border: 0; color: var(--d36-ink); cursor: pointer;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+  padding: 0;
+}
+.d36-charthint {
+  font-size: 8.5px; color: var(--d36-faint); letter-spacing: 0.06em;
+  margin-left: auto; text-align: right;
+}
+
+/* One column on a phone, two on a large phone/tablet, four at desk width —
+   never more than four, as asked. auto-fit would collapse to one wide tile
+   on a narrow screen and stretch the candles, so the counts are explicit. */
+.d36-charts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  padding: 0 8px;
+}
+@media (min-width: 560px)  { .d36-charts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 900px)  { .d36-charts { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (min-width: 1180px) { .d36-charts { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+
+/* minmax(0,1fr) above plus this is what stops a wide canvas from forcing the
+   grid wider than the screen — the classic cause of a sideways-scrolling
+   page on iOS. */
+.d36-chartcell { min-width: 0; overflow: hidden; }
+
+/* ── positions ──────────────────────────────────────────────────────────── */
+/* Cards, not a table. The desk's grid has thirteen columns; on a 393px
+   screen that either scrolls sideways or shrinks past reading. Two stacked
+   lines per position say the same thing and fit. */
+.d36-pos { padding: 0 8px; }
+.d36-posbar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 2px 8px; flex-wrap: wrap;
+}
+.d36-poschips { display: flex; gap: 4px; flex-wrap: wrap; min-width: 0; }
+.d36-poschip {
+  background: none; border: 1px solid var(--d36-line); color: var(--d36-faint);
+  border-radius: 999px; padding: 4px 9px; cursor: pointer;
+  font-size: 8.5px; letter-spacing: 0.1em; text-transform: uppercase;
+}
+.d36-poschip.on { color: var(--d36-green); border-color: rgba(134, 239, 172, 0.4); }
+.d36-posrefresh {
+  margin-left: auto; flex: none;
+  background: none; border: 1px solid var(--d36-line); color: var(--d36-dim);
+  border-radius: 6px; padding: 4px 8px; cursor: pointer; font-size: 9px;
+}
+.d36-posempty {
+  padding: 14px 4px; color: var(--d36-faint); font-size: 10px; text-align: center;
+}
+.d36-posrow {
+  padding: 7px 2px; border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+}
+.d36-posmain {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 11px; margin-bottom: 3px;
+}
+.d36-postag {
+  font-size: 8px; font-weight: 700; text-transform: uppercase;
+  padding: 2px 5px; border-radius: 4px; letter-spacing: 0.06em;
+}
+.d36-postag.call { background: rgba(134, 239, 172, 0.16); color: var(--d36-green); }
+.d36-postag.put { background: rgba(255, 77, 109, 0.16); color: var(--d36-red); }
+.d36-posstrike { color: var(--d36-dim); font-size: 10px; }
+.d36-posstatus {
+  font-size: 8px; text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--d36-faint);
+}
+.d36-posstatus.open, .d36-posstatus.pending { color: var(--d36-amber); }
+.d36-posstatus.tp_filled { color: var(--d36-green); }
+.d36-posstatus.sl_sold { color: var(--d36-red); }
+.d36-poslive {
+  font-size: 7.5px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--d36-red); border: 1px solid rgba(255, 92, 122, 0.35);
+  border-radius: 4px; padding: 1px 4px;
+}
+.d36-posnums {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  font-size: 9.5px; color: var(--d36-dim); font-variant-numeric: tabular-nums;
+}
+.d36-posnums .up { color: var(--d36-green); font-weight: 700; }
+.d36-posnums .down { color: var(--d36-red); font-weight: 700; }
+.d36-posclose {
+  margin-left: auto; flex: none;
+  background: rgba(255, 77, 109, 0.1); border: 1px solid rgba(255, 92, 122, 0.3);
+  color: var(--d36-red); border-radius: 5px; cursor: pointer;
+  font-size: 8px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  padding: 4px 7px;
+}
+
+/* ── top 5 ──────────────────────────────────────────────────────────────── */
+/* Stacked on a phone, side by side once there is room: two five-row lists
+   next to each other at 393px would leave no space for the price. */
+.d36-t5 {
+  padding: 0 8px;
+  display: grid; grid-template-columns: 1fr; gap: 10px;
+}
+@media (min-width: 560px) { .d36-t5 { grid-template-columns: 1fr 1fr; gap: 14px; } }
+
+.d36-t5col { min-width: 0; }
+.d36-t5hd {
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.18em;
+  text-transform: uppercase; padding: 2px 2px 5px;
+  border-bottom: 1px solid var(--d36-line); margin-bottom: 3px;
+}
+.d36-t5hd.up { color: var(--d36-green); }
+.d36-t5hd.down { color: var(--d36-red); }
+.d36-t5empty { color: var(--d36-faint); font-size: 10px; padding: 6px 2px; }
+
+.d36-t5row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 2px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.035);
+}
+.d36-t5sym {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--d36-ink); font: inherit;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.04em;
+  width: 48px; flex: none; text-align: left;
+}
+.d36-t5px {
+  font-size: 10px; color: var(--d36-dim);
+  font-variant-numeric: tabular-nums; flex: none;
+}
+.d36-t5pct {
+  font-size: 10.5px; font-weight: 700; font-variant-numeric: tabular-nums;
+  margin-left: auto;
+}
+.d36-t5pct.up { color: var(--d36-green); }
+.d36-t5pct.down { color: var(--d36-red); }
+.d36-t5pc { display: flex; gap: 4px; flex: none; }
+/* The put/call pair is the same control as the snapshot's, at the width a
+   single letter needs. */
+.d36-t5pc .d36-pc { width: 22px; height: 22px; font-size: 9px; }
+
+/* ── superhot + hot ─────────────────────────────────────────────────────── */
+/* Both come from the same HotScan component. Re-point Tradier variables at
+   this board's colours so the imported component wears the 36 theme. */
+.d36-hot {
+  --tr-bg: var(--d36-bg);
+  --tr-panel: var(--d36-panel);
+  --tr-line: var(--d36-line);
+  --tr-ink: var(--d36-ink);
+  --tr-dim: var(--d36-dim);
+  --tr-faint: var(--d36-faint);
+  --tr-accent: var(--d36-green);
+  --tr-accent-hi: var(--d36-green-bg);
+  --tr-green: var(--d36-green);
+  --tr-red: var(--d36-red);
+  --tr-amber: var(--d36-amber);
+  padding: 0 8px;
+  min-width: 0;
+}
+/* Its table is wider than a phone; let it scroll inside its own box rather
+   than widening the page. */
+.d36-hot > * { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+
+/* The desk's chart carries its own panel chrome; this only has to host it. */
+.d36-chartcell .tr-chart {
+  border-radius: 10px;
+  border: 1px solid var(--d36-line);
+  background: var(--d36-panel);
+  overflow: hidden;
+}
+.d36-chartcell .tr-chart canvas { max-width: 100%; }
+/* Maximised, it must clear the notch and the home indicator. */
+.d36-chartcell .tr-chart.fs {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.d36-note {
+  padding: 10px 12px 4px; font-size: 9.5px; color: var(--d36-faint);
+  line-height: 1.6;
+}
+.d36-err {
+  margin: 8px 10px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid rgba(255, 92, 122, 0.3);
+  background: rgba(127, 29, 29, 0.22);
+  color: #ffc9d2; font-size: 11px; line-height: 1.5;
+}
+
+/* ── the one error tray ─────────────────────────────────────────────────── */
+.d36-errtray {
+  margin: 8px 10px 0; border-radius: 8px;
+  border: 1px solid rgba(255, 92, 122, 0.3);
+  background: rgba(127, 29, 29, 0.22);
+}
+.d36-errline {
+  display: flex; align-items: flex-start; gap: 8px;
+  padding: 7px 8px 7px 10px;
+  font-size: 10.5px; line-height: 1.5; color: #ffc9d2;
+  border-bottom: 1px solid rgba(255, 92, 122, 0.16);
+}
+.d36-errline:last-of-type { border-bottom: 0; }
+.d36-errx {
+  margin-left: auto; flex: none;
+  background: none; border: 0; cursor: pointer;
+  color: rgba(255, 201, 210, 0.6); font-size: 14px; line-height: 1; padding: 0 2px;
+}
+.d36-errclear {
+  display: block; width: 100%;
+  background: none; border: 0; border-top: 1px solid rgba(255, 92, 122, 0.16);
+  color: rgba(255, 201, 210, 0.7); cursor: pointer;
+  font-size: 8.5px; letter-spacing: 0.16em; text-transform: uppercase;
+  padding: 6px;
+}
+.d36-toast {
+  margin: 8px 10px; padding: 8px 10px; border-radius: 8px;
+  border: 1px solid rgba(134, 239, 172, 0.3);
+  background: rgba(6, 78, 59, 0.25);
+  color: #bbf7d0; font-size: 11px; line-height: 1.5;
+}
+
+/* ── header actions: manual buy + auto trade ────────────────────────────── */
+/* Square-ish icon buttons: the label moved into title/aria, so the box is
+   sized for a mark rather than a word. 28px keeps them inside the 44px
+   touch guidance once the header's own gap is counted. */
+.d36-act {
+  flex: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 28px; padding: 0;
+  font-size: 13px; line-height: 1;
+  border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--d36-line); background: none; color: var(--d36-dim);
+}
+.d36-act svg { display: block; }
+.d36-act.buy {
+  color: var(--d36-green); border-color: rgba(134, 239, 172, 0.35);
+  background: rgba(134, 239, 172, 0.08);
+}
+.d36-act.auto { color: var(--d36-dim); }
+.d36-act.auto.on {
+  color: var(--d36-amber); border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.1);
+}
+.d36-act:active { transform: scale(0.94); }
+
+/* The operator's name is a button now; it must not look like one until it
+   is reached for. */
+button.d36-who {
+  background: none; border: 0; padding: 0 0 0 2px; cursor: pointer;
+  font-family: inherit;
+}
+@media (hover: hover) { button.d36-who:hover { color: var(--d36-dim); } }
+
+/* ── SPY 0DTE gamma, hour by hour ───────────────────────────────────────── */
+/* Newest at the left at full size, each older reading a step smaller as it
+   recedes to the right. The size gradient IS the time axis — it says which
+   number is now without needing a label on every value. */
+.d36-gexstrip {
+  display: inline-flex; align-items: baseline; gap: 3px;
+  min-width: 0; overflow: hidden;
+  padding: 0 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.d36-gexv { font-weight: 700; letter-spacing: -0.01em; }
+.d36-gexv.up { color: var(--d36-green); }
+.d36-gexv.down { color: var(--d36-red); }
+/* One step, not a gradient: the current reading at full size, every earlier
+   one at 60% of it and all the same. The history then reads as a single
+   band to scan across instead of eight values each asking to be weighed
+   differently. */
+.d36-gexv {
+  --gex-now: 11px;
+  font-size: var(--gex-now);
+}
+.d36-gexv.now { opacity: 1; }
+.d36-gexv.prev {
+  font-size: calc(var(--gex-now) * 0.6);
+  opacity: 0.72;
+}
+.d36-gexarrow { color: var(--d36-faint); font-size: 7px; opacity: 0.5; }
+
+/* The date, shown only when the strip is NOT today's — a stale reading that
+   looks current is worse than no reading. */
+.d36-gexstale {
+  font-size: 7px; letter-spacing: 0.08em;
+  color: var(--d36-amber); opacity: 0.85;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 3px; padding: 1px 3px; margin-right: 2px;
+}
+.d36-gexnone {
+  font-size: 8px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--d36-faint);
+}
+
+/* On a phone the DI readout and eight gamma values cannot share one field —
+   squeezing them left three values visible and clipped the rest. So the
+   strip drops to its own full-width line under the SPY row instead, where
+   all eight fit. Beside the DI is still what happens wherever there is room
+   for it. */
+.d36-gexstrip {
+  order: 9;                 /* after the DI, whichever side it landed on */
+  flex: 1 0 100%;
+  justify-content: flex-end;
+  padding: 2px 6px 0;
+}
+@media (min-width: 620px) {
+  .d36-gexstrip { flex: 0 1 auto; padding: 0 6px; order: 0; }
+}
+/* The field has to be allowed to wrap for that own-line trick to work. */
+.d36-field { flex-wrap: wrap; }
+
+.d36-symfield {
+  width: 118px; font-size: 18px; font-weight: 700;
+  background: #1a1a24; color: var(--d36-ink);
+  border: 1px solid var(--d36-amber); border-radius: 7px;
+  padding: 3px 8px; outline: none;
+  -webkit-appearance: none; appearance: none;
+}
+button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
+
+/* The desk's auto-trade form, wearing this board's colours. */
+.d36-autosheet {
+  --tr-bg: var(--d36-bg); --tr-panel: var(--d36-panel);
+  --tr-line: var(--d36-line); --tr-ink: var(--d36-ink);
+  --tr-dim: var(--d36-dim); --tr-faint: var(--d36-faint);
+  --tr-accent: var(--d36-green); --tr-accent-hi: var(--d36-green-bg);
+  --tr-green: var(--d36-green); --tr-red: var(--d36-red);
+  --tr-amber: var(--d36-amber);
+}
+
+/* ── footer ─────────────────────────────────────────────────────────────── */
+.d36-footer {
+  margin-top: 22px; padding: 16px 12px calc(8px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--d36-line);
+  text-align: center;
+  font-size: 9px; letter-spacing: 0.1em;
+  color: var(--d36-faint);
+}
+
+/* ── buy sheet ──────────────────────────────────────────────────────────── */
+.d36-scrim {
+  position: fixed; inset: 0; z-index: 100;
+  background: rgba(3, 3, 8, 0.72);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.d36-sheet {
+  width: 100%; max-width: 460px;
+  background: var(--d36-panel);
+  border: 1px solid var(--d36-line);
+  border-radius: 16px 16px 0 0;
+  padding: 14px 14px calc(16px + env(safe-area-inset-bottom));
+  /* dvh so the sheet is not cut off by the iOS URL bar, with a vh fallback
+     for older WebKit. */
+  max-height: 86vh; max-height: 86dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+@media (min-width: 620px) {
+  .d36-scrim { align-items: center; }
+  .d36-sheet { border-radius: 16px; }
+}
+.d36-sheet-hd {
+  display: flex; align-items: baseline; gap: 8px; margin-bottom: 4px;
+}
+.d36-sheet-sym { font-size: 19px; font-weight: 700; }
+.d36-sheet-side {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.14em;
+  text-transform: uppercase; padding: 3px 8px; border-radius: 999px;
+}
+.d36-sheet-side.call { color: #06251a; background: var(--d36-green-bg); }
+.d36-sheet-side.put { color: #2b0410; background: var(--d36-red-bg); }
+.d36-sheet-x {
+  /* 44 square. A backdrop tap no longer dismisses the ticket, so this and
+     Escape are the only ways out -- and Escape is not a thing on a phone.
+     The negative margin keeps the glyph optically where it was while the hit
+     area grows around it. */
+  margin-left: auto;
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 44px; min-height: 44px; margin-right: -10px; margin-top: -10px;
+  background: none; border: 0;
+  color: var(--d36-dim); font-size: 20px; line-height: 1; cursor: pointer;
+  padding: 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.d36-pick {
+  margin: 10px 0; padding: 9px 10px; border-radius: 10px;
+  background: #16161f; border: 1px solid var(--d36-line);
+  font-size: 11px; line-height: 1.75; color: var(--d36-dim);
+}
+.d36-pick b { color: var(--d36-ink); font-weight: 700; }
+/* 0DTE opt-in. Reads as a checkbox because that is what it is, and it sits
+   above the numeric grid rather than inside it -- the fields there change how
+   much is bought, this changes WHAT is bought. Full-width and 44px tall so it
+   is a real target on a phone. */
+.d36-dte {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin: 10px 0 2px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  color: var(--d36-faint);
+  background: var(--d36-panel);
+  border: 1px solid var(--d36-line);
+  border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.d36-dte.on {
+  color: var(--d36-amber);
+  border-color: var(--d36-amber);
+}
+.d36-dtebox {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  font-size: 12px;
+  line-height: 1;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+}
+
+/* Market / limit, and the discount ladder under it.
+   Chips rather than a select: a native picker on iOS covers half the ticket
+   to choose between four numbers, and these are all reachable with a thumb
+   without the sheet moving. 44px tall throughout, and the rows wrap rather
+   than shrink so nothing gets clipped at 393. */
+.d36-otype { margin: 10px 0 2px; }
+.d36-chiprow {
+  display: flex; gap: 6px; flex-wrap: wrap;
+}
+.d36-chiprow + .d36-chiprow { margin-top: 6px; }
+.d36-chip {
+  flex: 1 1 0; min-width: 64px; min-height: 44px;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: inherit; font-size: 11px; font-weight: 700; letter-spacing: 0.1em;
+  color: var(--d36-dim);
+  background: var(--d36-panel);
+  border: 1px solid var(--d36-line); border-radius: 8px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.d36-chip.sm { font-size: 11px; letter-spacing: 0.04em; min-width: 52px; }
+.d36-chip.on {
+  color: var(--d36-amber);
+  border-color: var(--d36-amber);
+  background: #1b1710;
+}
+.d36-otnote {
+  margin-top: 6px; font-size: 9.5px; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--d36-faint);
+}
+
+.d36-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0;
+}
+.d36-fld label {
+  display: block; font-size: 8.5px; letter-spacing: 0.16em;
+  text-transform: uppercase; color: var(--d36-faint); margin-bottom: 3px;
+}
+.d36-fld input {
+  /* border-box, or width:100% plus the padding and border below overflows
+     the grid cell -- 4px of sideways scroll inside the ticket at 393. The
+     reset gives buttons border-box but not inputs. */
+  box-sizing: border-box;
+  width: 100%; font-size: 16px;        /* see .d36-syminput */
+  background: #14141c; color: var(--d36-ink);
+  border: 1px solid var(--d36-line); border-radius: 7px;
+  padding: 7px 8px; outline: none;
+  -webkit-appearance: none; appearance: none;
+}
+.d36-go {
+  width: 100%; margin-top: 6px; padding: 13px;
+  border: 0; border-radius: 10px; cursor: pointer;
+  font-size: 12px; font-weight: 700; letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+.d36-go.call { background: var(--d36-green-bg); color: #06251a; }
+.d36-go.put { background: var(--d36-red-bg); color: #2b0410; }
+.d36-go:disabled { opacity: 0.5; cursor: progress; }
+.d36-warn {
+  margin-top: 9px; text-align: center;
+  font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase;
+}
+.d36-warn.live { color: var(--d36-red); }
+.d36-warn.paper { color: var(--d36-faint); }
+
+@media (prefers-reduced-motion: reduce) {
+  .d36-bar { transition: none; }
+  .d36-pc:active { transform: none; }
+}

@@ -1,0 +1,103 @@
+{
+ "symbol": "SPY",
+ "as_of": "2026-08-18T14:00:31.809Z",
+ "market_open": true,
+ "price": {
+  "bid": 768.38,
+  "ask": 768.4,
+  "mid": 768.39,
+  "last": 768.39,
+  "last_update": "2026-08-18T14:00:31.809Z"
+ },
+ "volatility": {
+  "atm_iv": 10.02,
+  "hv_20": 13.95,
+  "hv_60": 13.91,
+  "vrp": null,
+  "skew_25d": null,
+  "iv_term_structure": null
+ },
+ "options_flow": {
+  "total_call_oi": 6080694,
+  "total_put_oi": 15513392,
+  "total_call_volume": 233492,
+  "total_put_volume": 250274,
+  "pc_ratio_oi": 2.551,
+  "pc_ratio_volume": 1.072,
+  "active_expirations": 34
+ },
+ "exposure": {
+  "net_gex": -6470427472,
+  "net_dex": null,
+  "net_vex": null,
+  "net_chex": null,
+  "gamma_flip": 771.248775159186,
+  "call_wall": 775,
+  "put_wall": 765,
+  "max_pain": null,
+  "highest_oi_strike": 520,
+  "regime": "negative_gamma",
+  "interpretation": {
+   "gamma": "Dealers short gamma \u2014 moves amplified, trend following likely",
+   "vanna": null,
+   "charm": null
+  },
+  "hedging_estimate": null,
+  "zero_dte": null,
+  "top_strikes": null,
+  "oi_weighted_dte": 96.4
+ },
+ "macro": {
+  "vix": {
+   "value": 15.8,
+   "change": 0.61,
+   "change_pct": 4.02,
+   "as_of": "2026-08-18T14:00:16.373Z"
+  },
+  "vvix": {
+   "value": 96.09,
+   "change": 8.61,
+   "change_pct": 9.84,
+   "as_of": "2026-08-18T14:00:16.373Z"
+  },
+  "skew": {
+   "value": 142.91,
+   "change": 4.55,
+   "change_pct": 3.29,
+   "as_of": "2026-08-17T21:00:18Z"
+  },
+  "spx": {
+   "value": 7703.07,
+   "change": -41.99,
+   "change_pct": -0.54,
+   "as_of": "2026-08-18T14:00:28Z"
+  },
+  "move": {
+   "value": 75.6302,
+   "change": 6.05,
+   "change_pct": 8.7,
+   "as_of": "2026-08-17T20:30:15Z"
+  },
+  "vix_term_structure": {
+   "levels": {
+    "vix9d": 13.43,
+    "vix": 15.75,
+    "vix3m": 19.32,
+    "vix6m": 21.48
+   },
+   "near_slope_pct": 17.27,
+   "structure": "contango"
+  },
+  "vix_futures": {
+   "front_month": 19.32,
+   "spot": 15.75,
+   "spread": 3.57,
+   "basis_pct": 22.67,
+   "basis": "contango"
+  },
+  "fear_and_greed": {
+   "score": 55,
+   "rating": "greed"
+  }
+ }
+}

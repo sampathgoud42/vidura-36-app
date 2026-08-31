@@ -1,0 +1,5 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:above_vwap+ylow_reclaim|nk0.0|vm0.8|mid_1030_1300,14,0.25,11,0,3,78.6,100.0,inf,3.95,0.0,98.9
+SHORT:below_vwap_v+mom_ignite_dn|nk0.5|vm0.8|mid_1030_1300,12,0.21,8,0,4,66.7,100.0,226.04,2.48,0.01,113.3
+LONG:s1_bounce+cvd_up|nk0.8|vm0.8|full_0930_1400,11,0.19,6,0,5,54.5,100.0,inf,2.68,0.0,110.9
+SHORT:yhigh_reject+hist_turn_dn|nk0.8|vm0.8|full_0930_1400,10,0.18,6,0,4,60.0,100.0,33.39,1.78,0.04,121.0

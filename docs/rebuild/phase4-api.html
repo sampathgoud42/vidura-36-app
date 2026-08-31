@@ -1,0 +1,425 @@
+<title>Phase 4 API Surface</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+  :root{
+    --ground:#EEF0F3; --surface:#FFFFFF; --surface-2:#F6F7F9;
+    --ink:#171A1F; --ink-2:#3C444F; --muted:#646E7B;
+    --rule:#D6DAE0; --rule-strong:#B6BDC7;
+    --accent:#8A5200; --accent-soft:#F4E7D2;
+    --critical:#9E2A19; --critical-soft:#F7E2DE;
+    --warn:#7A5A05; --warn-soft:#F6EDD4;
+    --ok:#2A6047; --ok-soft:#DEEDE5;
+    --shadow:0 1px 2px rgba(23,26,31,.06),0 8px 24px rgba(23,26,31,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F1216; --surface:#171B21; --surface-2:#1D222A;
+      --ink:#E4E7EC; --ink-2:#BFC6D0; --muted:#8B95A3;
+      --rule:#2A313A; --rule-strong:#3B444F;
+      --accent:#E3A94E; --accent-soft:#2E2415;
+      --critical:#EC7B66; --critical-soft:#331914;
+      --warn:#D7B152; --warn-soft:#2C2513;
+      --ok:#72C098; --ok-soft:#152A20;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0F1216; --surface:#171B21; --surface-2:#1D222A;
+    --ink:#E4E7EC; --ink-2:#BFC6D0; --muted:#8B95A3;
+    --rule:#2A313A; --rule-strong:#3B444F;
+    --accent:#E3A94E; --accent-soft:#2E2415;
+    --critical:#EC7B66; --critical-soft:#331914;
+    --warn:#D7B152; --warn-soft:#2C2513;
+    --ok:#72C098; --ok-soft:#152A20;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);
+    font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+    font-size:16.5px;line-height:1.62;margin:0;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 24px 96px}
+
+  .mast{border-bottom:2px solid var(--ink);padding:56px 0 20px;margin-bottom:36px}
+  .eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+  h1{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;font-weight:700;
+    font-size:clamp(2.3rem,5.6vw,3.5rem);line-height:1.04;letter-spacing:-.015em;
+    text-wrap:balance;margin:.28em 0 .32em}
+  .standfirst{font-size:1.14rem;color:var(--ink-2);max-width:64ch;margin:0}
+  .status-pill{display:inline-flex;align-items:center;gap:7px;
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.1em;
+    text-transform:uppercase;background:var(--warn-soft);color:var(--warn);
+    border:1px solid color-mix(in srgb,var(--warn) 34%,transparent);
+    border-radius:2px;padding:4px 9px}
+  .status-pill::before{content:"";width:6px;height:6px;background:var(--warn);border-radius:50%}
+
+  .counters{display:grid;grid-template-columns:repeat(auto-fit,minmax(126px,1fr));
+    gap:1px;background:var(--rule);border:1px solid var(--rule);margin:0 0 44px}
+  .counter{background:var(--surface);padding:15px 16px}
+  .counter .n{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.8rem;
+    font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .counter .l{font-family:"IBM Plex Mono",monospace;font-size:9.6px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);margin-top:6px;display:block;line-height:1.45}
+  .counter.good .n{color:var(--ok)}
+  .counter.bad .n{color:var(--critical)}
+
+  section{margin:0 0 54px}
+  .qnum{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;
+    color:var(--accent);text-transform:uppercase;display:block;margin-bottom:6px}
+  h2.sec{font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-size:clamp(1.5rem,3vw,1.95rem);font-weight:700;letter-spacing:-.012em;
+    margin:0 0 6px;text-wrap:balance;padding-bottom:10px;border-bottom:1px solid var(--rule-strong)}
+  h3{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.12rem;font-weight:600;
+    margin:30px 0 8px;letter-spacing:-.005em}
+  p{max-width:68ch}
+  a{color:var(--accent)}
+
+  .answer{background:var(--surface-2);border:1px solid var(--rule);
+    padding:14px 18px;margin:14px 0 20px;font-size:1.02rem}
+  .answer .lbl{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.15em;
+    text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.885em}
+  code{background:var(--surface-2);border:1px solid var(--rule);border-radius:2px;padding:1px 5px}
+  .cite{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);white-space:nowrap}
+
+  pre{background:var(--surface-2);border:1px solid var(--rule);padding:14px 16px;
+    overflow-x:auto;margin:12px 0;font-family:"IBM Plex Mono",monospace;
+    font-size:12.5px;line-height:1.62;color:var(--ink-2)}
+  pre b{color:var(--critical);font-weight:600}
+  pre em{color:var(--ok);font-style:normal;font-weight:600}
+  pre i{color:var(--muted);font-style:normal}
+  pre u{color:var(--accent);text-decoration:none;font-weight:600}
+
+  .scroll{overflow-x:auto;margin:16px 0;border:1px solid var(--rule);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:.875rem;min-width:840px}
+  th,td{text-align:left;padding:8px 11px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.12em;
+    text-transform:uppercase;color:var(--muted);background:var(--surface-2)}
+  tbody tr:last-child td{border-bottom:none}
+  td.k{font-family:"IBM Plex Mono",monospace;font-size:.82rem}
+  td.num{font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace;text-align:right}
+  tbody tr.grp td{background:var(--surface-2);font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-weight:700;font-size:.95rem}
+
+  ul,ol{max-width:68ch;padding-left:1.15em}
+  li{margin:5px 0}
+  li::marker{color:var(--muted)}
+
+  .tag{font-family:"IBM Plex Mono",monospace;font-size:9.5px;letter-spacing:.11em;
+    text-transform:uppercase;padding:2px 6px;border-radius:2px;border:1px solid;white-space:nowrap}
+  .tag.crit{color:var(--critical);background:var(--critical-soft);border-color:color-mix(in srgb,var(--critical) 32%,transparent)}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 32%,transparent)}
+  .tag.new{color:var(--accent);background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 32%,transparent)}
+
+  .stopbar{border:2px solid var(--accent);background:var(--accent-soft);
+    padding:20px 24px;margin:48px 0 0}
+  .stopbar h2{font-family:"IBM Plex Sans Condensed",sans-serif;margin:0 0 8px;
+    font-size:1.3rem;color:var(--accent);letter-spacing:-.01em}
+  .stopbar p{margin:0 0 10px;color:var(--ink-2);max-width:68ch}
+  .stopbar p:last-child{margin-bottom:0}
+
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:8px 22px}
+  @media (max-width:640px){.wrap{padding:0 17px 64px}body{font-size:16px}}
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">
+      <span>Phase 4</span><span>Vidura 36 rebuild</span><span>API surface</span>
+      <span class="status-pill">Awaiting approval</span>
+    </div>
+    <h1>API Surface</h1>
+    <p class="standfirst">Which endpoints are genuinely the same operation and merge, which merely look alike and stay apart, and the exact frontend diff that ships alongside — measured line by line, not estimated.</p>
+  </header>
+
+  <div class="counters">
+    <div class="counter"><span class="n">107</span><span class="l">operations today</span></div>
+    <div class="counter good"><span class="n">86</span><span class="l">after</span></div>
+    <div class="counter good"><span class="n">39→14</span><span class="l">bot station</span></div>
+    <div class="counter"><span class="n">8</span><span class="l">new endpoints</span></div>
+    <div class="counter good"><span class="n">0</span><span class="l">endpoints for a new bot</span></div>
+    <div class="counter"><span class="n">1</span><span class="l">frontend file changes</span></div>
+  </div>
+
+  <section>
+    <span class="qnum">Method</span>
+    <h2 class="sec">The rules I applied</h2>
+    <p>The brief is explicit that the goal is <strong>eliminating duplicate and incidental endpoints, not minimising the count</strong>, and that a coarse endpoint with a <code>mode</code> flag is worse than two clean ones. So merges happen only where the operation is genuinely identical and the difference is a value, not a behaviour. Three candidates that <em>look</em> mergeable are deliberately left alone, and I have said why for each — that list matters as much as the merges.</p>
+  </section>
+
+  <section>
+    <span class="qnum">The main event</span>
+    <h2 class="sec">Consolidation table</h2>
+
+    <div class="scroll">
+    <table>
+      <thead><tr>
+        <th>Old endpoints</th><th>New endpoint</th><th>Same operation?</th>
+        <th>Frontend calls affected</th><th>Auth / caching impact</th><th>User-visible change?</th>
+      </tr></thead>
+      <tbody>
+        <tr class="grp"><td colspan="6">Bot station — 39 operations become 14</td></tr>
+        <tr>
+          <td class="k">/bots/btc/status<br>/bots/sports/status<br>/bots/parley/status<br>/bots/commodities/status</td>
+          <td class="k">GET /bots/{bot_key}/status</td>
+          <td><strong>Yes.</strong> All four call the same <code>_status()</code> helper with a different key list.</td>
+          <td class="num">4 wrappers → 1</td>
+          <td>Session-scoped (was optional <code>user_id</code>). Caching unchanged.</td>
+          <td><span class="tag ok">None</span> identical payload</td>
+        </tr>
+        <tr>
+          <td class="k">/bots/{btc,sports,parley,commodities}/start</td>
+          <td class="k">POST /bots/{bot_key}/start</td>
+          <td><strong>Yes</strong> for the lifecycle. The launch <em>options</em> differ per family and become a declared schema per bot rather than a hand-written route.</td>
+          <td class="num">4 → 1</td>
+          <td>Now requires an idempotency key (Phase 3 guard 1).</td>
+          <td><span class="tag ok">None</span></td>
+        </tr>
+        <tr>
+          <td class="k">/bots/{4 families}/stop<br>/bots/{4}/logs<br>/bots/{4}/trades<br>/bots/{4}/sync-trades<br>/bots/{4}/processes<br>/bots/{4}/kill</td>
+          <td class="k">POST /bots/{bot_key}/stop<br>GET /bots/{bot_key}/logs<br>GET /bots/{bot_key}/trades<br>POST /bots/{bot_key}/sync<br>GET /bots/{bot_key}/processes<br>POST /bots/{bot_key}/kill</td>
+          <td><strong>Yes.</strong> Identical handlers today, differing only in which key tuple they iterate.</td>
+          <td class="num">24 → 6</td>
+          <td>Session-scoped. <code>kill</code> and <code>stop</code> gain the execution lease.</td>
+          <td><span class="tag ok">None</span></td>
+        </tr>
+        <tr>
+          <td class="k">/bots/sports/active-bets<br>/bots/parley/active-bets</td>
+          <td class="k">GET /bots/{bot_key}/active-bets</td>
+          <td><strong>Yes.</strong> Same query, different bot key.</td>
+          <td class="num">2 → 1 <span class="cite">(neither is called by a screen)</span></td>
+          <td>Unchanged.</td>
+          <td><span class="tag ok">None</span></td>
+        </tr>
+        <tr>
+          <td class="k">/bots/sports/config</td>
+          <td class="k">GET /bots/{bot_key}/config</td>
+          <td><strong>Generalised.</strong> Today only sports declares its options; every bot needs to, or the UI cannot render a launch form for a new one.</td>
+          <td class="num">1 → 1</td>
+          <td>Unchanged.</td>
+          <td><span class="tag ok">None</span> today; enables new bots later</td>
+        </tr>
+        <tr>
+          <td class="k">/bots/sports/performance</td>
+          <td class="k">GET /bots/{bot_key}/performance</td>
+          <td><strong>Generalised</strong>, same reason.</td>
+          <td class="num">1 → 1 <span class="cite">(not called by a screen)</span></td>
+          <td>Unchanged.</td>
+          <td><span class="tag ok">None</span></td>
+        </tr>
+        <tr>
+          <td class="k">/bots/commodities/signals<br>/bots/reconcile<br>/bots</td>
+          <td class="k">unchanged</td>
+          <td><strong>Kept as-is.</strong> Signals is market data for the commodity family; reconcile is cross-family; <code>/bots</code> is the registry.</td>
+          <td class="num">0</td>
+          <td><code>reconcile</code> becomes session-scoped.</td>
+          <td><span class="tag ok">None</span></td>
+        </tr>
+
+        <tr class="grp"><td colspan="6">Tenancy — identity leaves the wire</td></tr>
+        <tr>
+          <td class="k">GET /users<br>POST /users<br>GET /users/{user_id}</td>
+          <td class="k">GET /auth/me <span class="tag new">extended</span><br>POST /tenants <span class="tag new">admin</span><br>GET /tenants <span class="tag new">admin</span></td>
+          <td><strong>No — deliberately split.</strong> One operation today serves two different jobs: "who am I" (every screen) and "manage operators" (admin). Merging them is what let <code>ensureUser()</code> enumerate every tenant.</td>
+          <td class="num">1 wrapper rewritten</td>
+          <td><strong>Major.</strong> <code>/auth/me</code> returns the session's tenant and its worlds; the admin routes require an admin session.</td>
+          <td><span class="tag warn">Yes — approved</span> D1. Sampath: identical. Others: they stop seeing sampath's data.</td>
+        </tr>
+        <tr>
+          <td class="k">every endpoint taking <code>?user_id=</code><br><span class="cite">~40 operations</span></td>
+          <td class="k">same paths, parameter removed</td>
+          <td><strong>Yes</strong> — same operation, the identity now comes from the session.</td>
+          <td class="num">32 wrappers stop sending it</td>
+          <td>Responses become genuinely per-tenant cacheable; today a shared cache key would leak.</td>
+          <td><span class="tag ok">None for sampath</span> byte-identical</td>
+        </tr>
+        <tr>
+          <td class="k">GET /users/{id}/portfolio<br>GET /users/{id}/portfolio/history<br>GET /users/{id}/trades<br>POST /users/{id}/trades</td>
+          <td class="k">GET /portfolio<br>GET /portfolio/history<br>GET /trades<br>POST /trades</td>
+          <td><strong>Yes.</strong> The path segment was the tenant; the session is now.</td>
+          <td class="num">4 wrappers</td>
+          <td>Session-scoped.</td>
+          <td><span class="tag ok">None</span></td>
+        </tr>
+        <tr>
+          <td class="k">POST /users/{id}/kalshi-client</td>
+          <td class="k">POST /credentials/{venue}/verify</td>
+          <td><strong>Yes, renamed to what it does.</strong> It authenticates a credential set read-only and reports connection state. Under runtime onboarding this becomes load-bearing: it is how you confirm a new customer's keys work.</td>
+          <td class="num">1 wrapper <span class="cite">(not called by a screen)</span></td>
+          <td>Session-scoped; never returns the credential.</td>
+          <td><span class="tag ok">None</span></td>
+        </tr>
+        <tr>
+          <td class="k">POST /users/{id}/verify-password</td>
+          <td class="k"><strong>deleted</strong></td>
+          <td>—</td>
+          <td class="num">0 — no reference anywhere in the frontend</td>
+          <td>Removes an unthrottled password oracle.</td>
+          <td><span class="tag ok">None</span> see caveat below</td>
+        </tr>
+        <tr>
+          <td class="k">GET /worlds?user_id=</td>
+          <td class="k">folded into GET /auth/me</td>
+          <td><strong>Yes.</strong> Both answer "who is this and what may they open", and the desk calls them back-to-back on every load.</td>
+          <td class="num">1 call site <span class="cite">WorldGate.jsx:25</span></td>
+          <td><strong>One fewer round trip</strong> on load.</td>
+          <td><span class="tag warn">Marginally faster</span> — see note</td>
+        </tr>
+
+        <tr class="grp"><td colspan="6">Trading — no merges, one addition</td></tr>
+        <tr>
+          <td class="k">POST /tradier/positions<br>POST /tradier/positions/contract<br>POST /tradier/positions/{id}/close<br>POST /tradier/positions/sweep</td>
+          <td class="k">unchanged paths<br>+ <code>Idempotency-Key</code> header</td>
+          <td><strong>Not merged.</strong> Four genuinely different operations: open by delta band, buy a named contract, close one, flatten all.</td>
+          <td class="num">4 wrappers add a header</td>
+          <td>Repeat submits return the first outcome instead of acting twice.</td>
+          <td><span class="tag warn">Yes — approved</span> a double-tap now returns the first order rather than placing a second</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Deliberately not merged</h3>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Looks mergeable</th><th>Why it is not</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="k">/desk36/dmi + /tradier/hot</td>
+          <td>Both return DMI, and Phase 1 proved they share <code>_scan_symbol</code> verbatim. But one takes an arbitrary symbol list ungated and the other sweeps a fixed universe through gates, and their response shapes differ. <strong>The duplication is in the code, not the API</strong> — the fix is one indicator module with two callers, which is what Phase 3 does. Merging the endpoints would need a mode flag, which is the anti-pattern the brief names.</td>
+        </tr>
+        <tr>
+          <td class="k">/bots/commodities/signals + /desk36/dmi</td>
+          <td>Different engine entirely: commodity signals wrap <code>runtime/indicators/commodity_dmi.py</code> over yfinance futures <span class="cite">commodity_signals.py:1</span>; the DMI board uses Tradier equity bars. Same indicator name, different data, different instruments. Merging them would be a genuine behaviour change.</td>
+        </tr>
+        <tr>
+          <td class="k">/tradier/hot + /tradier/flow + /tradier/commodities</td>
+          <td>All three are "read a background-swept snapshot" with <code>live</code> and <code>refresh</code>. The shape rhymes; the content does not. A single <code>/scan?kind=</code> endpoint would be one handler branching three ways — worse for testing, authorisation and caching, exactly as the brief warns.</td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <section>
+    <span class="qnum">The success criterion</span>
+    <h2 class="sec">A new bot needs zero new endpoints</h2>
+    <pre><i>Before — adding a bot family meant a new route block:</i>
+  /bots/&lt;family&gt;/status  start  stop  logs  trades  sync  processes  kill   <b>~9 endpoints</b>
+  plus a KEYS tuple, validators, a bot_manager env mapper, an ingest switch arm,
+  ~9 client wrappers and a UI panel.                          <b>6 files</b>
+
+<i>After — the routes already exist and are keyed:</i>
+  GET  /bots                        <i>lists the registry, now including the new bot</i>
+  GET  /bots/{bot_key}/status       <em>works immediately</em>
+  POST /bots/{bot_key}/start        <em>options validated against the bot's declared schema</em>
+  ...                               <em>all eight, unchanged</em>
+
+<i>What the author of a new bot writes:</i>
+  1. one config entry            <u>key, name, category, versions, launch style, options schema</u>
+  2. one adapter class           <u>lifecycle hooks + record mapping, conforming to the interface</u>
+  3. nothing else                <u>discovery is automatic from the config</u>
+
+<b>  0 endpoints.  0 migrations.  0 shared-library edits.  0 switch statements.  0 frontend changes.</b></pre>
+    <p>The launch form renders itself from <code>GET /bots/{bot_key}/config</code>, which is why generalising that endpoint mattered more than its single current caller suggests. Phase 6 proves this by onboarding a throwaway bot as a test fixture and asserting no file outside the allowed list was touched.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Additions</span>
+    <h2 class="sec">New endpoints</h2>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Endpoint</th><th>Purpose</th><th>Required by</th></tr></thead>
+      <tbody>
+        <tr><td class="k">POST /tenants<br>GET /tenants<br>PATCH /tenants/{id}</td><td>Create, list and suspend operators at runtime</td><td>Customer onboarding contract: zero deploys, zero files, zero migrations</td></tr>
+        <tr><td class="k">POST /tenants/{id}/credentials<br>POST /tenants/{id}/credentials/{cid}/rotate<br>DELETE /tenants/{id}/credentials/{cid}</td><td>Store, rotate and revoke encrypted venue credentials</td><td>Brief §5: rotation and revocation without downtime; never returns the secret</td></tr>
+        <tr><td class="k">PUT /tenants/{id}/worlds</td><td>Which tiles this operator may open</td><td>Replaces <code>worlds.json</code> — a file edit today, which fails the onboarding contract</td></tr>
+        <tr><td class="k">GET /readiness</td><td>Database, migration version, and <strong>risk-monitor heartbeat age per tenant</strong></td><td>Phase 3: the signal that makes an unwatched stop-loss visible instead of silent</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>All tenancy admin routes require an admin session. <strong>Sampath is the only operator today and is therefore admin</strong>, which means no new UI is needed for Phase 7 — these are reachable by <code>curl</code> and by the onboarding runbook. A management screen is a UX addition and outside this rebuild's scope; say the word if you want one later.</p>
+  </section>
+
+  <section>
+    <span class="qnum">The part that must not break</span>
+    <h2 class="sec">Frontend impact — exact, measured</h2>
+
+    <div class="answer">
+      <span class="lbl">Measured across frontend/src</span>
+      <strong>116 lines reference <code>user_id</code></strong>, across 5 files: <code>viduraApi.js</code> (46), <code>BotStationSite.jsx</code> (29), <code>TradierSite.jsx</code> (22), <code>Desk36Site.jsx</code> (18), <code>WorldGate.jsx</code> (1). <strong>32 of 96 client functions</strong> take a user id, called from <strong>41 sites</strong> across the three screens.
+    </div>
+
+    <p>Those numbers look alarming and the diff is not, because of where the boundary falls. The brief requires the frontend change to be <strong>network layer only</strong>, and that is achievable exactly:</p>
+
+    <pre><u>Change set A — ships with the backend, one file</u>
+  frontend/src/shared/viduraApi.js
+    - 32 wrappers stop putting user_id in params/body   <em>(they keep their signature)</em>
+    - ensureUser() is replaced by a call to /auth/me     <em>(kills ?operator= and GET /users)</em>
+    - operatorName() is deleted                          <em>(the hardcoded 'sampath' default)</em>
+    - 4 execution wrappers add an Idempotency-Key header
+    - bot wrappers collapse onto /bots/{bot_key}/...
+  <b>Screens change: 0 files, 0 lines.</b>
+  They keep passing user.user_id; the wrapper simply no longer sends it.
+
+<u>Change set B — Phase 9 cleanup, after the tests are green</u>
+  Remove the now-unused parameter from 32 wrappers and 41 call sites
+  across the three screens. Pure dead-argument removal, no behaviour.</pre>
+
+    <p>Splitting it this way means the risky change (identity moves to the session) lands with a <strong>one-file frontend diff</strong> that is trivially reviewable, and the cosmetic change lands later where a mistake costs nothing. Doing both at once would put a 41-site edit in the same commit as the security fix, and I would rather not review those together.</p>
+
+    <h3>Two user-visible effects, both approved, both stated plainly</h3>
+    <ul>
+      <li><strong>One fewer round trip on load.</strong> Folding <code>/worlds</code> into <code>/auth/me</code> removes a request. The brief counts round-trip changes as potentially user-visible, so I am naming it: the desk will reach first paint marginally sooner. Nothing renders differently.</li>
+      <li><strong>A double-tap on BUY now returns the first order</strong> instead of placing a second. This is the change you asked for. It is user-visible in the sense that the second tap now shows the existing order rather than a new one — which is the point.</li>
+    </ul>
+
+    <h3>One deletion I want confirmed rather than assumed</h3>
+    <p><code>POST /users/{user_id}/verify-password</code> has no reference anywhere in <code>frontend/src</code>, and its own docstring calls it a "legacy wellness/sports app login contract". That phrasing is my concern: it suggests a caller <em>outside this repository</em>. Sampath's folder also contains <code>wellness-profile.json</code>, which is consistent with another app having existed. <strong>The brief warns that frontends call things grep cannot see, so I am not deleting this on my own evidence.</strong> If a wellness or sports app still authenticates against it, deleting it breaks that app's login; if nothing does, it is an unthrottled password oracle and should go today.</p>
+  </section>
+
+  <section>
+    <span class="qnum">D11</span>
+    <h2 class="sec">The 37 uncalled wrappers</h2>
+    <p>You asked me to decide, so I have — but these are the ones where being wrong is cheap to reverse and expensive to guess at, so here is the split rather than a silent deletion.</p>
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Group</th><th>Decision</th><th>Reasoning</th></tr></thead>
+      <tbody>
+        <tr><td class="k">*Processes, *Kill (8 wrappers)</td><td><span class="tag ok">Keep</span></td><td>These are the operator's escape hatch when a bot subprocess is wedged. The runbook needs them even though no button calls them, and Phase 5's incident runbook will document them as the manual recovery path.</td></tr>
+        <tr><td class="k">superEarnings, superSnapshots, superEcon, superGex*, engine-gates/pct (14)</td><td><span class="tag ok">Keep</span></td><td>Live backend features with working endpoints; the wrappers are simply not wired to UI yet. Deleting the client while keeping the server is the worst of both.</td></tr>
+        <tr><td class="k">sportsPerformance, *ActiveBets (3)</td><td><span class="tag ok">Keep, generalised</span></td><td>Folded into the keyed bot routes above, so they cost nothing to retain.</td></tr>
+        <tr><td class="k">recordTrade, trades, users, health (4)</td><td><span class="tag warn">Keep 3, retire 1</span></td><td><code>users</code> disappears with <code>ensureUser</code>. The rest stay.</td></tr>
+        <tr><td class="k">kalshiClient (1)</td><td><span class="tag new">Promote</span></td><td>Becomes the credential verification step in customer onboarding.</td></tr>
+      </tbody>
+    </table>
+    </div>
+    <p>Net: I am deleting almost none of them, because "no screen calls it" turned out to mean "no screen calls it <em>yet</em>" far more often than "dead". The genuine dead weight in this codebase is the 5,254 duplicated lines under <code>runtime/</code>, not the API client.</p>
+  </section>
+
+  <div class="stopbar">
+    <h2>Approve and I start writing tests</h2>
+    <p>Phase 4 is complete. The contract above becomes the frozen baseline the Phase 6 contract tests assert against — every path, request shape, response shape and status code.</p>
+    <p><strong>One question:</strong> does any app outside this repository call <code>verify-password</code>? A wellness or sports app is the likely candidate given the docstring and <code>wellness-profile.json</code>. If you do not know, I will keep the endpoint but put it behind the same lockout and timing defences as <code>/auth/login</code> — which removes the vulnerability without breaking an unknown caller. That is the safe default and I will take it unless you say otherwise.</p>
+    <p>Everything else here I have decided per your mandate. Next is Phase 6 — acceptance tests, contract tests, the onboarding test, and the tenant isolation suite the brief ranks highest. They will fail, which is the point.</p>
+  </div>
+
+  <footer>
+    <span>Phase 4 of 10</span>
+    <span>107 → 86 operations</span>
+    <span>25 duplicate bot routes eliminated</span>
+    <span>1-file frontend diff</span>
+    <span>Next: Phase 6 tests</span>
+  </footer>
+
+</div>

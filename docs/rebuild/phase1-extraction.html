@@ -1,0 +1,440 @@
+<title>Phase 1 Extraction</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap">
+
+<style>
+  :root{
+    --ground:#EEF0F3; --surface:#FFFFFF; --surface-2:#F6F7F9;
+    --ink:#171A1F; --ink-2:#3C444F; --muted:#646E7B;
+    --rule:#D6DAE0; --rule-strong:#B6BDC7;
+    --accent:#8A5200; --accent-soft:#F4E7D2;
+    --critical:#9E2A19; --critical-soft:#F7E2DE;
+    --warn:#7A5A05; --warn-soft:#F6EDD4;
+    --ok:#2A6047; --ok-soft:#DEEDE5;
+    --shadow:0 1px 2px rgba(23,26,31,.06),0 8px 24px rgba(23,26,31,.05);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --ground:#0F1216; --surface:#171B21; --surface-2:#1D222A;
+      --ink:#E4E7EC; --ink-2:#BFC6D0; --muted:#8B95A3;
+      --rule:#2A313A; --rule-strong:#3B444F;
+      --accent:#E3A94E; --accent-soft:#2E2415;
+      --critical:#EC7B66; --critical-soft:#331914;
+      --warn:#D7B152; --warn-soft:#2C2513;
+      --ok:#72C098; --ok-soft:#152A20;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+    }
+  }
+  :root[data-theme="dark"]{
+    --ground:#0F1216; --surface:#171B21; --surface-2:#1D222A;
+    --ink:#E4E7EC; --ink-2:#BFC6D0; --muted:#8B95A3;
+    --rule:#2A313A; --rule-strong:#3B444F;
+    --accent:#E3A94E; --accent-soft:#2E2415;
+    --critical:#EC7B66; --critical-soft:#331914;
+    --warn:#D7B152; --warn-soft:#2C2513;
+    --ok:#72C098; --ok-soft:#152A20;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.3);
+  }
+
+  *{box-sizing:border-box}
+  body{background:var(--ground);color:var(--ink);
+    font-family:"IBM Plex Sans","Segoe UI",system-ui,sans-serif;
+    font-size:16.5px;line-height:1.62;margin:0;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 24px 96px}
+
+  .mast{border-bottom:2px solid var(--ink);padding:56px 0 20px;margin-bottom:40px}
+  .eyebrow{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:11.5px;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+  h1{font-family:"IBM Plex Sans Condensed","IBM Plex Sans",sans-serif;font-weight:700;
+    font-size:clamp(2.3rem,5.6vw,3.5rem);line-height:1.04;letter-spacing:-.015em;
+    text-wrap:balance;margin:.28em 0 .32em}
+  .standfirst{font-size:1.14rem;color:var(--ink-2);max-width:64ch;margin:0}
+  .status-pill{display:inline-flex;align-items:center;gap:7px;
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.1em;
+    text-transform:uppercase;background:var(--warn-soft);color:var(--warn);
+    border:1px solid color-mix(in srgb,var(--warn) 34%,transparent);
+    border-radius:2px;padding:4px 9px}
+  .status-pill::before{content:"";width:6px;height:6px;background:var(--warn);border-radius:50%}
+
+  /* counters strip */
+  .counters{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+    gap:1px;background:var(--rule);border:1px solid var(--rule);margin:0 0 44px}
+  .counter{background:var(--surface);padding:15px 16px}
+  .counter .n{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.85rem;
+    font-weight:700;line-height:1;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .counter .l{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);margin-top:6px;display:block;line-height:1.4}
+  .counter.bad .n{color:var(--critical)}
+  .counter.good .n{color:var(--ok)}
+
+  .correction{background:var(--critical-soft);border:2px solid var(--critical);
+    padding:22px 24px;margin:0 0 48px}
+  .correction h2{font-family:"IBM Plex Sans Condensed",sans-serif;margin:0 0 10px;
+    font-size:1.3rem;color:var(--critical);letter-spacing:-.01em}
+  .correction p{margin:0 0 10px;max-width:68ch;color:var(--ink-2)}
+  .correction p:last-child{margin-bottom:0}
+
+  section{margin:0 0 54px}
+  .qnum{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.12em;
+    color:var(--accent);text-transform:uppercase;display:block;margin-bottom:6px}
+  h2.sec{font-family:"IBM Plex Sans Condensed",sans-serif;
+    font-size:clamp(1.5rem,3vw,1.95rem);font-weight:700;letter-spacing:-.012em;
+    margin:0 0 6px;text-wrap:balance;padding-bottom:10px;border-bottom:1px solid var(--rule-strong)}
+  h3{font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.12rem;font-weight:600;
+    margin:30px 0 8px;letter-spacing:-.005em}
+  p{max-width:68ch}
+  a{color:var(--accent)}
+
+  .answer{background:var(--surface-2);border:1px solid var(--rule);
+    padding:14px 18px;margin:14px 0 20px;font-size:1.02rem}
+  .answer .lbl{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.15em;
+    text-transform:uppercase;color:var(--muted);display:block;margin-bottom:4px}
+
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace;font-size:.885em}
+  code{background:var(--surface-2);border:1px solid var(--rule);border-radius:2px;padding:1px 5px}
+  .cite{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);white-space:nowrap}
+
+  .ev{display:grid;grid-template-columns:auto 1fr;border:1px solid var(--rule);
+    background:var(--surface);margin:12px 0;box-shadow:var(--shadow)}
+  .ev-stripe{width:4px;background:var(--rule-strong)}
+  .ev.crit .ev-stripe{background:var(--critical)}
+  .ev.warn .ev-stripe{background:var(--warn)}
+  .ev.ok .ev-stripe{background:var(--ok)}
+  .ev-body{padding:15px 18px}
+  .ev-head{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:baseline;margin-bottom:6px}
+  .ev-title{font-weight:600;font-family:"IBM Plex Sans Condensed",sans-serif;font-size:1.05rem}
+  .ev p{margin:0 0 8px;font-size:.965rem;color:var(--ink-2);max-width:66ch}
+  .ev p:last-child{margin-bottom:0}
+  .tag{font-family:"IBM Plex Mono",monospace;font-size:10px;letter-spacing:.13em;
+    text-transform:uppercase;padding:2px 7px;border-radius:2px;border:1px solid}
+  .tag.crit{color:var(--critical);background:var(--critical-soft);border-color:color-mix(in srgb,var(--critical) 32%,transparent)}
+  .tag.warn{color:var(--warn);background:var(--warn-soft);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+  .tag.ok{color:var(--ok);background:var(--ok-soft);border-color:color-mix(in srgb,var(--ok) 32%,transparent)}
+
+  pre{background:var(--surface-2);border:1px solid var(--rule);padding:13px 15px;
+    overflow-x:auto;margin:12px 0;font-family:"IBM Plex Mono",monospace;
+    font-size:12.7px;line-height:1.6;color:var(--ink-2)}
+  pre b{color:var(--critical);font-weight:600}
+  pre i{color:var(--muted);font-style:normal}
+  pre em{color:var(--ok);font-style:normal;font-weight:600}
+
+  .scroll{overflow-x:auto;margin:16px 0;border:1px solid var(--rule);background:var(--surface)}
+  table{border-collapse:collapse;width:100%;font-size:.93rem;min-width:600px}
+  th,td{text-align:left;padding:9px 13px;border-bottom:1px solid var(--rule);vertical-align:top}
+  th{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.13em;
+    text-transform:uppercase;color:var(--muted);background:var(--surface-2);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  td.num,th.num{font-variant-numeric:tabular-nums;font-family:"IBM Plex Mono",monospace;text-align:right}
+  td.zero{color:var(--muted)}
+  .hit{background:var(--ok-soft);font-weight:600}
+
+  ul,ol{max-width:68ch;padding-left:1.15em}
+  li{margin:5px 0}
+  li::marker{color:var(--muted)}
+
+  .stopbar{border:2px solid var(--accent);background:var(--accent-soft);
+    padding:20px 24px;margin:48px 0 0}
+  .stopbar h2{font-family:"IBM Plex Sans Condensed",sans-serif;margin:0 0 8px;
+    font-size:1.3rem;color:var(--accent);letter-spacing:-.01em}
+  .stopbar p{margin:0 0 10px;color:var(--ink-2);max-width:68ch}
+  .stopbar p:last-child{margin-bottom:0}
+
+  footer{margin-top:56px;padding-top:18px;border-top:1px solid var(--rule);
+    font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--muted);
+    display:flex;flex-wrap:wrap;gap:8px 22px}
+  @media (max-width:640px){.wrap{padding:0 17px 64px}body{font-size:16px}}
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="eyebrow">
+      <span>Phase 1</span><span>Vidura 36 rebuild</span><span>Read-only</span>
+      <span class="status-pill">Awaiting approval</span>
+    </div>
+    <h1>Extraction</h1>
+    <p class="standfirst">What the system actually does today, measured rather than assumed — the API surface, the three-worlds-two-domains question settled, the duplication counted, and the data profiled against the files themselves.</p>
+  </header>
+
+  <div class="counters">
+    <div class="counter"><span class="n">107</span><span class="l">API operations</span></div>
+    <div class="counter"><span class="n">0</span><span class="l">business-rule differences web vs mobile</span></div>
+    <div class="counter bad"><span class="n">5</span><span class="l">critical tenancy findings</span></div>
+    <div class="counter bad"><span class="n">5,254</span><span class="l">redundant lines</span></div>
+    <div class="counter"><span class="n">124</span><span class="l">CSV files</span></div>
+    <div class="counter bad"><span class="n">0</span><span class="l">isolation tests of 330</span></div>
+  </div>
+
+  <div class="correction">
+    <h2>Correction to Phase 0</h2>
+    <p>I reported that the frontend always sends the logged-in user's own id. <strong>That is wrong, and the truth is worse.</strong></p>
+    <p>Every screen resolves its acting identity through <code>ensureUser()</code> <span class="cite">viduraApi.js:157</span>, which does not consult the session at all. It reads a username from <code>operatorName()</code> <span class="cite">viduraApi.js:144</span> — taken from a <code>?operator=</code> URL parameter, persisted to localStorage, defaulting to the hardcoded string <code>'sampath'</code> — then looks that name up via <code>GET /users</code> and uses whatever id comes back.</p>
+    <p>So the identity the desk acts as is set by a <strong>URL parameter</strong>, not by who signed in. Sign in as any operator, append <code>?operator=sampath</code>, and the desk trades sampath's account. And because the fallback is a hardcoded name rather than the session, an operator who is <em>not</em> sampath signing in today lands on <strong>sampath's</strong> data by default — the build sets no <code>VITE_TRADIER_OPERATOR</code> anywhere.</p>
+    <p>The Phase 0 conclusion still holds — moving identity to the session is correct and is invisible for sampath, who is the only operator this deployment resolves to. But it is not invisible for anyone else, and what changes for them is a bug being removed, not a feature.</p>
+  </div>
+
+  <section>
+    <span class="qnum">The central question</span>
+    <h2 class="sec">Three worlds, two domains — proven</h2>
+
+    <div class="answer">
+      <span class="lbl">Result</span>
+      <strong>Genuine business-rule differences between Tradier Platform and 36 Trades: zero.</strong>
+      They call the same endpoints with the same parameters. The backend cannot tell which world is calling, because nothing in the request says.
+    </div>
+
+    <p>I mapped every call each world makes, through the single shared client at <span class="cite">frontend/src/shared/viduraApi.js</span>, plus the direct <code>api.*</code> calls that bypass it.</p>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Surface</th><th class="num">Distinct endpoints called</th><th class="num">Shared with Tradier</th><th class="num">Exclusive</th></tr></thead>
+      <tbody>
+        <tr><td><strong>Tradier Platform</strong> (web)</td><td class="num">29</td><td class="num">—</td><td class="num">17</td></tr>
+        <tr><td><strong>36 Trades</strong> (mobile)</td><td class="num">14</td><td class="num hit">12</td><td class="num">2</td></tr>
+        <tr><td><strong>Bot Station</strong></td><td class="num">22</td><td class="num zero">0</td><td class="num">22</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p><strong>Twelve of 36 Trades' fourteen endpoints are the same endpoints Tradier Platform calls</strong> — <code>tradierBalance</code>, <code>tradierPositions</code>, <code>tradierOpen</code>, <code>tradierClose</code>, <code>tradierSweep</code>, <code>tradierVenue</code>, <code>tradierQuotes</code>, <code>autoTradeStart</code>, <code>autoTradeStop</code>, <code>autoTradeStatus</code>, and the two 0DTE gamma history reads. Not similar endpoints. The same ones, from the same client module.</p>
+
+    <h3>The two exclusives, classified</h3>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>36-Trades-only call</th><th>What differs</th><th>Classification</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>GET /tradier/chain</code></td>
+          <td>Tradier Platform buys a contract the flow board already picked (<code>tradierBuyContract</code>); the mobile desk picks from a chain preview first. Same underlying chain service, different entry point into it.</td>
+          <td><span class="tag warn">Presentation</span></td>
+        </tr>
+        <tr>
+          <td><code>GET /desk36/dmi</code></td>
+          <td>Arbitrary symbol list with no gating, vs the HOT scan's fixed top-100 universe with gates. <strong>Calls <code>hot_scan._scan_symbol</code> verbatim</strong> — the identical indicator function, reached through a different filter.</td>
+          <td><span class="tag warn">Presentation</span></td>
+        </tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>The module's own docstring concedes the point:</p>
+    <pre><i># backend/app/api/v1/desk36.py:3-10</i>
+"""36 Trade Desk - the snapshot board's own endpoints.
+
+<em>Only one thing here is new: DMI readings for an ARBITRARY symbol list.</em>
+The HOT scan already computes Wilder +DI/-DI/ADX, but it sweeps a fixed
+top-100 universe and returns only the names that clear its gates. [...]
+<em>So this reuses hot_scan's indicator code verbatim</em> and skips the
+universe and the gates."""
+
+<i># and at line 117, literally:</i>
+return sym, hot_scan.<b>_scan_symbol</b>(client, sym, iv, days)   <i># a private fn, reached across modules</i></pre>
+
+    <div class="ev ok"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">Verdict</span><span class="tag ok">Hypothesis confirmed</span></div>
+      <p><strong>Tradier Platform and 36 Trades are one domain with two clients.</strong> The counts the brief asked for: presentation differences 2, client-capability differences 0, genuine business rules 0. There is no drift to resolve because there is no forked logic — they were never forked, they share a client module and a service layer already.</p>
+      <p><strong>Bot Station is a genuine domain boundary.</strong> Zero endpoint overlap with either of the other two, a different venue, different instruments, and subprocess execution semantics nothing else has.</p>
+      <p>Nothing here justifies a second schema, a second service layer, or a <code>/config/thirty-six-trades</code>. The Phase 5 layout stays at <code>shared</code> / <code>trading</code> / <code>bot-station</code>.</p>
+    </div></div>
+  </section>
+
+  <section>
+    <span class="qnum">Inventory</span>
+    <h2 class="sec">API surface</h2>
+
+    <p>Taken from the running application's own OpenAPI document, not from grep: <strong>101 paths, 107 operations, 9 tags.</strong> The full machine-readable spec is saved alongside this report.</p>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Tag</th><th class="num">Ops</th><th>Owns</th><th>Tenant-scoped?</th></tr></thead>
+      <tbody>
+        <tr><td><code>super-research</code></td><td class="num">27</td><td>Signals, GEX, engines, earnings, econ</td><td>No — global data</td></tr>
+        <tr><td><code>bots</code></td><td class="num">39</td><td>Kalshi bot families: btc, sports, parley, commodities</td><td><code>user_id</code> query, optional</td></tr>
+        <tr><td><code>tradier</code></td><td class="num">18</td><td>Options executor, positions, autotrade, market data</td><td><code>user_id</code> query, required</td></tr>
+        <tr><td><code>auth</code></td><td class="num">4</td><td>Login, logout, me, status</td><td>Session</td></tr>
+        <tr><td><code>users</code></td><td class="num">3</td><td>Operator records</td><td>None</td></tr>
+        <tr><td><code>kalshi</code></td><td class="num">4</td><td>Portfolio value + history</td><td><code>user_id</code> path</td></tr>
+        <tr><td><code>trades</code></td><td class="num">2</td><td>Trade ledger</td><td><code>user_id</code> path</td></tr>
+        <tr><td><code>levels</code>, <code>desk36</code>, <code>system</code></td><td class="num">10</td><td>Level watcher, DMI board, health</td><td>Mixed</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>Authentication model</h3>
+    <p>Two paths are open (<code>/auth/login</code>, <code>/auth/status</code>). Two accept a scoped push token and nothing else (<code>/super/gex0dte/refresh</code>, <code>/heartbeat</code>) — that one is genuinely well designed, and its comment explains why: a leaked push token poisons gamma data rather than placing an order. Everything else takes a session token <em>or</em> the shared <code>TBOT_API_KEY</code>, interchangeably.</p>
+
+    <h3>Endpoints nothing calls</h3>
+    <p>Two layers, and the distinction matters because the brief warns that frontends call things grep cannot see:</p>
+    <ul>
+      <li><strong>3 operations have no reference anywhere in the frontend source</strong> — <code>POST /super/econ/refresh</code>, <code>POST /super/gex0dte/heartbeat</code> (pushed by the getgamma bookmarklet, so this one is legitimately external), and <code>POST /users/{user_id}/verify-password</code>.</li>
+      <li><strong>37 more have a client wrapper in <code>viduraApi.js</code> that no screen ever invokes</strong> — including every <code>*Processes</code> and <code>*Kill</code> function, <code>sportsPerformance</code>, <code>sportsActiveBets</code>, <code>parleyActiveBets</code>, <code>superEarnings</code>, <code>superSnapshots</code>, and the whole engine-gates/engine-pct pair.</li>
+    </ul>
+    <p>I am proposing no deletions yet. That is Phase 4's table and Phase 9's manifest, and both need your confirmation per endpoint.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Security</span>
+    <h2 class="sec">Tenancy findings, consolidated</h2>
+
+    <p>Phase 0 found three. Extraction found two more, and one of them is the default path rather than an attack.</p>
+
+    <div class="ev crit"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">1. Acting identity comes from a URL parameter</span><span class="tag crit">Critical</span><span class="cite">viduraApi.js:144,157</span></div>
+      <p><code>?operator=&lt;name&gt;</code> selects which operator the desk acts as, persisted in localStorage, defaulting to a hardcoded <code>'sampath'</code>. The session is never consulted. This is the correction above, and it is the most exploitable of the five because it needs no crafted request — just a query string.</p>
+    </div></div>
+
+    <div class="ev crit"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">2. Every data endpoint trusts a caller-supplied <code>user_id</code></span><span class="tag crit">Critical</span><span class="cite">api/deps.py:10</span></div>
+      <p>No code path compares the session's user to the requested one. <code>current_session</code> is used by <code>/auth/me</code> and nothing else.</p>
+    </div></div>
+
+    <div class="ev crit"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">3. Omitting <code>user_id</code> widens the query to every tenant</span><span class="tag crit">Critical</span><span class="cite">services/trades.py:49</span></div>
+      <p><code>if user_id:</code> — a missing scope means "all", not "refuse". Roughly 20 endpoints declare the parameter optional.</p>
+    </div></div>
+
+    <div class="ev crit"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">4. A new user can be pointed at an existing operator's credential folder</span><span class="tag crit">Critical</span><span class="cite">api/v1/users.py:17</span></div>
+      <p><code>_check_root_allowed</code> checks the folder is <em>under</em> <code>customers_root</code>, never that it is unclaimed.</p>
+    </div></div>
+
+    <div class="ev crit"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">5. An unthrottled password oracle, new in this phase</span><span class="tag crit">Critical</span><span class="cite">api/v1/kalshi.py:211</span></div>
+      <p><code>POST /users/{user_id}/verify-password</code> takes any operator's id and a candidate password and answers 200 or 401. <code>/auth/login</code> is carefully defended — lockout after 10 failures, a burned second on every failure, one message for both failure modes. <strong>This endpoint has none of that</strong>, and it reaches the same <code>.sam</code> file. It is a login bypass for the throttling, and no screen calls it.</p>
+    </div></div>
+
+    <h3>What the tests say about all this</h3>
+    <div class="answer">
+      <span class="lbl">Measured</span>
+      <strong>330 tests across 30 files. Zero create a second user. Zero assert that one operator cannot reach another's data.</strong> The isolation category the brief ranks highest does not exist yet, which is consistent with the findings surviving this long.
+    </div>
+  </section>
+
+  <section>
+    <span class="qnum">Duplication</span>
+    <h2 class="sec">Where the same logic lives more than once</h2>
+
+    <div class="answer">
+      <span class="lbl">Measured, after stripping comments and docstrings</span>
+      <strong>11 clusters of byte-identical modules, 84 files, 5,254 redundant lines.</strong> Separately, 48 function bodies are duplicated across files, about 2,910 redundant statements.
+    </div>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Module</th><th class="num">Copies</th><th class="num">Lines each</th><th>Where</th></tr></thead>
+      <tbody>
+        <tr><td><code>data.py</code></td><td class="num">16</td><td class="num">31</td><td rowspan="5"><code>runtime/super_research/&lt;ticker&gt;_research/</code> and the two India research dirs</td></tr>
+        <tr><td><code>features.py</code></td><td class="num">15</td><td class="num">92</td></tr>
+        <tr><td><code>signals.py</code></td><td class="num">15</td><td class="num">15</td></tr>
+        <tr><td><code>iterate.py</code></td><td class="num">13</td><td class="num">120</td></tr>
+        <tr><td><code>backtest.py</code></td><td class="num">13</td><td class="num">64</td></tr>
+        <tr><td><code>liquidity_sr.py</code></td><td class="num">2</td><td class="num">403</td><td rowspan="3"><code>runtime/indicators/</code> ↔ <code>runtime/prediction-trade/kalshi/btc/btc15/</code></td></tr>
+        <tr><td><code>monitor.py</code></td><td class="num">2</td><td class="num">263</td></tr>
+        <tr><td><code>cb_btc_signal.py</code></td><td class="num">2</td><td class="num">152</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <h3>The cost of onboarding a research ticker today</h3>
+    <p>This is the clearest measurement of the problem the rebuild exists to fix. A per-ticker research directory holds <strong>8 files</strong>. Six are byte-identical across every ticker. Only two carry anything ticker-specific:</p>
+
+    <pre>runtime/super_research/spy_research/
+  backtest.py      64 lines   <b>identical in 13 dirs</b>
+  data.py          31 lines   <b>identical in 16 dirs</b>
+  features.py      92 lines   <b>identical in 15 dirs</b>
+  iterate.py      120 lines   <b>identical in 13 dirs</b>
+  research.py      82 lines   <b>identical in 2 dirs</b>
+  signals.py       15 lines   <b>identical in 15 dirs</b>
+  config.py        24 lines   <em>25 constants, of which 16 genuinely vary</em>
+  spy_intraday_bot.py 14 lines <em>ticker-specific entry point</em></pre>
+
+    <p>So adding a ticker means copying eight files to change sixteen values. The target — one config entry, zero copied files — is not a stretch goal here; the code is <em>already</em> uniform enough to collapse. The sixteen varying constants are the real per-ticker config: <code>TICKER</code>, <code>TZ</code>, <code>RTH_OPEN</code>/<code>RTH_CLOSE</code>, <code>ENTRY_OPEN</code>/<code>ENTRY_CLOSE</code>, <code>PREMARKET_OPEN</code>, <code>ORB_MIN</code>, <code>TP_PCT</code>/<code>SL_PCT</code>, <code>TP_BARS</code>/<code>SL_BARS</code>, <code>POC_BIN</code>, <code>NOISE_KS</code>, <code>VOL_MULTS</code>, <code>MIN_TRADES_PER_DAY</code>, <code>WINDOWS</code>.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Data</span>
+    <h2 class="sec">CSV profile, against the files themselves</h2>
+
+    <p><strong>124 CSV files, 150,692 data rows.</strong> Almost all of it is machine state under <code>runtime/</code> (114 files, 150,209 rows) that the bots recreate — that is Phase 9 deletion, not Phase 8 migration. <strong>The data that actually migrates is 424 rows in sampath's folder</strong>, and both populated files are malformed in ways an importer must handle deliberately.</p>
+
+    <div class="ev crit"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">v2_trade_history.csv — the header is missing a column</span><span class="tag crit">Blocks import</span></div>
+      <p>324 rows. The header declares <strong>19</strong> columns. <strong>231 rows carry 20 fields.</strong> The undeclared 20th is a boolean — 220 <code>FALSE</code>, 11 <code>TRUE</code> — which by every other signal in the codebase is the <code>dry_run</code> flag; <span class="cite">core/database.py:290</span> describes exactly this gap, that btc15 v2/v3/v4 "write paper and live rows to the same CSV with no distinguishing field".</p>
+      <p>The 93 narrow rows genuinely predate the flag, so <strong>93 rows have an unknowable paper-or-live status</strong> from the file alone. Three declared columns — <code>MAX_LOSS_PCT</code>, <code>MAX_PROFIT_PCT</code>, <code>ENTRY_SIGNAL</code> — are 100% blank across all 324 rows.</p>
+    </div></div>
+
+    <div class="ev crit"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">trade_history_main.csv — it is an event log, not a trade table</span><span class="tag crit">Blocks import</span></div>
+      <p>99 rows, all 23 fields wide, but <strong>54 rows have the first 18 fields blank</strong> and carry only <code>ticker</code>, <code>status=CLOSED</code>, <code>ts_close</code>, <code>pv_close</code>, <code>realized_pnl</code>. The other 45 are entry rows. So the file is 45 opens plus 54 close events appended separately — reading it as one-row-per-trade, which is what the row count suggests, double-counts and loses the join.</p>
+      <p>97 distinct tickers across 99 rows, so ticker alone is not a key. Three rows are still <code>OPEN</code>.</p>
+    </div></div>
+
+    <div class="ev warn"><div class="ev-stripe"></div><div class="ev-body">
+      <div class="ev-head"><span class="ev-title">Four of seven files are header-only</span><span class="tag warn">Note</span></div>
+      <p><code>paper_trades_main.csv</code>, <code>trade_history_sports.csv</code>, <code>v3_trade_history.csv</code>, <code>v4_trade_history.csv</code> hold a header and no rows. Their column sets still differ from each other (23 / 19 / 20 / 19), which is more evidence that each bot version invented its own layout.</p>
+    </div></div>
+
+    <p>Other typed problems the importer must decide on: <code>returns</code> is a string with a percent sign (<code>"-50.69%"</code>), <code>side</code> and <code>direction</code> hold <code>yes</code>/<code>no</code> rather than booleans, and <code>ts</code> carries a trailing <code>CST</code> in the text while <code>ts_epoch</code> is a float — two representations of the same instant, disagreeing about timezone handling in exactly the way <span class="cite">core/database.py:63</span> already had to correct for India signals.</p>
+  </section>
+
+  <section>
+    <span class="qnum">Config &amp; docs</span>
+    <h2 class="sec">Configuration surface</h2>
+
+    <div class="scroll">
+    <table>
+      <thead><tr><th>Surface</th><th class="num">Count</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td><code>Settings</code> fields</td><td class="num">82</td><td>All overridable as <code>TBOT_&lt;NAME&gt;</code>; legacy <code>VIDURA_*</code> names still bridged</td></tr>
+        <tr><td>documented in <code>.env.example</code></td><td class="num">29</td><td>Well written where it exists — 78 comment lines</td></tr>
+        <tr><td><strong>undocumented Settings fields</strong></td><td class="num">53</td><td>Every autotrade A/B, flow, hot-scan and superhot tuning constant</td></tr>
+        <tr><td>fields defaulting to empty</td><td class="num">5</td><td>All secrets; none fail loudly at startup</td></tr>
+        <tr><td><strong>env vars read directly in bots</strong></td><td class="num">289</td><td>Via <code>os.environ</code> under <code>runtime/</code>, bypassing <code>Settings</code> entirely</td></tr>
+        <tr><td>env vars read directly in backend</td><td class="num">1</td><td><code>PORT</code>, for cloud auto-detection — legitimate</td></tr>
+      </tbody>
+    </table>
+    </div>
+
+    <p>The <strong>289 bot environment variables are the real configuration surface</strong>, and none of them are in <code>.env.example</code>, in <code>Settings</code>, or in any schema. They are injected as strings by <span class="cite">services/bot_manager.py</span> — around 60 <code>env[...] = ...</code> assignments — and read back by name inside each bot. Nothing validates that a name written by the launcher is a name any bot reads. A typo in either half is silent.</p>
+
+    <h3>Documentation</h3>
+    <p>56 Markdown/Mermaid files. <strong>16 are generated research reports totalling 1.52 MB</strong> — output, not documentation. Of the rest:</p>
+    <ul>
+      <li><strong>11 of 13</strong> <code>*_research/README.md</code> files are 96.9–98.0% identical — the same templated text with a ticker swapped. Only <code>btc_research/README.md</code> is genuinely different.</li>
+      <li>The <strong>3 commodity <code>ENGINE.md</code></strong> files are 97.2–98.0% identical.</li>
+      <li>The four root docs — <code>README</code>, <code>DEPLOY</code>, <code>CLOUDRUN</code>, <code>TUNNEL</code> — are mutually distinct (under 7% pairwise overlap). They are not duplicates; they cover different ground and can be folded into the Phase 5 layout rather than reconciled.</li>
+      <li><strong>No document describes tenancy, isolation, or credential handling.</strong> No safe-shutdown procedure exists. No incident runbook exists.</li>
+    </ul>
+  </section>
+
+  <section>
+    <span class="qnum">Honesty</span>
+    <h2 class="sec">Gaps — what I could not determine</h2>
+
+    <ol>
+      <li><strong>What uses the shared <code>TBOT_API_KEY</code>.</strong> Phase 0 Decision 03 depends on this and I still cannot answer it from the code. It authenticates any request; nothing records who presents it. If a cron job, supervisor or deploy script uses it against data endpoints, demoting it breaks them. <em>I need you to tell me, or to accept that we find out by removing it in a controlled window.</em></li>
+      <li><strong>Whether the 93 unflagged v2 rows are paper or live.</strong> <code>_backfill_btc15_modes</code> tries to infer this from <code>bot_runs</code> time windows. Whether that inference is trustworthy enough to carry into the new schema is a Phase 8 decision for you, not one I should make silently — these are real-money rows or they are not.</li>
+      <li><strong>Whether <code>_test</code>, <code>sams</code> and <code>suma</code> are real operators.</strong> <code>sams</code> and <code>suma</code> each hold a live Kalshi key and a 59-row sports history. Under scope (a) they import later, but I do not know whether they are people or test accounts.</li>
+      <li><strong>Whether the 37 uncalled client wrappers are dead or staged.</strong> Several look deliberately built and never wired up (<code>sportsPerformance</code>, the kill/processes family). Dead code, or a half-finished feature you intend to finish?</li>
+      <li><strong>Rules that look like accidents.</strong> The trades ledger treats unknown mode as excluded from both LIVE and PAPER views <span class="cite">services/trades.py:42</span>; the India timestamp correction re-runs on every boot <span class="cite">core/database.py:63</span>; <code>_relocate_user_roots</code> rewrites stored paths at startup <span class="cite">core/database.py:171</span>. Each is defensible and each is documented in a comment — but all three are boot-time data mutations, and I would rather name them now than inherit them by accident.</li>
+    </ol>
+  </section>
+
+  <div class="stopbar">
+    <h2>Stopping here for approval</h2>
+    <p>Phase 1 is complete and was read-only — no source file was modified in this phase. The OpenAPI document, CSV profiles and duplication data are saved as working files if you want the raw numbers.</p>
+    <p>The frozen UX contract baseline is the 107-operation inventory. On approval I will write Phase 2, which turns this into a specification: what each workflow <em>should</em> do, every place current behaviour looks like a bug with a proposed correction for you to decide on, the domain boundaries now that the two-domain question is settled, and the Onboarding Contract for each extension point.</p>
+    <p>The five gaps above are the only things I would rather have from you than guess at — and only the first one, what uses <code>TBOT_API_KEY</code>, blocks anything.</p>
+  </div>
+
+  <footer>
+    <span>Phase 1 of 10</span>
+    <span>107 operations, 14,405 backend LOC, 9,745 frontend LOC</span>
+    <span>Read-only: no files modified</span>
+    <span>Next: Phase 2 specification</span>
+  </footer>
+
+</div>

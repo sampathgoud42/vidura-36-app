@@ -1,0 +1,21 @@
+# spx_research — SPX 5m 0.30%/4h Super-Signals (PERCENT, custom price+volume)
+
+Deep hunt on SPX: reach **+/-0.30%** before a 0.30% adverse move, **within
+4 hours** (48 x 5m bars). **Desk session rule: signals only AFTER 8:45 AM CST;
+the TP must hit BEFORE 2:35 PM CST** (25 min before close — outcomes truncate
+there). Entries 08:45-14:00 CST, next-bar-open entry, symmetric stop.
+
+    python research.py    # grid -> results/all_configs.csv + REPORT.md
+    python iterate.py     # stacks + greedy ensemble -> results/ensemble.csv
+    python spx_intraday_bot.py --once / --backfill-today / (live loop)
+
+Custom layer: ORB (first 15 min) levels, VWAP sigma-bands, rvol, CVD+slope,
+RSI(14), momentum-ignition — blocks pair a price event with volume confirmation.
+
+**A-book** = compact precision union (5 families, 4 LONG + 1 SHORT): 28 trades,
+0 stops, **100.0% TP-before-SL @ 0.47/day** over 60
+sessions (results/abook_ensemble.csv). B-book = trimmed results/ensemble.csv.
+Book rule at bot load: TP-before-SL > 95% -> A, else B.
+
+Live: super_signal_bot.py --category etf|stock spawns spx_intraday_bot.py
+--once each cycle -> spx_intraday_signals.csv -> central ledgers -> desk.

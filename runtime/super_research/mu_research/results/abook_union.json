@@ -1,0 +1,114 @@
+{
+ "picked": [
+  {
+   "d": "LONG",
+   "combo": [
+    "vwap_reclaim",
+    "above_vwap"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.8,
+   "vm": 1.2,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 11
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "adi_dn",
+    "below_pivot",
+    "orb_break_dn"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 7
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "above_pivot",
+    "vwap_lo_bounce"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.8,
+   "vm": 1.2,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "macd_x_up",
+    "hist_turn_up"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 1.2,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss",
+    "adi_dn",
+    "below_pivot"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss",
+    "adi_dn",
+    "hist_turn_dn"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss",
+    "hist_turn_dn",
+    "cvd_dn"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  }
+ ],
+ "union": {
+  "trades": 38,
+  "wins": 38,
+  "stops": 0,
+  "scratch": 0,
+  "win_rate": 100.0,
+  "tp_before_sl": 100.0,
+  "days": 28,
+  "per_day": 0.63,
+  "net_pct": 11.4
+ },
+ "ok": false,
+ "n_days": 60,
+ "bot": "mu_intraday_bot.py",
+ "target_freq": 10.0
+}

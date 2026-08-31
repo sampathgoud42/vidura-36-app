@@ -1,0 +1,78 @@
+/* Hard-stop page for a world an operator may not open, plus the small
+   waiting states around it. Deliberately plain: this is a wall, and it
+   should read as one rather than as a page that failed to load. */
+
+.wg-wait {
+  min-height: 100vh; min-height: 100dvh;
+  display: grid; place-items: center;
+  background: #05050b; color: rgba(253, 230, 138, 0.7);
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem; letter-spacing: 0.4em; text-transform: uppercase;
+}
+
+.wg-stop {
+  min-height: 100vh; min-height: 100dvh;
+  display: grid; place-items: center;
+  padding: calc(24px + env(safe-area-inset-top)) 18px
+           calc(24px + env(safe-area-inset-bottom));
+  background: #05050b;
+  color: #e8e8ef;
+  font-family: 'Outfit', system-ui, sans-serif;
+}
+
+.wg-card {
+  width: 100%; max-width: 420px; text-align: center;
+  padding: 26px 20px 22px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 92, 122, 0.28);
+  background: rgba(20, 10, 14, 0.6);
+}
+.wg-mark { margin-bottom: 12px; }
+.wg-mark img { display: inline-block; opacity: 0.85; }
+
+.wg-title {
+  font-family: 'Cinzel', serif;
+  margin: 0 0 4px;
+  font-size: 1.05rem; letter-spacing: 0.16em; text-transform: uppercase;
+  color: #ff8fa3;
+}
+.wg-world {
+  margin: 0 0 14px;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.78rem; letter-spacing: 0.1em;
+  color: rgba(255, 255, 255, 0.55);
+}
+.wg-body {
+  margin: 0; font-size: 0.84rem; line-height: 1.65;
+  color: rgba(255, 255, 255, 0.68);
+}
+.wg-body b { color: #e8e8ef; }
+
+.wg-open {
+  margin-top: 18px; padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex; flex-direction: column; align-items: center; gap: 7px;
+}
+.wg-openk {
+  font-size: 0.6rem; letter-spacing: 0.22em; text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.32);
+}
+.wg-link {
+  display: inline-block;
+  padding: 7px 14px; border-radius: 999px;
+  border: 1px solid rgba(134, 239, 172, 0.35);
+  background: rgba(134, 239, 172, 0.08);
+  color: #86efac; text-decoration: none;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.72rem; letter-spacing: 0.06em;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (hover: hover) {
+  .wg-link:hover { background: rgba(134, 239, 172, 0.16); }
+}
+
+.wg-path {
+  margin: 16px 0 0;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.6rem; color: rgba(255, 255, 255, 0.22);
+}

@@ -1,0 +1,236 @@
+{
+ "picked": [
+  {
+   "d": "LONG",
+   "combo": [
+    "adi_up",
+    "above_pivot",
+    "hist_turn_up"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.8,
+   "vm": 1.2,
+   "s": 27.8,
+   "t": 100.0,
+   "n": 18
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "below_pivot",
+    "weak_close",
+    "vwap_loss_v"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 73.3,
+   "t": 100.0,
+   "n": 15
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "adi_dn",
+    "hist_turn_dn",
+    "rsi_thrust_dn"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 60.0,
+   "t": 100.0,
+   "n": 10
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "ylow_break",
+    "cvd_dn_v"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 87.5,
+   "t": 100.0,
+   "n": 8
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "below_vwap",
+    "r1_reject",
+    "weak_close"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 1.2,
+   "s": 85.7,
+   "t": 100.0,
+   "n": 7
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "above_vwap",
+    "vwap_lo_bounce"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.8,
+   "vm": 1.2,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "poc_reject_dn",
+    "below_pivot"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss",
+    "macd_x_dn_pos"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss",
+    "below_vwap"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.0,
+   "vm": 1.2,
+   "s": 71.4,
+   "t": 100.0,
+   "n": 7
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "hist_turn_dn",
+    "rvol_thrust_dn",
+    "cvd_dn",
+    "rsi_thrust_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 77.8,
+   "t": 100.0,
+   "n": 9
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "ylow_break",
+    "below_pivot"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.0,
+   "vm": 1.2,
+   "s": 83.3,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "below_pivot",
+    "hist_turn_dn",
+    "rsi_thrust_dn"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 75.0,
+   "t": 100.0,
+   "n": 8
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "vwap_lo_bounce",
+    "cvd_up"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.8,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss",
+    "yhigh_reject"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "vwap_loss",
+    "weak_close",
+    "rsi_thrust_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 62.5,
+   "t": 100.0,
+   "n": 8
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "r1_reject",
+    "yhigh_reject",
+    "weak_close"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  }
+ ],
+ "union": {
+  "trades": 80,
+  "wins": 57,
+  "stops": 0,
+  "scratch": 23,
+  "win_rate": 71.2,
+  "tp_before_sl": 100.0,
+  "days": 43,
+  "per_day": 1.33,
+  "net_pct": 16.73
+ },
+ "ok": false,
+ "n_days": 60,
+ "bot": "gld_intraday_bot.py",
+ "target_freq": 10.0
+}

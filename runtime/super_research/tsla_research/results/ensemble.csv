@@ -1,0 +1,11 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:above_vwap+ylow_reclaim+strong_close|nk0.0|vm1.2|full_0845_1400,11,0.18,10,1,0,90.9,90.9,10.0,2.7,0.3,8.2
+LONG:vwap_reclaim+adi_up+cvd_up|nk0.0|vm1.2|pm_1130_1400,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.3,26.5
+LONG:vwap_reclaim+adi_up+cvd_up_v|nk0.0|vm0.8|pm_1130_1400,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.3,26.5
+LONG:adi_up+vwap_reclaim_v+cvd_up|nk0.0|vm0.8|pm_1130_1400,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.3,26.5
+LONG:adi_up+vwap_reclaim_v+cvd_up_v|nk0.0|vm0.8|pm_1130_1400,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.3,26.5
+LONG:vwap_reclaim+above_vwap+adi_up+cvd_up|nk0.0|vm1.2|pm_1130_1400,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.3,26.5
+LONG:vwap_reclaim+above_vwap+adi_up+cvd_up_v|nk0.0|vm0.8|pm_1130_1400,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.3,26.5
+LONG:vwap_reclaim+adi_up+vwap_reclaim_v+cvd_up|nk0.0|vm0.8|pm_1130_1400,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.3,26.5
+LONG:vwap_reclaim+adi_up+vwap_reclaim_v+cvd_up_v|nk0.0|vm0.8|pm_1130_1400,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.3,26.5
+LONG:vwap_reclaim+adi_up+cvd_up+cvd_up_v|nk0.0|vm0.8|pm_1130_1400,10,0.17,9,1,0,90.0,90.0,9.0,2.4,0.3,26.5

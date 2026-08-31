@@ -1,11 +1,17 @@
-# Tradier Bot
+# Vidura 36
 
 A standalone trading station — backend, web UI, signal engines, the Kalshi
 bot scripts and the credentials, all inside this one folder. Copy the folder
 to any machine with Python 3.12+ and Node 18+, run `setup`, and it works.
-Nothing outside `tradier-bot/` is read at runtime.
+Nothing outside `vidura-36-app/` is read at runtime.
 
-It ships **three worlds**, all on one process and one port:
+Prove that at any time:
+
+```bash
+.venv\Scripts\python tools\check_self_contained.py
+```
+
+It ships **three worlds**, one process, one port:
 
 | world | route | what it is |
 | --- | --- | --- |
@@ -13,17 +19,10 @@ It ships **three worlds**, all on one process and one port:
 | 36 Trade Desk | `/36-trade-desk` | the same desk, laid out for a phone |
 | Bot Station | `/bot-station` | mission control for the Kalshi bots |
 
-It was extracted from the `vidura-world` (API) and `vidura-world-js` (SPA)
-projects, where these were three of nine sites sharing a database, a
-customers folder and a bot repo on another disk. Everything they touched
-came with them — including every bot script the station launches, which now
-live under `runtime/prediction-trade/`.
-
-Prove that at any time:
-
-```bash
-.venv\Scripts\python tools\check_self_contained.py
-```
+Three worlds, **two domains**. Tradier Platform and 36 Trades share one
+backend: they call the same endpoints with the same parameters, and the only
+differences are presentation. Bot Station is a genuine boundary — a different
+venue, different instruments, and subprocess execution nothing else has.
 
 ---
 
@@ -37,352 +36,395 @@ setup.bat
 start.bat
 ```
 
-Open <http://127.0.0.1:8790/>. The desk and the API are the same port and
-the same process — the API serves the built UI, so there is nothing to
-configure and no second server to run. Swagger is at `/docs`.
+Open <http://127.0.0.1:8791/>.
 
-| command | |
-| --- | --- |
-| `start.bat` | start detached |
-| `start.bat --dev` | also run the Vite dev server on 5199 (hot reload, for UI work) |
-| `stop.bat` | stop |
-| `restart.bat` | stop, then start |
-| `launch.bat` | start + Cloudflare tunnel, URL in a banner, window stays open |
-| `start.bat --tunnel` | the same, for a terminal you are already in |
-| `status.bat` | what is running, which database, paper or live, tunnel URL |
-| `url.bat` | the current public tunnel URL, on its own (it changes each restart) |
-| `doctor.bat` | prove this copy is self-contained |
+The desk and the API are the same origin, so nothing has to be configured to
+point one at the other.
 
-`.sh` equivalents exist for Linux/macOS. Both are two-line wrappers around
-`tools/appctl.py`, so start/stop behave identically on either OS.
-
-To ship this to another machine, see **[DEPLOY.md](DEPLOY.md)**. To reach it
-from outside your LAN, see **[TUNNEL.md](TUNNEL.md)**.
-
----
-
-## What it does
-
-**The executor.** You say "SPY call, 50% of the account, delta 0.25–0.50";
-the service picks the contract off the chain, sizes it, buys, rests the
-take-profit as a real order on the venue and monitors the stop-loss itself.
-Many positions run side by side.
-
-The TP/SL split matters: the take-profit is an order Tradier holds, so it
-survives an API restart on its own. The stop-loss is a 10-second loop in
-this process — `TBOT_TRADIER_MONITOR_INTERVAL_S` *is* the stop's reaction
-time. Positions live in SQLite rather than memory for exactly that reason: a
-restart with in-memory state would silently turn every open position into
-"take-profit or ride to zero". When the stop fires it cancels the resting TP
-before selling, so two sells can never stack.
-
-**Two auto-traders**, both of which only ever hand work to the executor
-above:
-
-- `10min_intraday_move` — watches the SPY/QQQ/SPX opening-range level
-  crosses produced by `runtime/stock-trade/levels_watcher.py`, requires the
-  signal to still hold after a confirmation delay, and trades only inside
-  the 08:30–09:30 CST window.
-- `ab_signal_options` — takes A/B super-signals (LONG→call, SHORT→put) but
-  does not buy on the signal. It samples the chosen contract's bid and buys
-  only while that bid is holding up, never into a fade.
-
-**Two boards.** A HOT scan ranking the top 100 names by Wilder DMI/ADX
-trend strength, and an options-flow board surfacing unusual activity across
-the large caps. Both are served from background sweeps, so a request returns
-whatever snapshot exists rather than waiting on the venue.
-
-**The signal engines** (`runtime/super_research/`) that feed the A/B
-auto-trader, mirrored into SQLite continuously so the database is the
-durable record.
-
----
-
-## The Bot Station
-
-`/bot-station` is mission control for the **Kalshi** bots — a different
-venue and a different risk model from the Tradier desk, which is why it is
-its own world rather than another panel.
-
-Seven bot families, sixteen selectable engines, every script vendored under
-`runtime/prediction-trade/kalshi/`:
-
-| bot | cadence | versions (default first) |
-| --- | --- | --- |
-| `btc15` | 15m | **v2**, v3, v4, v5 |
-| `btc60` | 60m | **fable5**, burst |
-| `sports` | live match | **main**, v1, v2 |
-| `parley` | live match | **v1** |
-| `gold15` | 15m | **v2**, v1 |
-| `silver15` | 15m | **v2**, v1 |
-| `oil15` | 15m | **v2**, v1 |
-
-Each one is launched as a **subprocess**, not imported: they are long-lived
-scripts with their own event loops, and one bot crashing must not take the
-API with it. `bot_manager` builds the argv, working directory and
-environment per family — the btc15 engines resolve their `.env` and PEM from
-the working directory, btc60 takes `BTC_CUSTOMERS_DIR`/`BTC_CUSTOMER`, and
-the sports family takes the customer name as `argv[1]` — and pins every
-output path into `customers/<user>/`, so two operators never collide on a
-shared file.
-
-Three guards are applied on every launch, whatever the request or the
-operator's shell said:
-
-- `HALT_MACHINE_SHUTDOWN=FALSE` — a bot halt may never power off the host.
-- `DO_NOT_BUY_IF_PORTFOLIO_BELOW=0` and `TARGET_PORTFOLIO_PCT=0` — the
-  Kalshi account is **shared** by every bot, so a floor or profit target on
-  its joint value let one bot's drawdown silently stop the others. Risk is
-  expressed per bot, as a bankroll plus a target on that bankroll.
-- A start refuses outright if a copy of that bot is already running,
-  including one this API never launched. Two bots on one account corrupted a
-  live ledger once. Pass `kill_existing=true` to deliberately take over.
-
-**Paper is the default and paper is enforced.** `mode="paper"` forces
-`DRY_RUN_MODE` / `MAIN_PAPER` / `PARLEY_PAPER` / `BOTGOLD_DRY_RUN` /
-`BOTSILVER_DRY_RUN` to the simulated side, and a paper run is refused if the
-customer's own `.env` contradicts it. `mode="live"` is refused entirely
-while the server is `paper_only`.
-
-The station also carries the **trade ledger**: each bot writes CSVs into
-`customers/<user>/trade_history/`, which are mirrored into SQLite on every
-read (TTL-guarded), reconciled hourly against Kalshi fills and settlements
-for rows the exchange has finished but the bot never closed, and shown as
-the event log, the win record and the portfolio curve.
-
-Smoke-test the whole thing without placing an order:
+### From anywhere
 
 ```bash
-.venv\Scripts\python tools\paper_smoke_bots.py --all-versions
+start.bat --tunnel
 ```
 
-That starts each engine in paper, holds it alive, tails its log, stops it
-and confirms nothing was left behind.
+Publishes the same desk at <https://vidura36.app> over a Cloudflare tunnel.
+The address is permanent -- it is a named tunnel on your own zone rather than
+the random `trycloudflare.com` hostname the quick tunnel used to hand out.
+
+Nothing moves to a server: the tunnel is an inbound path to the process on
+this machine, so when the machine sleeps the address stops answering. Every
+`/api` route refuses without a session, so an unauthenticated visitor reaches
+the sign-in screen and nothing else. Details, and the things worth reading
+before sharing the link, are in [TUNNEL.md](TUNNEL.md).
+
+### First run on a fresh machine
+
+The database starts empty and **nobody can sign in until an operator exists**.
+Creating the first one is a one-time call that refuses to run again once any
+operator is present:
+
+```bash
+.venv\Scripts\python -c "import sys; sys.path.insert(0,'backend'); from app.tenancy import bootstrap; print(bootstrap.create_first_admin(slug='you', password='pick-a-real-one'))"
+```
+
+Then add that operator's venue keys through the API — no files, no restart:
+
+```bash
+curl -X POST http://127.0.0.1:8791/api/v1/tenants/<id>/credentials ^
+  -H "X-API-Key: <your session token>" -H "Content-Type: application/json" ^
+  -d "{\"venue\":\"tradier_sandbox\",\"secret\":{\"token\":\"...\",\"account_id\":\"...\"}}"
+```
 
 ---
 
-## Layout
+## Try it — the demo operator
 
-```
-tradier-bot/
-├── backend/app/          FastAPI application
-│   ├── api/v1/           auth, tradier, bots, kalshi, trades, super,
-│   │                     levels, users, desk36, worlds
-│   ├── core/             config, database, path safety
-│   ├── models/           TradierPosition, BotRun, Trade, User, signals
-│   └── services/         tradier_client, tradier_bot, auto_trade,
-│                         hot_scan, options_flow, quotes, levels,
-│                         super_research, gex, earnings, credentials,
-│                         bot_manager, bot_launcher, bot_registry,
-│                         kalshi_client, ingest, reconcile, trades
-├── frontend/src/sites/   tradier/, desk36/, botstation/  (one per world)
-├── runtime/
-│   ├── super_research/   signal engines + per-ticker research folders
-│   ├── NIFTY_research/   referenced by super_research.config (india)
-│   ├── BANKNIFTY_research/
-│   ├── stock-trade/      levels_watcher.py + its state and crossings CSV
-│   ├── indicators/       commodity_dmi + the BTC signal helpers the bots
-│   │                     and the station's live DMI readout import
-│   └── prediction-trade/ every Kalshi bot script the station launches
-│       ├── kalshi/btc/           btc15 + btc60 engines and their signal pkg
-│       ├── kalshi/sports/        multi-sport + parlay bots, tracked config
-│       ├── kalshi/commodities/   gold15, silver15, oil15
-│       └── sports/               the tennis + baseball models they import
-├── customers/<user>/     per-user credentials  ← SECRETS, gitignored
-├── var/                  app.db + logs
-├── tests/                pytest suite
-└── tools/                setup, start/stop, doctor, the self-contained
-                          audit and the paper smoke test
-```
-
-### Where the money lives
-
-`customers/<username>/` holds one operator's credentials:
-
-| file | contents |
+| | |
 | --- | --- |
-| `.env` | `TRADIER_SANDBOX_*` and `TRADIER_PROD_*` (URI, token, account id), Kalshi keys |
-| `.sam` | login password, plaintext, compared timing-safely |
-| `*.pem` | Kalshi private key |
+| username | `demo` |
+| password | `BankF@t1M` |
 
-Sandbox and production are **separate key names on purpose** — the sandbox
-is a different venue with its own token, so a paper session cannot reach the
-live account by a flag being misread.
+Sign in at <http://127.0.0.1:8791/> and all three worlds open with mock data
+already on the boards: four positions (one venue-protected, one
+monitored-only, one closed at target, one stopped out), eight bot trades
+across four families — three of them deliberately *unclassified*, so the
+ledger shows the real "belongs to neither LIVE nor PAPER" behaviour rather
+than a tidied-up version — and a wellness profile.
 
-Credentials are parsed into a dict and never loaded into `os.environ`, so
-one user's secrets cannot leak into another's subprocess.
+Recreate or reset it at any time:
 
-`customers/` and `.env` are gitignored. Keep it that way.
+```bash
+.venv\Scripts\python tools\seed_demo.py
+```
+
+### Why publishing this password is safe
+
+**The demo operator has no venue credentials.** Not empty ones — none at all.
+So it cannot reach Tradier or Kalshi even if the server is taken out of paper
+mode, because there is nothing to authenticate with. It is also not an admin,
+so it cannot create operators or list anyone's credentials.
+
+What stops it seeing your data is not the password, it is tenant isolation.
+Probed directly, with a position belonging to another operator:
+
+| as demo | result |
+| --- | --- |
+| read another operator's position | `404` |
+| read an id belonging to nobody | `404` — the same answer, so no oracle |
+| close another operator's position | `404` |
+| list positions | its own 4, never the other operator's |
+| `GET /tenants` (admin surface) | `404` — hidden, not merely forbidden |
+| reach a venue | `424` — no credential, cannot trade |
+
+The demo account is the honest test of that claim rather than an exception
+to it.
+
+**One thing to be aware of:** the server binds `0.0.0.0` by default, so with
+a published password anyone on your network can sign in as `demo`. That is
+fine for what `demo` can do — nothing — but set `TBOT_V2_HOST=127.0.0.1` if
+you would rather it were not reachable at all.
 
 ---
 
 ## Signing in
 
-The desk asks for a password before it renders, over the Vidura World hero.
+The desk asks for a password before it renders, and every `/api` call carries
+the session token it returns in an `X-API-Key` header.
 
-The password is **not stored in this project**. It is the operator's own
-`customers/<username>/.sam` — the single-line plaintext file the 38trades
-apps have always used — compared timing-safely, with a fixed one-second
-penalty on every failure and a five-minute lockout after ten. Adding an
-operator is a filesystem operation, not a migration: drop a folder under
-`customers/` with a `.sam` and the broker keys, register the user, done.
-Nothing about the password ever enters the database.
+**The session decides which operator you are.** No request can name one:
+there is no `user_id` parameter, no `?operator=` switch, and no way to ask
+about another operator's data. Asking for a record that is not yours returns
+*not found* rather than *forbidden*, because "forbidden" would confirm the
+record exists.
 
-Login gates the **API**, not just the screen. A successful sign-in returns a
-session token that every `/api` call must carry in `X-API-Key`; without that
-the login would be decorative, since the desk binds `0.0.0.0` and can place
-real orders. Only `/health`, `/docs`, `/auth/status`, `/auth/login` and the
-static UI are reachable without one.
+Sessions live in memory. A restart signs everyone out, which is deliberate:
+a desk that can place real orders should not sit unlocked on a machine nobody
+is at. The cost is retyping a password after a deploy — see
+[safe shutdown](#safe-shutdown) before you restart during market hours.
 
-Sessions live in memory, so **a restart signs everyone out**. That is the
-intended trade: a machine left running overnight cannot be walked up to and
-used. They otherwise last 12 hours (`TBOT_SESSION_TTL_S`).
+Two hours of no keyboard or pointer input also signs you out.
 
-For scripts and cron, which cannot type a password, set `TBOT_API_KEY` and
-send that in the same header instead. To turn the gate off entirely on a
-throwaway localhost session, `TBOT_LOGIN_REQUIRED=false`.
-
-```bash
-curl -s -X POST http://127.0.0.1:8790/api/v1/auth/login -H "Content-Type: application/json" -d "{\"username\":\"sampath\",\"password\":\"...\"}"
-```
-
-## The 0DTE gamma feed
-
-SPY 0DTE dealer gamma comes from getgamma.io, whose option chain the server
-cannot fetch — the vendor blocks it. So the data is **pushed in** by a
-bookmarklet running on the dashboard tab, where the session is already
-authenticated. The server never calls getgamma; that is the design, not a
-workaround.
-
-```bash
-python tools\make_bookmarklet.py
-```
-
-That reads `tools/gex0dte_bookmarklet.js`, injects this machine's port and
-push token, and writes a one-line `javascript:` URL to
-`var/gex0dte_bookmarklet.txt`. Save it as a bookmark, open the getgamma
-dashboard, click once to start (it pushes immediately, then every five
-minutes) and again to stop.
-
-It authenticates with **`TBOT_GEX_PUSH_TOKEN`** — not the login, and not
-`TBOT_API_KEY`. That token opens exactly two paths,
-`POST /super/gex0dte/refresh` and `/heartbeat`, and nothing else. It runs on
-a third-party page belonging to a desk that can place real orders, so the
-worst case for a leaked push token is poisoned gamma data rather than a
-trade. Rotate it by changing the line in `.env`, restarting, and rebuilding.
+---
 
 ## Safety
 
-`paper_only` defaults to **true in code**, which pins every client to
-Tradier's sandbox. A fresh copy of this folder therefore cannot place a real
-order, no matter what else is misconfigured. The sign-in screen states which
-mode it is in before you type anything.
+This desk places real orders. The guarantees below are structural — they are
+constraints and locks, not conventions somebody has to remember.
 
-This machine's `.env` carries `TBOT_PAPER_ONLY=false` — the deliberate live
-unlock carried over from the workstation this was extracted from. Delete
-that line to go back to paper.
+### A duplicate order cannot be expressed
 
-If the API is reachable beyond localhost, set `TBOT_API_KEY` and every
-`/api` request must carry it in the `X-API-Key` header.
+Every money-moving request carries an idempotency key, written to the
+database **before** the venue is called, under a uniqueness constraint. A
+double-tap or a retry after a timeout returns the *first* order rather than
+placing a second. A client that sends no key is still covered: the server
+fingerprints the request and absorbs the repeat.
+
+On top of that, before anything reaches the venue:
+
+- a cross-process lease is taken on the contract, so two workers cannot both
+  proceed (an in-process lock does not span workers, and two have run here);
+- your own open positions are checked, and buying a contract you already hold
+  is refused by name — pass `allow_add` to do it deliberately;
+- the venue is asked whether a working order already exists, because our own
+  records can be wrong;
+- after placing, the venue is re-read: an unexpected second order is
+  cancelled and the position flagged for review.
+
+### Every stop-loss rests at the venue
+
+A take-profit **and** a stop are placed as resting orders. If this process
+dies, both survive. The previous build kept the stop as a threshold watched
+by a Python loop — so a crash left live positions with an armed profit-taker
+and no downside protection, silently.
+
+Belt and braces on top of that:
+
+- the in-process monitor still watches, and now runs its first pass
+  immediately on startup rather than after a delay;
+- if a venue refuses the stop leg, the position is marked
+  `stop_protection: monitored_only` and says so — failing to rest a stop is
+  acceptable, failing *quietly* is not;
+- `/readiness` reports how long ago the risk monitor last completed a sweep,
+  **per operator**, and new entries are refused while it is stale. Opening a
+  position nobody is watching the stop for is worse than not trading.
+
+### Refuse, never clamp
+
+Every risk parameter is validated before the venue is touched, and an invalid
+one is refused with the arithmetic that produced the refusal. Nothing is
+silently adjusted into range: a clamped stop is a stop you did not choose and
+would never be told about.
+
+### Paper is the default
+
+`TBOT_PAPER_ONLY=true` refuses live trading outright rather than downgrading
+it silently. Sandbox is the default venue for every call that does not name
+one, so reaching the real account is always a deliberate act.
+
+---
+
+## Customers
+
+Each operator is a tenant with their own venue credentials. Adding one is
+**three runtime writes** — no file, no migration, no deploy, no restart:
+
+| | |
+| --- | --- |
+| `POST /api/v1/tenants` | the operator |
+| `POST /api/v1/tenants/{id}/credentials` | their venue keys, encrypted |
+| `PUT /api/v1/tenants/{id}/worlds` | which tiles they may open |
+
+Credentials are sealed with **envelope encryption**: a per-record data key,
+itself wrapped by a master key from the environment. Rotating the master key
+re-wraps the small keys and never touches a secret, so a re-key cannot
+corrupt one. Each ciphertext is bound to its owner, so a row copied into
+another operator's record fails to decrypt rather than quietly working.
+
+A credential is never returned by any endpoint — not masked, not partially.
+You can see that one exists and when it changed, and nothing else.
+
+Passwords are **hashed with Argon2id**, not encrypted. A venue key has to be
+reversible because the system presents it to a broker; a password only needs
+comparing, so hashing keeps the master key out of its blast radius entirely.
+
+---
+
+## The Bot Station
+
+`/bot-station` is mission control for the **Kalshi** bots. Seven families,
+sixteen selectable engines, every script vendored under
+`runtime/prediction-trade/kalshi/`:
+
+| bot | cadence | versions (default first) | signal source |
+| --- | --- | --- | --- |
+| `btc15` | 15m | **v2**, v3, v4, v5 | own engine |
+| `btc60` | 60m | **fable5**, burst | own engine |
+| `sports` | live match | **main**, v1, v2 | own engine |
+| `parley` | live match | **v1** | own engine |
+| `gold15` | 15m | **v2**, v1 | GLD via Tradier |
+| `silver15` | 15m | **v2**, v1 | SLV via Tradier |
+| `oil15` | 15m | **v2**, v1 | USO via Tradier |
+
+Each is launched as a **subprocess**, not imported: they are long-lived
+scripts with their own event loops, and one crashing must not take the API
+with it.
+
+### Every field is editable
+
+Per launch, individually or for several bots at once:
+
+| group | fields |
+| --- | --- |
+| Per trade | take-profit %, stop-loss %, contracts |
+| Bankroll | bankroll, halt on bankroll gain %, halt on bankroll loss % |
+| Schedule | trade from, trade until, blackout windows (CST) |
+
+Take-profit and stop-loss are **per model**, not per bot: btc15 v2 and v5 are
+different engines with different risk profiles, so one number would be wrong
+for at least one of them. Values resolve in four layers — bot default, model
+default, shared options, per-bot override.
+
+`POST /api/v1/bots/launch` starts several at once from one place. An unknown
+bot refuses the whole batch before anything starts; a failure after that
+point does not abandon the rest, and the response says exactly which started.
+There is no rollback for an order already placed, so an honest partial beats
+a pretend all-or-nothing.
+
+### Guards on every launch
+
+- **One running instance per (operator, bot).** Two bots on one account
+  corrupted a live ledger once.
+- `HALT_MACHINE_SHUTDOWN=FALSE` — a bot halt may never power off the host.
+- Risk is **per bot**, never account-wide. The Kalshi account is shared, so a
+  floor on its joint value let one bot's drawdown stop the others.
+- The subprocess environment is built from an **allowlist**, so it cannot
+  inherit credentials from the API process. A denylist is only as good as its
+  last update, and the failure there is one operator's bot signing with
+  another operator's key.
+
+### Commodity signals
+
+Inside **08:30–15:00 CST, Monday to Friday**, gold, silver and oil read their
+DMI from Tradier bars on the ETF that tracks each underlying, at 1m / 2m / 5m.
+Kalshi publishes no price series to compute an indicator from, so the ETF
+stands in — and it goes through the *same* indicator the desk uses, so the
+board and the bot agree about what the market is doing.
+
+Tradier serves 1min, 5min and 15min natively; 2min is folded from 1min bars,
+grouped by clock time so a gap in the feed cannot silently shift the buckets.
+
+Outside that window those ETFs are shut, so the futures engine answers
+instead — and **every row says which source produced it**. A gold signal at
+7pm from futures is not the same number as one from a closed ETF.
+
+### Adding a bot
+
+One config entry and one adapter class. It needs no endpoint, no migration,
+no shared-library edit and no change to any dispatch switch — the eight
+operations are keyed by bot, and the launch form renders itself from the
+bot's own declared options. A test proves this by onboarding a throwaway bot
+and asserting no shared module was touched.
 
 ---
 
 ## Configuration
 
-Every field in `backend/app/core/config.py` maps to an environment variable
-named `TBOT_<FIELD_NAME>`; `.env` in this folder is read at startup. See
-`.env.example` for the ones worth knowing about.
+Every setting is a `TBOT_`-prefixed environment variable, or a line in the
+project-root `.env`. See `.env.example` for the full list with dummy values.
 
-**Every default path points inside this folder** — that is the property that
-makes the project relocatable, so prefer moving the folder over overriding
-paths.
+The ones that matter most:
 
-Legacy `VIDURA_*` names are still accepted, so a machine that already ran
-the original app keeps working without edits.
+| variable | what it does |
+| --- | --- |
+| `TBOT_PAPER_ONLY` | `true` refuses live trading outright. Default `true`. |
+| `TBOT_ENCRYPTION_MASTER_KEY` | **required** once customers exist — see below |
+| `TBOT_DATABASE_URL_OVERRIDE` | full SQLAlchemy URL; empty uses `var/app.db` |
+| `TBOT_V2_PORT` / `TBOT_V2_HOST` | where the app listens |
 
-### Relocating
+### The master key
 
-Just move or copy the folder; there is nothing to edit. `user_root_folder`
-is stored per user as an absolute path, and on every boot a user whose
-folder no longer resolves is repointed at the matching folder under this
-project's `customers/`. If no folder of that name exists locally the row is
-left alone and a warning is logged — a wrong path you can see beats a
-silently reassigned credential folder.
+Generate one per environment and never reuse it across environments:
 
-### Ports
+```bash
+python -c "import secrets; print(secrets.token_urlsafe(48))"
+```
 
-8790 serves both the API and the desk. 5199 is the Vite dev server, and only
-exists under `start --dev`; it is 5199 rather than Vite's usual 5173 so this
-can run alongside the project it came from.
+**If this key is lost, every stored customer credential is unrecoverable.**
+There is no recovery path and deliberately no backdoor. Back it up where you
+back up nothing else. Startup fails loudly rather than defaulting it, because
+a generated key would silently make every existing credential unreadable.
 
-`start` refuses to launch when the port is already taken, rather than
-producing a server that fails to bind but keeps running every background
-loop. `stop` only ever signals processes launched from this folder — it
-verifies each recorded pid is still alive *and* still this project's
-process, so a recycled pid or an unrelated `uvicorn app.main:app` elsewhere
-on the machine is never touched.
+---
+
+## Database and migrations
+
+SQLite, with the schema managed by Alembic:
+
+```bash
+.venv\Scripts\alembic upgrade head
+```
+
+The app runs this itself on startup and **refuses to serve** if the schema is
+not current — an application on a half-migrated database answers, and the
+answers are wrong.
+
+`tools/import_profile.py` profiles what would migrate from an older install;
+`tools/import_dry_run.py` imports into a throwaway database and reconciles by
+reading the result back, touching nothing real.
 
 ---
 
 ## Tests
 
 ```bash
-.venv\Scripts\python -m pytest
+.venv\Scripts\python -m pytest tests/rebuild -q
 ```
 
-356 pass, 51 xfail. One is expected to fail:
-`test_gex0dte.py::test_refresh_without_a_payload_tries_the_vendor_and_reports_the_block`
-asserts that getgamma.io blocks a server-side fetch; when the vendor
-answers instead, it fails. It fails identically in the project this was
-extracted from — it is a live-network assertion, not a defect here.
+| suite | what it protects |
+| --- | --- |
+| `test_tenant_isolation.py` | two operators with look-alike data; every read and write path; a guard that fails when a new endpoint has no isolation test |
+| `test_contract.py` | the frozen API surface, and that **no endpoint anywhere can accept a tenant selector** |
+| `test_execution_safety.py` | the seven guards, including a concurrent burst of six buys yielding one position |
+| `test_onboarding.py` | a throwaway bot and a runtime-created customer, performed rather than asserted |
+| `test_sensitive_data.py` | credentials absent from responses, logs, errors and `repr` |
+| `test_stop_loss_durability.py` | both exit legs resting; one filling cancels the other |
+| `test_migration.py` | migrate from empty, rollback, no model drift, one head |
 
-The 51 xfails are all `test_sports_firesell.py`. It guards an unconditional
-6c/98c exit band that the vendored sports bots no longer define — the same
-51 cases fail in the project this came from. The file is kept as the record
-of the rule; delete the `pytestmark` at the top the moment the band is put
-back and it starts guarding again.
+---
 
-Bots are not covered by pytest — a subprocess that authenticates against a
-live exchange is not a unit test. They have their own paper smoke test:
+## Safe shutdown
 
-```bash
-.venv\Scripts\python tools\paper_smoke_bots.py --all-versions
+Before stopping the app or deploying:
+
+1. **Check for open positions.** A restart is a financial event, not just an
+   availability one, if anything is open and only monitored.
+   ```bash
+   .venv\Scripts\python -c "import sqlite3;print(sqlite3.connect('var/app-v2.db').execute(\"select id,occ_symbol,status,stop_protection from position where status in ('pending','open')\").fetchall())"
+   ```
+2. **Check for bot subprocesses.** They are detached, so stopping the API
+   does not stop them.
+   ```powershell
+   Get-CimInstance Win32_Process -Filter "Name like '%python%'" | Where-Object { $_.CommandLine -like '*prediction-trade*' }
+   ```
+3. Positions whose `stop_protection` is `venue_resting` are safe — the venue
+   holds both legs. Anything `monitored_only` loses its stop when the process
+   stops.
+4. Bots do **not** auto-resume on startup. Restarting them is explicit.
+
+---
+
+## Layout
+
 ```
+backend/app/
+  api_v2/          the HTTP edge: routers, and the ONE place a tenant is resolved
+  domains/
+    trading/       market data, execution, risk  (Tradier)
+    botstation/    registry, lifecycle, ledger   (Kalshi)
+  tenancy/         operators, credentials, world access
+  platform/        db, security, migrations — no domain knowledge
+  core/            settings
+backend/migrations/  Alembic
+frontend/src/      the three worlds
+runtime/           vendored signal engines and bot scripts
+customers/<name>/  per-operator credentials (gitignored, never committed)
+var/               database, logs, backups (gitignored)
+docs/rebuild/      the design record for this rebuild
+```
+
+Dependency direction is enforced: `api → domains → tenancy → platform`, and
+the two domains may never import each other.
 
 ---
 
 ## Staying self-contained
 
-The extraction is **finished**. This folder is now the source of truth: the
-`extract_*` / `vendor_*` scripts that pulled code from `vidura-world`,
-`vidura-world-js` and the old bot repo have been retired, because a re-sync
-would now delete the Bot Station rather than update it. Fix things here.
-
-What replaces them is an audit that proves the property those scripts
-existed to establish:
-
 ```bash
 .venv\Scripts\python tools\check_self_contained.py
 ```
 
-It checks three things and fails on any of them:
-
-1. **Settings** — database, customers, runtime, levels, super, var and log
-   directories all resolve inside this folder.
-2. **Launch plans** — for every user × bot × version, the working directory
-   and every path the subprocess is handed (`*_CSV`, `*_DIR`, `*_LOG_PATH`,
-   `*_SECRETS`) land inside this folder. A script being vendored is not
-   enough; a bot handed an outside credential folder is still coupled.
-3. **Sources** — no file, comment or doc names another checkout on this
-   machine.
-
-Portable illustrations (`/home/app/data/app.db`, `C:\Users\you\...`) are
-deliberately not flagged: they document what an override looks like on some
-other host and resolve to nothing here. Add `no-outside-ref-ok` to a line
-that genuinely has to name an outside path.
-
-Run it after any change that touches paths, and alongside:
-
-```bash
-doctor.bat
-```
+It resolves every configured path, every bot script, and the working
+directory and pinned paths for **every operator × bot × version** launch
+combination, then scans every source file and comment for a path naming
+another location on this machine. Exit code 0 means nothing in this project
+points outside it.

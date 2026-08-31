@@ -1,0 +1,11 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+SHORT:vwap_loss+weak_close+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,15,0.25,11,1,3,73.3,91.7,10.99,3.13,0.3,46.7
+SHORT:weak_close+vwap_loss_v+cvd_dn|nk0.0|vm0.8|full_0845_1400,15,0.25,11,1,3,73.3,91.7,10.99,3.13,0.3,46.7
+SHORT:weak_close+vwap_loss_v+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,15,0.25,11,1,3,73.3,91.7,10.99,3.13,0.3,46.7
+SHORT:vwap_loss+below_vwap+weak_close+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,15,0.25,11,1,3,73.3,91.7,10.99,3.13,0.3,46.7
+SHORT:vwap_loss+weak_close+vwap_loss_v+cvd_dn|nk0.0|vm0.8|full_0845_1400,15,0.25,11,1,3,73.3,91.7,10.99,3.13,0.3,46.7
+SHORT:vwap_loss+weak_close+vwap_loss_v+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,15,0.25,11,1,3,73.3,91.7,10.99,3.13,0.3,46.7
+SHORT:vwap_loss+weak_close+cvd_dn+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,15,0.25,11,1,3,73.3,91.7,10.99,3.13,0.3,46.7
+SHORT:below_vwap+weak_close+vwap_loss_v+cvd_dn|nk0.0|vm0.8|full_0845_1400,15,0.25,11,1,3,73.3,91.7,10.99,3.13,0.3,46.7
+SHORT:below_vwap+weak_close+vwap_loss_v+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,15,0.25,11,1,3,73.3,91.7,10.99,3.13,0.3,46.7
+SHORT:weak_close+vwap_loss_v+cvd_dn+cvd_dn_v|nk0.0|vm0.8|full_0845_1400,15,0.25,11,1,3,73.3,91.7,10.99,3.13,0.3,46.7

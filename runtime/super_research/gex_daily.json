@@ -1,0 +1,39 @@
+{
+ "fetched_at": "2026-08-28 14:33:17",
+ "stale": false,
+ "tickers": {
+  "SPY": {
+   "as_of": "2026-08-28T19:33:17.085Z",
+   "price": 769.36,
+   "net_gex": -1316315510,
+   "regime": "negative_gamma",
+   "gamma_flip": 769.76,
+   "call_wall": 770,
+   "put_wall": 765,
+   "gamma_note": "Dealers short gamma \u2014 moves amplified, trend following likely",
+   "atm_iv": 9.94,
+   "pc_ratio_volume": 1.956
+  },
+  "QQQ": {
+   "as_of": "2026-08-28T19:33:17.029Z",
+   "price": 716.49,
+   "net_gex": -611589186,
+   "regime": "negative_gamma",
+   "gamma_flip": 718.36,
+   "call_wall": 720,
+   "put_wall": 700,
+   "gamma_note": "Dealers short gamma \u2014 moves amplified, trend following likely",
+   "atm_iv": 14.86,
+   "pc_ratio_volume": 1.249
+  }
+ },
+ "macro": {
+  "vix": 14.45,
+  "vix_chg_pct": -0.41,
+  "vvix": 86.18,
+  "skew": 144.05,
+  "move": 69.859,
+  "term": "contango",
+  "fear_greed": 54
+ }
+}

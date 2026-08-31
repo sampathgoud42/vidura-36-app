@@ -1,0 +1,140 @@
+{
+ "picked": [
+  {
+   "d": "LONG",
+   "combo": [
+    "vwap_reclaim",
+    "cvd_up"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.8,
+   "vm": 1.2,
+   "s": 66.7,
+   "t": 100.0,
+   "n": 9
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "above_pivot",
+    "mom_ignite_up"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.5,
+   "vm": 1.2,
+   "s": 55.6,
+   "t": 100.0,
+   "n": 9
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "vwap_reclaim",
+    "above_pivot",
+    "macd_x_up"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 75.0,
+   "t": 100.0,
+   "n": 8
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "above_pivot",
+    "hist_turn_up",
+    "rvol_thrust_up"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 62.5,
+   "t": 100.0,
+   "n": 8
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "adi_up",
+    "s1_bounce"
+   ],
+   "w": "mid_1030_1300",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 7
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "adi_up",
+    "s1_bounce",
+    "strong_close"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.8,
+   "vm": 1.2,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 7
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "delta_surge",
+    "orb_break_up_v"
+   ],
+   "w": "am_0845_1130",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "delta_surge",
+    "s1_bounce"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.8,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "orb_break_up",
+    "above_vwap_v",
+    "rsi_thrust_up"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  }
+ ],
+ "union": {
+  "trades": 51,
+  "wins": 39,
+  "stops": 0,
+  "scratch": 12,
+  "win_rate": 76.5,
+  "tp_before_sl": 100.0,
+  "days": 32,
+  "per_day": 0.85,
+  "net_pct": 12.3
+ },
+ "ok": false,
+ "n_days": 60,
+ "bot": "qqq_intraday_bot.py",
+ "target_freq": 10.0
+}

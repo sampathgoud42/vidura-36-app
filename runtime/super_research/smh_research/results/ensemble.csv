@@ -1,0 +1,11 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:above_pivot+macd_x_up_neg|nk0.0|vm1.2|full_0845_1400,13,0.22,11,1,1,84.6,91.7,11.63,3.19,0.3,23.1
+LONG:above_pivot+macd_x_up+macd_x_up_neg|nk0.0|vm1.2|full_0845_1400,13,0.22,11,1,1,84.6,91.7,11.63,3.19,0.3,23.1
+SHORT:below_pivot+weak_close+orb_break_dn_v|nk0.0|vm0.8|full_0845_1400,12,0.2,11,1,0,91.7,91.7,11.0,3.0,0.3,11.2
+SHORT:below_vwap+below_pivot+weak_close+orb_break_dn_v|nk0.0|vm0.8|full_0845_1400,12,0.2,11,1,0,91.7,91.7,11.0,3.0,0.3,11.2
+SHORT:below_pivot+weak_close+orb_break_dn+orb_break_dn_v|nk0.0|vm0.8|full_0845_1400,12,0.2,11,1,0,91.7,91.7,11.0,3.0,0.3,11.2
+LONG:adi_up+above_pivot+macd_x_up_neg|nk0.0|vm1.2|full_0845_1400,12,0.2,10,1,1,83.3,90.9,10.63,2.89,0.3,23.3
+LONG:adi_up+above_pivot+macd_x_up+macd_x_up_neg|nk0.0|vm1.2|full_0845_1400,12,0.2,10,1,1,83.3,90.9,10.63,2.89,0.3,23.3
+LONG:delta_surge+macd_x_up_neg|nk0.8|vm0.8|full_0845_1400,11,0.18,10,1,0,90.9,90.9,10.0,2.7,0.3,7.3
+LONG:vwap_reclaim+adi_up+macd_x_up_neg|nk0.8|vm0.8|full_0845_1400,11,0.18,10,1,0,90.9,90.9,10.0,2.7,0.3,19.5
+LONG:vwap_reclaim+macd_x_up_neg+strong_close|nk0.8|vm0.8|full_0845_1400,11,0.18,10,1,0,90.9,90.9,10.0,2.7,0.3,19.5

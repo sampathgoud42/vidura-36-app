@@ -1,0 +1,113 @@
+{
+ "picked": [
+  {
+   "d": "SHORT",
+   "combo": [
+    "below_pivot",
+    "orb_break_dn"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.0,
+   "vm": 1.2,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "LONG",
+   "combo": [
+    "vwap_reclaim",
+    "hist_turn_up",
+    "cvd_up_v"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "below_pivot",
+    "macd_x_dn",
+    "rsi_thrust_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 6
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "ylow_break",
+    "macd_x_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "delta_dump",
+    "macd_x_dn",
+    "rsi_thrust_dn"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "below_vwap",
+    "macd_x_dn_pos"
+   ],
+   "w": "pm_1130_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  },
+  {
+   "d": "SHORT",
+   "combo": [
+    "macd_x_dn",
+    "orb_break_dn_v"
+   ],
+   "w": "full_0845_1400",
+   "nk": 0.0,
+   "vm": 0.8,
+   "s": 100.0,
+   "t": 100.0,
+   "n": 5
+  }
+ ],
+ "union": {
+  "trades": 21,
+  "wins": 21,
+  "stops": 0,
+  "scratch": 0,
+  "win_rate": 100.0,
+  "tp_before_sl": 100.0,
+  "days": 15,
+  "per_day": 0.35,
+  "net_pct": 6.3
+ },
+ "ok": false,
+ "n_days": 60,
+ "bot": "nvda_intraday_bot.py",
+ "target_freq": 10.0
+}

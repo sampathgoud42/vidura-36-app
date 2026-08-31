@@ -1,0 +1,314 @@
+"""Which bots exist. Configuration, not code.
+
+The old registry was already config-driven and that part was worth keeping.
+What was not: everything around it. Four families each owned a near-identical
+block of nine routes, an env mapper, an arm in a CSV-shape switch, nine client
+wrappers and a UI panel. Adding a bot meant editing six files.
+
+Here a bot is one config entry and one adapter class. Discovery is automatic,
+so there is no registration list to edit and no dispatch switch to extend --
+the two things the onboarding contract forbids by name.
+"""
+
+from __future__ import annotations
+
+import logging
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class BotVersion:
+    version: str
+    rel_script: str          # relative to the vendored runtime root
+    default: bool = False
+    # Per-MODEL overrides. btc15 v2 and v5 are different engines with
+    # different risk profiles, so "take-profit 15%" is not one number shared
+    # across them. A version that says nothing inherits the bot defaults.
+    option_defaults: dict = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class BotConfig:
+    """Everything the shared machinery needs, declared rather than coded."""
+
+    key: str
+    name: str
+    category: str
+    cadence: str | None = None
+    versions: tuple[BotVersion, ...] = ()
+    # How the subprocess is handed its customer folder. The three styles are
+    # the vendored scripts' own conventions, not a design of ours.
+    launch_style: str = "cwd_customer"
+    # The launch form renders itself from this. Without it, a new bot would
+    # still need a hand-written UI panel -- which is the difference between
+    # onboarding costing two files and onboarding costing six.
+    options_schema: dict[str, dict] = field(default_factory=dict)
+    extra: dict = field(default_factory=dict)
+
+    def version_or_default(self, version: str | None) -> BotVersion:
+        if not self.versions:
+            raise KeyError(f"bot '{self.key}' declares no versions")
+        if version is None:
+            for v in self.versions:
+                if v.default:
+                    return v
+            return self.versions[0]
+        for v in self.versions:
+            if v.version == version:
+                return v
+        known = ", ".join(v.version for v in self.versions)
+        raise KeyError(f"unknown version '{version}' for bot '{self.key}' "
+                       f"(known: {known})")
+
+
+class UnknownBot(KeyError):
+    pass
+
+
+_REGISTRY: dict[str, BotConfig] = {}
+_ADAPTERS: dict[str, Any] = {}
+# Which modules a bot's registration reached. The onboarding test asserts this
+# is only the bot's own files -- it is how "touched no shared library" is
+# checked rather than asserted.
+_TOUCHED: dict[str, set[str]] = {}
+
+
+def register(config: BotConfig, adapter: Any) -> None:
+    """Add a bot. This is the whole registration step."""
+    from app.domains.botstation.adapters import is_adapter
+
+    if not is_adapter(adapter):
+        raise TypeError(
+            f"{adapter!r} is not a bot adapter: it needs external_id() and "
+            f"to_trade()")
+    if config.key in _REGISTRY:
+        raise ValueError(f"bot '{config.key}' is already registered")
+
+    _REGISTRY[config.key] = config
+    _ADAPTERS[config.key] = adapter() if isinstance(adapter, type) else adapter
+    _TOUCHED[config.key] = {getattr(adapter, "__module__", "?")}
+    logger.info("bot registered: %s (%s)", config.key, config.name)
+
+
+def unregister(key: str) -> None:
+    _REGISTRY.pop(key, None)
+    _ADAPTERS.pop(key, None)
+    _TOUCHED.pop(key, None)
+
+
+def get(key: str) -> BotConfig:
+    try:
+        return _REGISTRY[key]
+    except KeyError:
+        raise UnknownBot(
+            f"unknown bot '{key}' (known: {', '.join(sorted(_REGISTRY)) or 'none'})"
+        ) from None
+
+
+def adapter_for(key: str) -> Any:
+    get(key)                    # raises UnknownBot with a useful message
+    return _ADAPTERS[key]
+
+
+def all_bots() -> list[BotConfig]:
+    return [_REGISTRY[k] for k in sorted(_REGISTRY)]
+
+
+def modules_touched_by(key: str) -> set[str]:
+    """Which modules this bot's registration reached.
+
+    Used by the onboarding test to prove the plug point does not leak: a bot
+    that reached into shared code is an architecture failure, and this is what
+    makes it visible rather than a matter of opinion.
+    """
+    return set(_TOUCHED.get(key, set()))
+
+
+def script_path(config: BotConfig, version: BotVersion) -> Path:
+    from app.core.config import get_settings
+    return get_settings().source_repo / version.rel_script
+
+
+def report() -> list[dict]:
+    """What GET /bots answers. ``exists`` is checked live, so the API says so
+    honestly when a script has been renamed or is missing."""
+    out = []
+    for config in all_bots():
+        out.append({
+            "key": config.key,
+            "name": config.name,
+            "category": config.category,
+            "cadence": config.cadence,
+            "versions": [
+                {"version": v.version,
+                 "script": str(script_path(config, v)),
+                 "exists": script_path(config, v).is_file(),
+                 "default": v.default}
+                for v in config.versions
+            ],
+        })
+    return out
+
+
+def effective_defaults(config: BotConfig, version: BotVersion | None) -> dict:
+    """Bot defaults, with this model's overrides on top.
+
+    Three layers, resolved in one place: the schema default, then the
+    version's own, then whatever the operator typed. Resolving them anywhere
+    else means two callers disagreeing about which wins.
+    """
+    out = {name: spec["default"] for name, spec in config.options_schema.items()
+           if "default" in spec}
+    if version is not None:
+        out.update({k: v for k, v in version.option_defaults.items()
+                    if k in config.options_schema})
+    return out
+
+
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+
+
+# Fields the desk sends that identify the OPERATOR rather than configure the
+# bot. They are dropped before validation, never honoured: the session decides
+# whose bot this is, and accepting a user_id from the body would be exactly
+# the cross-tenant selector the isolation suite exists to forbid.
+#
+# Dropped rather than rejected because the desk sends user_id on every call it
+# makes. Erroring on it broke every launch from the individual bot form, for a
+# field whose only correct handling is to ignore it.
+IDENTITY_FIELDS = {"user_id", "customer", "tenant_id", "operator"}
+
+# What the desk has always called these, mapped to what the schema calls them.
+# The names diverged when the schema was written and nothing translated
+# between them, so the form posted `bank` at a bot that only knew `bankroll`
+# and the launch was refused with a list of field names the operator never
+# typed.
+LEGACY_ALIASES = {
+    "bank": "bankroll",
+    "target_pct": "bank_tp_pct",
+}
+
+# Options a bot USED to take and no longer does, dropped rather than refused.
+# A saved config, a stale browser tab and the stored options of an earlier run
+# all still carry the old field, and relaunching from any of them is the
+# normal way a bot gets restarted. Failing that launch over a value we would
+# ignore anyway strands the operator with an error naming a field they never
+# typed -- which is the same failure LEGACY_ALIASES exists to prevent, for the
+# case where the field has no successor rather than a renamed one.
+RETIRED_OPTIONS = {
+    # Sizing moved from a contract COUNT to a dollar budget. There is no
+    # honest translation between them: 5 contracts is $4.55 at 91c and $2.00
+    # at 40c, so an alias would silently change what a saved config spends.
+    "parley": {"contracts"},
+}
+
+
+def normalise_options(config: BotConfig, options: dict) -> dict:
+    """Strip identity fields and translate the desk's older field names.
+
+    Applied before validation so a stale browser tab, a saved config in
+    localStorage, or an older client keeps working. An alias only applies when
+    the schema does NOT already declare the incoming name, so a bot that
+    genuinely has its own `bank` field is left alone.
+    """
+    out: dict[str, Any] = {}
+    for name, value in options.items():
+        if name in IDENTITY_FIELDS:
+            continue
+        if name in RETIRED_OPTIONS.get(config.key, ()):
+            logger.info("%s no longer takes %r; ignoring it", config.key, name)
+            continue
+        if name not in config.options_schema and name in LEGACY_ALIASES:
+            name = LEGACY_ALIASES[name]
+        out[name] = value
+    return out
+
+
+def validate_options(config: BotConfig, options: dict,
+                     version: BotVersion | None = None) -> dict:
+    """Check launch options against the bot's OWN declared schema.
+
+    One validator, every bot. The alternative is a hand-written validator per
+    family, which is how four families ended up with four slightly different
+    ideas of what a bankroll is.
+    """
+    options = normalise_options(config, options)
+    cleaned: dict[str, Any] = dict(effective_defaults(config, version))
+    for name, spec in config.options_schema.items():
+        if name not in options or options[name] is None:
+            continue
+        value = options[name]
+        kind = spec.get("type", "string")
+        try:
+            if kind == "number":
+                value = float(value)
+            elif kind == "integer":
+                value = int(value)
+            elif kind == "boolean":
+                value = bool(value)
+            elif kind == "json":
+                # A structured option: a list of sports, a per-sport settings
+                # object. Declared as its own kind rather than smuggled
+                # through as a string, because the launcher has to know to
+                # serialise it -- str(dict) produces Python repr with single
+                # quotes, which no engine on the other side can parse.
+                if not isinstance(value, (dict, list)):
+                    raise ValueError(
+                        f"{name} must be a list or object, got "
+                        f"{type(value).__name__}")
+            else:
+                value = str(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"{name} must be a {kind}") from None
+
+        if kind in ("number", "integer"):
+            if "min" in spec and value < spec["min"]:
+                raise ValueError(f"{name} must be at least {spec['min']}, got {value:g}")
+            if "max" in spec and value > spec["max"]:
+                raise ValueError(f"{name} must be at most {spec['max']}, got {value:g}")
+
+        # A time field that is empty means NO curfew, which for the sports and
+        # BTC families is the normal case. Only a non-empty value has to be a
+        # time, and a malformed one is refused rather than silently ignored --
+        # a bot that quietly trades around the clock because "9am" did not
+        # parse is the worst version of this.
+        if spec.get("format") == "HH:MM" and value:
+            if not _HHMM.match(str(value)):
+                raise ValueError(
+                    f"{name} must be HH:MM in 24-hour CST, got {value!r}")
+
+        cleaned[name] = value
+
+    # Both ends or neither: half a window is ambiguous, and guessing which
+    # half the operator meant is how a bot ends up trading at 3am.
+    start, end = cleaned.get("time_start"), cleaned.get("time_end")
+    if bool(start) != bool(end):
+        raise ValueError(
+            "time_start and time_end must be given together, or both left "
+            "empty for no curfew")
+    if start and end and start >= end:
+        raise ValueError(
+            f"time_start {start} is not before time_end {end}")
+
+    unknown = set(options) - set(config.options_schema)
+    if unknown:
+        raise ValueError(
+            f"{config.key} does not accept: {', '.join(sorted(unknown))}. "
+            f"It takes: {', '.join(sorted(config.options_schema))}")
+    return cleaned
+
+
+def load_builtin_bots() -> None:
+    """Register the bots that ship with this project.
+
+    Kept in its own function rather than run at import so tests start from an
+    empty registry and a throwaway bot is the only thing in it.
+    """
+    from app.domains.botstation import builtin
+
+    builtin.register_all()

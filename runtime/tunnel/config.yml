@@ -1,0 +1,24 @@
+# Cloudflare tunnel: vidura36.app -> the desk on this machine.
+#
+# Inside the project folder rather than in %USERPROFILE%\.cloudflared, because
+# everything this app needs lives in one directory. A tunnel config in a home
+# directory is a reference outside the folder: it survives a delete of the
+# project, it is invisible to anyone reading the repo, and moving the project
+# to another machine silently leaves it behind.
+#
+# Nothing is hosted elsewhere. The tunnel is an inbound path to THIS process;
+# when this machine sleeps, the address stops answering.
+tunnel: tradier-bot
+credentials-file: D:\_projects\vidura-36-app\runtime\tunnel\35259d49-536c-4565-a9a1-80a5c5122cbe.json
+
+ingress:
+  # The desk and its API are one origin: the API serves the built frontend, so
+  # a single hostname covers both and there is no cross-origin story to get
+  # wrong.
+  - hostname: vidura36.app
+    service: http://127.0.0.1:8791
+  - hostname: www.vidura36.app
+    service: http://127.0.0.1:8791
+  # Anything else reaching this tunnel is not for us. 404 rather than a
+  # default backend, so a stray hostname cannot quietly land on the desk.
+  - service: http_status:404

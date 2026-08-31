@@ -1,0 +1,6 @@
+config,trades,trades_per_day,wins,stops,scratch,win_rate,tp_before_sl,profit_factor,net_pct,max_drawdown_pct,avg_hold_min
+LONG:above_vwap+above_pivot+macd_x_up_neg|nk0.8|vm0.8|full_0845_1400,10,0.17,10,0,0,100.0,100.0,inf,3.0,0.0,24.0
+LONG:yhigh_break+hist_turn_up|nk0.0|vm1.2|full_0845_1400,6,0.1,5,0,1,83.3,100.0,inf,1.7,0.0,15.0
+LONG:macd_x_up_neg+hist_turn_up|nk0.0|vm0.8|full_0845_1400,7,0.12,7,0,0,100.0,100.0,inf,2.1,0.0,15.7
+LONG:orb_break_up_v+mom_ignite_up|nk0.0|vm0.8|full_0845_1400,5,0.08,5,0,0,100.0,100.0,inf,1.5,0.0,19.0
+LONG:macd_x_up_neg+strong_close|nk0.8|vm1.2|pm_1130_1400,6,0.1,6,0,0,100.0,100.0,inf,1.8,0.0,23.3
