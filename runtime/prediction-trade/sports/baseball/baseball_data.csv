@@ -1,69 +1,4 @@
 date_time,match,team1,team2,team1_pct,team2_pct
-2026-07-26 16:15,Cleveland Guardians vs Tampa Bay Rays,Cleveland Guardians,Tampa Bay Rays,44.6,55.4
-2026-07-26 17:35,Arizona Diamondbacks vs Washington Nationals,Arizona Diamondbacks,Washington Nationals,54.6,45.4
-2026-07-26 17:35,Toronto Blue Jays vs Boston Red Sox,Toronto Blue Jays,Boston Red Sox,40.6,59.4
-2026-07-26 17:35,Chicago Cubs vs Pittsburgh Pirates,Chicago Cubs,Pittsburgh Pirates,51.4,48.6
-2026-07-26 17:35,Atlanta Braves vs Baltimore Orioles,Atlanta Braves,Baltimore Orioles,48.1,51.9
-2026-07-26 17:40,Kansas City Royals vs Detroit Tigers,Kansas City Royals,Detroit Tigers,41.7,58.3
-2026-07-26 17:40,San Diego Padres vs Miami Marlins,San Diego Padres,Miami Marlins,50.9,49.1
-2026-07-26 17:40,Los Angeles Dodgers vs New York Mets,Los Angeles Dodgers,New York Mets,59.4,40.6
-2026-07-26 18:10,Houston Astros vs Chicago White Sox,Houston Astros,Chicago White Sox,53.8,46.2
-2026-07-26 18:10,Oakland Athletics vs Minnesota Twins,Oakland Athletics,Minnesota Twins,43.2,56.8
-2026-07-26 18:10,Colorado Rockies vs Milwaukee Brewers,Colorado Rockies,Milwaukee Brewers,25.8,74.2
-2026-07-26 18:15,Cincinnati Reds vs St. Louis Cardinals,Cincinnati Reds,St. Louis Cardinals,46.1,53.9
-2026-07-26 18:35,Seattle Mariners vs Texas Rangers,Seattle Mariners,Texas Rangers,48.4,51.6
-2026-07-26 20:05,Los Angeles Angels vs San Francisco Giants,Los Angeles Angels,San Francisco Giants,42.1,57.9
-2026-07-26 23:20,New York Yankees vs Philadelphia Phillies,New York Yankees,Philadelphia Phillies,48.1,51.9
-2026-07-27 01:38,Houston Astros vs Los Angeles Angels,Houston Astros,Los Angeles Angels,53.8,46.2
-2026-07-27 01:40,Boston Red Sox vs Oakland Athletics,Boston Red Sox,Oakland Athletics,55.8,44.2
-2026-07-27 01:45,Milwaukee Brewers vs San Francisco Giants,Milwaukee Brewers,San Francisco Giants,58.3,41.7
-2026-07-27 18:35,Seattle Mariners vs Texas Rangers,Seattle Mariners,Texas Rangers,47.5,52.5
-2026-07-27 22:40,Arizona Diamondbacks vs Pittsburgh Pirates,Arizona Diamondbacks,Pittsburgh Pirates,48.4,51.6
-2026-07-27 22:40,Philadelphia Phillies vs Miami Marlins,Philadelphia Phillies,Miami Marlins,56.2,43.8
-2026-07-27 22:40,Baltimore Orioles vs Detroit Tigers,Baltimore Orioles,Detroit Tigers,45.7,54.3
-2026-07-27 22:45,Toronto Blue Jays vs Washington Nationals,Toronto Blue Jays,Washington Nationals,46.1,53.9
-2026-07-27 23:10,Atlanta Braves vs New York Mets,Atlanta Braves,New York Mets,52.4,47.6
-2026-07-27 23:40,New York Yankees vs Chicago White Sox,New York Yankees,Chicago White Sox,59.5,40.5
-2026-07-27 23:45,Chicago Cubs vs St. Louis Cardinals,Chicago Cubs,St. Louis Cardinals,52.0,48.0
-2026-07-28 01:38,Houston Astros vs Los Angeles Angels,Houston Astros,Los Angeles Angels,55.5,44.5
-2026-07-28 01:40,Boston Red Sox vs Oakland Athletics,Boston Red Sox,Oakland Athletics,56.5,43.5
-2026-07-28 01:40,Colorado Rockies vs San Diego Padres,Colorado Rockies,San Diego Padres,32.8,67.2
-2026-07-28 01:45,Milwaukee Brewers vs San Francisco Giants,Milwaukee Brewers,San Francisco Giants,58.6,41.4
-2026-07-28 02:10,Seattle Mariners vs Los Angeles Dodgers,Seattle Mariners,Los Angeles Dodgers,38.5,61.5
-2026-07-28 22:40,Philadelphia Phillies vs Miami Marlins,Philadelphia Phillies,Miami Marlins,50.4,49.6
-2026-07-28 22:40,Baltimore Orioles vs Detroit Tigers,Baltimore Orioles,Detroit Tigers,44.5,55.5
-2026-07-28 22:40,Texas Rangers vs Tampa Bay Rays,Texas Rangers,Tampa Bay Rays,40.9,59.1
-2026-07-28 22:40,Arizona Diamondbacks vs Pittsburgh Pirates,Arizona Diamondbacks,Pittsburgh Pirates,47.6,52.4
-2026-07-28 22:45,Toronto Blue Jays vs Washington Nationals,Toronto Blue Jays,Washington Nationals,48.1,51.9
-2026-07-28 23:10,Cleveland Guardians vs Cincinnati Reds,Cleveland Guardians,Cincinnati Reds,47.3,52.7
-2026-07-28 23:40,Kansas City Royals vs Minnesota Twins,Kansas City Royals,Minnesota Twins,43.8,56.2
-2026-07-28 23:40,New York Yankees vs Chicago White Sox,New York Yankees,Chicago White Sox,58.0,42.0
-2026-07-28 23:45,Chicago Cubs vs St. Louis Cardinals,Chicago Cubs,St. Louis Cardinals,52.6,47.4
-2026-07-29 01:38,Houston Astros vs Los Angeles Angels,Houston Astros,Los Angeles Angels,57.5,42.5
-2026-07-29 01:40,Boston Red Sox vs Oakland Athletics,Boston Red Sox,Oakland Athletics,55.4,44.6
-2026-07-29 02:10,Seattle Mariners vs Los Angeles Dodgers,Seattle Mariners,Los Angeles Dodgers,42.0,58.0
-2026-07-29 16:10,Philadelphia Phillies vs Miami Marlins,Philadelphia Phillies,Miami Marlins,55.2,44.8
-2026-07-29 16:35,Arizona Diamondbacks vs Pittsburgh Pirates,Arizona Diamondbacks,Pittsburgh Pirates,48.0,52.0
-2026-07-29 17:05,Toronto Blue Jays vs Washington Nationals,Toronto Blue Jays,Washington Nationals,50.3,49.7
-2026-07-29 17:10,Baltimore Orioles vs Detroit Tigers,Baltimore Orioles,Detroit Tigers,45.7,54.3
-2026-07-29 19:45,Milwaukee Brewers vs San Francisco Giants,Milwaukee Brewers,San Francisco Giants,54.1,45.9
-2026-07-29 20:10,Colorado Rockies vs San Diego Padres,Colorado Rockies,San Diego Padres,35.6,64.4
-2026-07-29 22:40,Texas Rangers vs Tampa Bay Rays,Texas Rangers,Tampa Bay Rays,43.9,56.1
-2026-07-29 23:10,Atlanta Braves vs New York Mets,Atlanta Braves,New York Mets,52.4,47.6
-2026-07-29 23:10,Cleveland Guardians vs Cincinnati Reds,Cleveland Guardians,Cincinnati Reds,50.3,49.7
-2026-07-29 23:40,New York Yankees vs Chicago White Sox,New York Yankees,Chicago White Sox,60.0,40.0
-2026-07-29 23:40,Kansas City Royals vs Minnesota Twins,Kansas City Royals,Minnesota Twins,42.6,57.4
-2026-07-29 23:45,Chicago Cubs vs St. Louis Cardinals,Chicago Cubs,St. Louis Cardinals,54.1,45.9
-2026-07-30 01:40,Boston Red Sox vs Oakland Athletics,Boston Red Sox,Oakland Athletics,55.9,44.1
-2026-07-30 01:40,San Francisco Giants vs San Diego Padres,San Francisco Giants,San Diego Padres,42.1,57.9
-2026-07-30 02:10,Seattle Mariners vs Los Angeles Dodgers,Seattle Mariners,Los Angeles Dodgers,40.6,59.4
-2026-07-30 16:10,Texas Rangers vs Tampa Bay Rays,Texas Rangers,Tampa Bay Rays,43.3,56.7
-2026-07-30 17:40,Kansas City Royals vs Minnesota Twins,Kansas City Royals,Minnesota Twins,45.0,55.0
-2026-07-30 18:10,New York Yankees vs Chicago White Sox,New York Yankees,Chicago White Sox,54.2,45.8
-2026-07-30 18:15,Chicago Cubs vs St. Louis Cardinals,Chicago Cubs,St. Louis Cardinals,52.6,47.4
-2026-07-30 23:10,Pittsburgh Pirates vs Cincinnati Reds,Pittsburgh Pirates,Cincinnati Reds,48.7,51.3
-2026-07-30 23:10,Miami Marlins vs New York Mets,Miami Marlins,New York Mets,46.8,53.2
-2026-07-30 23:15,Washington Nationals vs Atlanta Braves,Washington Nationals,Atlanta Braves,40.9,59.1
 2026-07-31 00:15,Texas Rangers vs Houston Astros,Texas Rangers,Houston Astros,44.6,55.4
 2026-07-31 00:40,Kansas City Royals vs Colorado Rockies,Kansas City Royals,Colorado Rockies,55.3,44.7
 2026-07-31 01:38,Milwaukee Brewers vs Los Angeles Angels,Milwaukee Brewers,Los Angeles Angels,64.2,35.8
@@ -72,11 +7,11 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-07-31 02:10,Boston Red Sox vs Los Angeles Dodgers,Boston Red Sox,Los Angeles Dodgers,43.9,56.1
 2026-07-31 02:10,Minnesota Twins vs Seattle Mariners,Minnesota Twins,Seattle Mariners,40.7,59.3
 2026-07-31 18:20,New York Yankees vs Chicago Cubs,New York Yankees,Chicago Cubs,45.7,54.3
-2026-07-31 22:10,Pittsburgh Pirates vs Cincinnati Reds,Pittsburgh Pirates,Cincinnati Reds,46.1,53.9
+2026-07-31 22:10,Pittsburgh Pirates vs Cincinnati Reds,Pittsburgh Pirates,Cincinnati Reds,46.2,53.8
 2026-07-31 23:05,Philadelphia Phillies vs Baltimore Orioles,Philadelphia Phillies,Baltimore Orioles,45.8,54.2
 2026-07-31 23:07,St. Louis Cardinals vs Toronto Blue Jays,St. Louis Cardinals,Toronto Blue Jays,43.9,56.1
-2026-07-31 23:10,Miami Marlins vs New York Mets,Miami Marlins,New York Mets,48.1,51.9
 2026-07-31 23:10,Chicago White Sox vs Tampa Bay Rays,Chicago White Sox,Tampa Bay Rays,38.0,62.0
+2026-07-31 23:10,Miami Marlins vs New York Mets,Miami Marlins,New York Mets,48.2,51.8
 2026-07-31 23:10,Arizona Diamondbacks vs Cleveland Guardians,Arizona Diamondbacks,Cleveland Guardians,45.0,55.0
 2026-07-31 23:15,Washington Nationals vs Atlanta Braves,Washington Nationals,Atlanta Braves,43.4,56.6
 2026-08-01 00:10,Kansas City Royals vs Colorado Rockies,Kansas City Royals,Colorado Rockies,54.3,45.7
@@ -85,22 +20,22 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-01 01:38,Milwaukee Brewers vs Los Angeles Angels,Milwaukee Brewers,Los Angeles Angels,62.8,37.2
 2026-08-01 01:40,Detroit Tigers vs Oakland Athletics,Detroit Tigers,Oakland Athletics,53.2,46.8
 2026-08-01 19:07,St. Louis Cardinals vs Toronto Blue Jays,St. Louis Cardinals,Toronto Blue Jays,45.7,54.3
-2026-08-01 20:10,Minnesota Twins vs Seattle Mariners,Minnesota Twins,Seattle Mariners,42.5,57.5
-2026-08-01 20:10,Chicago White Sox vs Tampa Bay Rays,Chicago White Sox,Tampa Bay Rays,37.7,62.3
 2026-08-01 20:10,Miami Marlins vs New York Mets,Miami Marlins,New York Mets,44.6,55.4
-2026-08-01 22:40,Pittsburgh Pirates vs Cincinnati Reds,Pittsburgh Pirates,Cincinnati Reds,44.7,55.3
+2026-08-01 20:10,Minnesota Twins vs Seattle Mariners,Minnesota Twins,Seattle Mariners,42.4,57.6
+2026-08-01 20:10,Chicago White Sox vs Tampa Bay Rays,Chicago White Sox,Tampa Bay Rays,37.7,62.3
+2026-08-01 22:40,Pittsburgh Pirates vs Cincinnati Reds,Pittsburgh Pirates,Cincinnati Reds,44.8,55.2
 2026-08-01 23:05,Philadelphia Phillies vs Baltimore Orioles,Philadelphia Phillies,Baltimore Orioles,48.7,51.3
 2026-08-01 23:10,Texas Rangers vs Houston Astros,Texas Rangers,Houston Astros,45.6,54.4
-2026-08-01 23:15,Arizona Diamondbacks vs Cleveland Guardians,Arizona Diamondbacks,Cleveland Guardians,45.4,54.6
 2026-08-01 23:15,New York Yankees vs Chicago Cubs,New York Yankees,Chicago Cubs,50.4,49.6
+2026-08-01 23:15,Arizona Diamondbacks vs Cleveland Guardians,Arizona Diamondbacks,Cleveland Guardians,45.4,54.6
 2026-08-01 23:15,Washington Nationals vs Atlanta Braves,Washington Nationals,Atlanta Braves,37.4,62.6
 2026-08-02 17:35,Philadelphia Phillies vs Baltimore Orioles,Philadelphia Phillies,Baltimore Orioles,50.6,49.4
 2026-08-02 17:35,Washington Nationals vs Atlanta Braves,Washington Nationals,Atlanta Braves,39.7,60.3
 2026-08-02 17:37,St. Louis Cardinals vs Toronto Blue Jays,St. Louis Cardinals,Toronto Blue Jays,45.4,54.6
+2026-08-02 17:40,Miami Marlins vs New York Mets,Miami Marlins,New York Mets,50.1,49.9
 2026-08-02 17:40,Pittsburgh Pirates vs Cincinnati Reds,Pittsburgh Pirates,Cincinnati Reds,43.6,56.4
 2026-08-02 17:40,Chicago White Sox vs Tampa Bay Rays,Chicago White Sox,Tampa Bay Rays,38.8,61.2
-2026-08-02 17:40,Miami Marlins vs New York Mets,Miami Marlins,New York Mets,50.1,49.9
-2026-08-02 17:40,Arizona Diamondbacks vs Cleveland Guardians,Arizona Diamondbacks,Cleveland Guardians,46.5,53.5
+2026-08-02 17:40,Arizona Diamondbacks vs Cleveland Guardians,Arizona Diamondbacks,Cleveland Guardians,46.4,53.6
 2026-08-02 18:10,Texas Rangers vs Houston Astros,Texas Rangers,Houston Astros,41.7,58.3
 2026-08-02 18:20,New York Yankees vs Chicago Cubs,New York Yankees,Chicago Cubs,48.0,52.0
 2026-08-02 19:10,Kansas City Royals vs Colorado Rockies,Kansas City Royals,Colorado Rockies,53.2,46.8
@@ -109,16 +44,16 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-02 20:10,San Francisco Giants vs San Diego Padres,San Francisco Giants,San Diego Padres,39.7,60.3
 2026-08-02 20:10,Minnesota Twins vs Seattle Mariners,Minnesota Twins,Seattle Mariners,44.4,55.6
 2026-08-02 23:20,Boston Red Sox vs Los Angeles Dodgers,Boston Red Sox,Los Angeles Dodgers,46.2,53.8
-2026-08-03 00:05,Los Angeles Dodgers vs Chicago Cubs,Los Angeles Dodgers,Chicago Cubs,49.8,50.2
+2026-08-03 00:05,Los Angeles Dodgers vs Chicago Cubs,Los Angeles Dodgers,Chicago Cubs,49.9,50.1
 2026-08-03 00:05,San Francisco Giants vs Texas Rangers,San Francisco Giants,Texas Rangers,47.2,52.8
 2026-08-03 00:10,Toronto Blue Jays vs Houston Astros,Toronto Blue Jays,Houston Astros,44.1,55.9
 2026-08-03 00:40,Tampa Bay Rays vs Colorado Rockies,Tampa Bay Rays,Colorado Rockies,59.0,41.0
-2026-08-03 01:40,San Diego Padres vs Arizona Diamondbacks,San Diego Padres,Arizona Diamondbacks,47.6,52.4
+2026-08-03 01:40,San Diego Padres vs Arizona Diamondbacks,San Diego Padres,Arizona Diamondbacks,47.5,52.5
 2026-08-03 22:40,Washington Nationals vs Philadelphia Phillies,Washington Nationals,Philadelphia Phillies,40.5,59.5
 2026-08-03 23:05,St. Louis Cardinals vs New York Yankees,St. Louis Cardinals,New York Yankees,37.5,62.5
 2026-08-03 23:40,Pittsburgh Pirates vs Milwaukee Brewers,Pittsburgh Pirates,Milwaukee Brewers,36.7,63.3
 2026-08-04 00:05,Los Angeles Dodgers vs Chicago Cubs,Los Angeles Dodgers,Chicago Cubs,50.5,49.5
-2026-08-04 00:05,San Francisco Giants vs Texas Rangers,San Francisco Giants,Texas Rangers,44.3,55.7
+2026-08-04 00:05,San Francisco Giants vs Texas Rangers,San Francisco Giants,Texas Rangers,44.2,55.8
 2026-08-04 00:10,Toronto Blue Jays vs Houston Astros,Toronto Blue Jays,Houston Astros,45.1,54.9
 2026-08-04 00:40,Tampa Bay Rays vs Colorado Rockies,Tampa Bay Rays,Colorado Rockies,56.4,43.6
 2026-08-04 01:40,Detroit Tigers vs Seattle Mariners,Detroit Tigers,Seattle Mariners,47.7,52.3
@@ -130,13 +65,13 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-04 23:05,St. Louis Cardinals vs New York Yankees,St. Louis Cardinals,New York Yankees,40.4,59.6
 2026-08-04 23:10,Chicago White Sox vs Boston Red Sox,Chicago White Sox,Boston Red Sox,37.4,62.6
 2026-08-04 23:15,Miami Marlins vs Atlanta Braves,Miami Marlins,Atlanta Braves,40.3,59.7
-2026-08-04 23:40,Minnesota Twins vs Kansas City Royals,Minnesota Twins,Kansas City Royals,48.1,51.9
 2026-08-04 23:40,Pittsburgh Pirates vs Milwaukee Brewers,Pittsburgh Pirates,Milwaukee Brewers,37.3,62.7
-2026-08-05 01:40,San Diego Padres vs Arizona Diamondbacks,San Diego Padres,Arizona Diamondbacks,51.2,48.8
+2026-08-04 23:40,Minnesota Twins vs Kansas City Royals,Minnesota Twins,Kansas City Royals,48.1,51.9
 2026-08-05 01:40,Detroit Tigers vs Seattle Mariners,Detroit Tigers,Seattle Mariners,47.5,52.5
+2026-08-05 01:40,San Diego Padres vs Arizona Diamondbacks,San Diego Padres,Arizona Diamondbacks,51.2,48.8
 2026-08-05 18:10,Toronto Blue Jays vs Houston Astros,Toronto Blue Jays,Houston Astros,41.6,58.4
 2026-08-05 18:20,Los Angeles Dodgers vs Chicago Cubs,Los Angeles Dodgers,Chicago Cubs,47.1,52.9
-2026-08-05 18:35,San Francisco Giants vs Texas Rangers,San Francisco Giants,Texas Rangers,40.9,59.1
+2026-08-05 18:35,San Francisco Giants vs Texas Rangers,San Francisco Giants,Texas Rangers,41.0,59.0
 2026-08-05 19:10,Tampa Bay Rays vs Colorado Rockies,Tampa Bay Rays,Colorado Rockies,59.2,40.8
 2026-08-05 22:35,Los Angeles Angels vs Baltimore Orioles,Los Angeles Angels,Baltimore Orioles,37.4,62.6
 2026-08-05 22:40,Washington Nationals vs Philadelphia Phillies,Washington Nationals,Philadelphia Phillies,39.6,60.4
@@ -145,12 +80,12 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-05 23:05,St. Louis Cardinals vs New York Yankees,St. Louis Cardinals,New York Yankees,41.4,58.6
 2026-08-05 23:10,Chicago White Sox vs Boston Red Sox,Chicago White Sox,Boston Red Sox,38.0,62.0
 2026-08-05 23:15,Miami Marlins vs Atlanta Braves,Miami Marlins,Atlanta Braves,44.2,55.8
-2026-08-05 23:40,Minnesota Twins vs Kansas City Royals,Minnesota Twins,Kansas City Royals,46.8,53.2
+2026-08-05 23:40,Minnesota Twins vs Kansas City Royals,Minnesota Twins,Kansas City Royals,46.9,53.1
 2026-08-05 23:40,Pittsburgh Pirates vs Milwaukee Brewers,Pittsburgh Pirates,Milwaukee Brewers,36.6,63.4
 2026-08-06 01:40,San Diego Padres vs Arizona Diamondbacks,San Diego Padres,Arizona Diamondbacks,45.9,54.1
 2026-08-06 16:35,Los Angeles Angels vs Baltimore Orioles,Los Angeles Angels,Baltimore Orioles,35.6,64.4
-2026-08-06 16:40,Oakland Athletics vs Cincinnati Reds,Oakland Athletics,Cincinnati Reds,38.7,61.3
-2026-08-06 17:10,New York Mets vs Cleveland Guardians,New York Mets,Cleveland Guardians,43.6,56.4
+2026-08-06 16:40,Oakland Athletics vs Cincinnati Reds,Oakland Athletics,Cincinnati Reds,38.8,61.2
+2026-08-06 17:10,New York Mets vs Cleveland Guardians,New York Mets,Cleveland Guardians,43.5,56.5
 2026-08-06 18:10,Pittsburgh Pirates vs Milwaukee Brewers,Pittsburgh Pirates,Milwaukee Brewers,36.1,63.9
 2026-08-06 18:20,Toronto Blue Jays vs Chicago Cubs,Toronto Blue Jays,Chicago Cubs,41.1,58.9
 2026-08-06 20:10,Detroit Tigers vs Seattle Mariners,Detroit Tigers,Seattle Mariners,44.9,55.1
@@ -161,19 +96,19 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-07 00:10,Chicago Cubs vs Kansas City Royals,Chicago Cubs,Kansas City Royals,54.7,45.3
 2026-08-07 00:15,Colorado Rockies vs St. Louis Cardinals,Colorado Rockies,St. Louis Cardinals,34.9,65.1
 2026-08-07 00:15,Baltimore Orioles vs Texas Rangers,Baltimore Orioles,Texas Rangers,47.3,52.7
-2026-08-07 01:40,Los Angeles Dodgers vs Arizona Diamondbacks,Los Angeles Dodgers,Arizona Diamondbacks,51.5,48.5
 2026-08-07 01:40,Houston Astros vs San Diego Padres,Houston Astros,San Diego Padres,44.0,56.0
-2026-08-07 01:45,Tampa Bay Rays vs Seattle Mariners,Tampa Bay Rays,Seattle Mariners,48.6,51.4
-2026-08-07 02:15,Detroit Tigers vs San Francisco Giants,Detroit Tigers,San Francisco Giants,52.3,47.7
+2026-08-07 01:40,Los Angeles Dodgers vs Arizona Diamondbacks,Los Angeles Dodgers,Arizona Diamondbacks,51.6,48.4
+2026-08-07 01:45,Tampa Bay Rays vs Seattle Mariners,Tampa Bay Rays,Seattle Mariners,48.7,51.3
+2026-08-07 02:15,Detroit Tigers vs San Francisco Giants,Detroit Tigers,San Francisco Giants,52.4,47.6
 2026-08-07 22:40,New York Mets vs Pittsburgh Pirates,New York Mets,Pittsburgh Pirates,47.9,52.1
 2026-08-07 22:40,Toronto Blue Jays vs Philadelphia Phillies,Toronto Blue Jays,Philadelphia Phillies,40.6,59.4
 2026-08-07 22:45,Cincinnati Reds vs Washington Nationals,Cincinnati Reds,Washington Nationals,49.6,50.4
-2026-08-07 23:05,Atlanta Braves vs New York Yankees,Atlanta Braves,New York Yankees,44.9,55.1
+2026-08-07 23:05,Atlanta Braves vs New York Yankees,Atlanta Braves,New York Yankees,44.8,55.2
+2026-08-07 23:10,Oakland Athletics vs Boston Red Sox,Oakland Athletics,Boston Red Sox,33.7,66.3
 2026-08-07 23:10,Los Angeles Angels vs Miami Marlins,Los Angeles Angels,Miami Marlins,40.3,59.7
-2026-08-07 23:10,Oakland Athletics vs Boston Red Sox,Oakland Athletics,Boston Red Sox,33.6,66.4
 2026-08-07 23:40,Cleveland Guardians vs Chicago White Sox,Cleveland Guardians,Chicago White Sox,53.7,46.3
 2026-08-07 23:40,Minnesota Twins vs Milwaukee Brewers,Minnesota Twins,Milwaukee Brewers,34.3,65.7
-2026-08-08 00:10,Los Angeles Dodgers vs Arizona Diamondbacks,Los Angeles Dodgers,Arizona Diamondbacks,51.9,48.1
+2026-08-08 00:10,Los Angeles Dodgers vs Arizona Diamondbacks,Los Angeles Dodgers,Arizona Diamondbacks,52.0,48.0
 2026-08-08 01:50,Tampa Bay Rays vs Seattle Mariners,Tampa Bay Rays,Seattle Mariners,49.0,51.0
 2026-08-08 19:05,Atlanta Braves vs New York Yankees,Atlanta Braves,New York Yankees,46.5,53.5
 2026-08-08 20:10,Oakland Athletics vs Boston Red Sox,Oakland Athletics,Boston Red Sox,33.3,66.7
@@ -185,18 +120,18 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-08 23:10,Minnesota Twins vs Milwaukee Brewers,Minnesota Twins,Milwaukee Brewers,37.5,62.5
 2026-08-08 23:15,Colorado Rockies vs St. Louis Cardinals,Colorado Rockies,St. Louis Cardinals,36.7,63.3
 2026-08-08 23:15,Detroit Tigers vs San Francisco Giants,Detroit Tigers,San Francisco Giants,48.9,51.1
+2026-08-08 23:15,Houston Astros vs San Diego Padres,Houston Astros,San Diego Padres,46.5,53.5
 2026-08-08 23:15,Cleveland Guardians vs Chicago White Sox,Cleveland Guardians,Chicago White Sox,52.3,47.7
 2026-08-08 23:15,Baltimore Orioles vs Texas Rangers,Baltimore Orioles,Texas Rangers,45.2,54.8
-2026-08-08 23:15,Houston Astros vs San Diego Padres,Houston Astros,San Diego Padres,46.5,53.5
 2026-08-09 00:20,Houston Astros vs San Diego Padres,Houston Astros,San Diego Padres,45.0,55.0
-2026-08-09 16:15,Cincinnati Reds vs Washington Nationals,Cincinnati Reds,Washington Nationals,51.6,48.4
-2026-08-09 17:35,Oakland Athletics vs Boston Red Sox,Oakland Athletics,Boston Red Sox,34.3,65.7
-2026-08-09 17:35,New York Mets vs Pittsburgh Pirates,New York Mets,Pittsburgh Pirates,46.4,53.6
+2026-08-09 16:15,Cincinnati Reds vs Washington Nationals,Cincinnati Reds,Washington Nationals,51.7,48.3
+2026-08-09 17:35,Oakland Athletics vs Boston Red Sox,Oakland Athletics,Boston Red Sox,34.4,65.6
+2026-08-09 17:35,New York Mets vs Pittsburgh Pirates,New York Mets,Pittsburgh Pirates,46.3,53.7
 2026-08-09 17:35,Toronto Blue Jays vs Philadelphia Phillies,Toronto Blue Jays,Philadelphia Phillies,40.9,59.1
 2026-08-09 17:35,Atlanta Braves vs New York Yankees,Atlanta Braves,New York Yankees,42.7,57.3
 2026-08-09 17:40,Los Angeles Angels vs Miami Marlins,Los Angeles Angels,Miami Marlins,41.0,59.0
 2026-08-09 18:10,Cleveland Guardians vs Chicago White Sox,Cleveland Guardians,Chicago White Sox,53.1,46.9
-2026-08-09 18:10,Chicago Cubs vs Kansas City Royals,Chicago Cubs,Kansas City Royals,55.6,44.4
+2026-08-09 18:10,Chicago Cubs vs Kansas City Royals,Chicago Cubs,Kansas City Royals,55.7,44.3
 2026-08-09 18:10,Minnesota Twins vs Milwaukee Brewers,Minnesota Twins,Milwaukee Brewers,32.9,67.1
 2026-08-09 18:15,Colorado Rockies vs St. Louis Cardinals,Colorado Rockies,St. Louis Cardinals,36.2,63.8
 2026-08-09 18:35,Baltimore Orioles vs Texas Rangers,Baltimore Orioles,Texas Rangers,44.6,55.4
@@ -209,25 +144,25 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-10 01:40,Tampa Bay Rays vs Oakland Athletics,Tampa Bay Rays,Oakland Athletics,57.0,43.0
 2026-08-10 01:45,Houston Astros vs San Francisco Giants,Houston Astros,San Francisco Giants,51.8,48.2
 2026-08-10 02:10,Kansas City Royals vs Los Angeles Dodgers,Kansas City Royals,Los Angeles Dodgers,35.7,64.3
-2026-08-10 23:07,Boston Red Sox vs Toronto Blue Jays,Boston Red Sox,Toronto Blue Jays,54.9,45.1
+2026-08-10 23:07,Boston Red Sox vs Toronto Blue Jays,Boston Red Sox,Toronto Blue Jays,55.0,45.0
 2026-08-10 23:15,New York Mets vs Atlanta Braves,New York Mets,Atlanta Braves,42.2,57.8
 2026-08-10 23:40,Baltimore Orioles vs Minnesota Twins,Baltimore Orioles,Minnesota Twins,50.7,49.3
 2026-08-10 23:45,Philadelphia Phillies vs St. Louis Cardinals,Philadelphia Phillies,St. Louis Cardinals,49.8,50.2
 2026-08-11 01:38,Texas Rangers vs Los Angeles Angels,Texas Rangers,Los Angeles Angels,57.8,42.2
 2026-08-11 01:40,Colorado Rockies vs Arizona Diamondbacks,Colorado Rockies,Arizona Diamondbacks,32.7,67.3
-2026-08-11 01:40,Tampa Bay Rays vs Oakland Athletics,Tampa Bay Rays,Oakland Athletics,57.3,42.7
+2026-08-11 01:40,Tampa Bay Rays vs Oakland Athletics,Tampa Bay Rays,Oakland Athletics,57.2,42.8
 2026-08-11 01:40,Milwaukee Brewers vs San Diego Padres,Milwaukee Brewers,San Diego Padres,53.0,47.0
 2026-08-11 01:45,Houston Astros vs San Francisco Giants,Houston Astros,San Francisco Giants,54.7,45.3
-2026-08-11 02:10,Kansas City Royals vs Los Angeles Dodgers,Kansas City Royals,Los Angeles Dodgers,36.2,63.8
-2026-08-11 22:40,Pittsburgh Pirates vs Miami Marlins,Pittsburgh Pirates,Miami Marlins,43.9,56.1
+2026-08-11 02:10,Kansas City Royals vs Los Angeles Dodgers,Kansas City Royals,Los Angeles Dodgers,36.0,64.0
 2026-08-11 22:40,Cleveland Guardians vs Detroit Tigers,Cleveland Guardians,Detroit Tigers,45.2,54.8
+2026-08-11 22:40,Pittsburgh Pirates vs Miami Marlins,Pittsburgh Pirates,Miami Marlins,43.9,56.1
 2026-08-11 22:45,Chicago Cubs vs Washington Nationals,Chicago Cubs,Washington Nationals,56.4,43.6
-2026-08-11 23:05,Seattle Mariners vs New York Yankees,Seattle Mariners,New York Yankees,40.6,59.4
+2026-08-11 23:05,Seattle Mariners vs New York Yankees,Seattle Mariners,New York Yankees,40.7,59.3
 2026-08-11 23:07,Boston Red Sox vs Toronto Blue Jays,Boston Red Sox,Toronto Blue Jays,47.2,52.8
 2026-08-11 23:15,New York Mets vs Atlanta Braves,New York Mets,Atlanta Braves,42.4,57.6
 2026-08-11 23:40,Baltimore Orioles vs Minnesota Twins,Baltimore Orioles,Minnesota Twins,48.3,51.7
 2026-08-11 23:40,Cincinnati Reds vs Chicago White Sox,Cincinnati Reds,Chicago White Sox,47.6,52.4
-2026-08-11 23:45,Philadelphia Phillies vs St. Louis Cardinals,Philadelphia Phillies,St. Louis Cardinals,51.3,48.7
+2026-08-11 23:45,Philadelphia Phillies vs St. Louis Cardinals,Philadelphia Phillies,St. Louis Cardinals,51.2,48.8
 2026-08-12 02:10,Kansas City Royals vs Los Angeles Dodgers,Kansas City Royals,Los Angeles Dodgers,35.8,64.2
 2026-08-12 02:10,Texas Rangers vs Los Angeles Angels,Texas Rangers,Los Angeles Angels,53.4,46.6
 2026-08-12 17:40,Baltimore Orioles vs Minnesota Twins,Baltimore Orioles,Minnesota Twins,50.3,49.7
@@ -237,17 +172,17 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-12 19:45,Houston Astros vs San Francisco Giants,Houston Astros,San Francisco Giants,53.1,46.9
 2026-08-12 20:10,Milwaukee Brewers vs San Diego Padres,Milwaukee Brewers,San Diego Padres,49.5,50.5
 2026-08-12 22:40,Cleveland Guardians vs Detroit Tigers,Cleveland Guardians,Detroit Tigers,44.8,55.2
-2026-08-12 22:40,Pittsburgh Pirates vs Miami Marlins,Pittsburgh Pirates,Miami Marlins,45.5,54.5
+2026-08-12 22:40,Pittsburgh Pirates vs Miami Marlins,Pittsburgh Pirates,Miami Marlins,45.6,54.4
 2026-08-12 22:45,Chicago Cubs vs Washington Nationals,Chicago Cubs,Washington Nationals,55.1,44.9
 2026-08-12 23:05,Seattle Mariners vs New York Yankees,Seattle Mariners,New York Yankees,42.1,57.9
 2026-08-12 23:07,Boston Red Sox vs Toronto Blue Jays,Boston Red Sox,Toronto Blue Jays,50.3,49.7
-2026-08-12 23:15,New York Mets vs Atlanta Braves,New York Mets,Atlanta Braves,41.2,58.8
+2026-08-12 23:15,New York Mets vs Atlanta Braves,New York Mets,Atlanta Braves,41.3,58.7
 2026-08-12 23:40,Cincinnati Reds vs Chicago White Sox,Cincinnati Reds,Chicago White Sox,48.9,51.1
 2026-08-13 02:07,Texas Rangers vs Los Angeles Angels,Texas Rangers,Los Angeles Angels,53.6,46.4
 2026-08-13 02:10,Milwaukee Brewers vs Los Angeles Dodgers,Milwaukee Brewers,Los Angeles Dodgers,47.0,53.0
 2026-08-13 17:10,Cleveland Guardians vs Detroit Tigers,Cleveland Guardians,Detroit Tigers,45.8,54.2
-2026-08-13 17:10,Pittsburgh Pirates vs Miami Marlins,Pittsburgh Pirates,Miami Marlins,45.2,54.8
 2026-08-13 17:10,Cincinnati Reds vs Chicago White Sox,Cincinnati Reds,Chicago White Sox,50.3,49.7
+2026-08-13 17:10,Pittsburgh Pirates vs Miami Marlins,Pittsburgh Pirates,Miami Marlins,45.2,54.8
 2026-08-13 17:35,Seattle Mariners vs New York Yankees,Seattle Mariners,New York Yankees,40.3,59.7
 2026-08-13 19:07,Boston Red Sox vs Toronto Blue Jays,Boston Red Sox,Toronto Blue Jays,50.9,49.1
 2026-08-13 20:05,Chicago Cubs vs Washington Nationals,Chicago Cubs,Washington Nationals,54.8,45.2
@@ -259,7 +194,7 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-14 02:15,Colorado Rockies vs San Francisco Giants,Colorado Rockies,San Francisco Giants,39.3,60.7
 2026-08-14 18:20,St. Louis Cardinals vs Chicago Cubs,St. Louis Cardinals,Chicago Cubs,37.8,62.2
 2026-08-14 22:10,Miami Marlins vs Cincinnati Reds,Miami Marlins,Cincinnati Reds,46.6,53.4
-2026-08-14 22:40,Boston Red Sox vs Pittsburgh Pirates,Boston Red Sox,Pittsburgh Pirates,53.7,46.3
+2026-08-14 22:40,Boston Red Sox vs Pittsburgh Pirates,Boston Red Sox,Pittsburgh Pirates,53.8,46.2
 2026-08-14 22:40,Chicago White Sox vs Detroit Tigers,Chicago White Sox,Detroit Tigers,39.2,60.8
 2026-08-14 23:10,Washington Nationals vs New York Mets,Washington Nationals,New York Mets,47.8,52.2
 2026-08-14 23:10,Baltimore Orioles vs Tampa Bay Rays,Baltimore Orioles,Tampa Bay Rays,40.6,59.4
@@ -275,52 +210,52 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-15 20:10,Washington Nationals vs New York Mets,Washington Nationals,New York Mets,41.9,58.1
 2026-08-15 22:10,Baltimore Orioles vs Tampa Bay Rays,Baltimore Orioles,Tampa Bay Rays,43.3,56.7
 2026-08-15 22:40,Miami Marlins vs Cincinnati Reds,Miami Marlins,Cincinnati Reds,43.6,56.4
-2026-08-15 23:10,San Diego Padres vs Cleveland Guardians,San Diego Padres,Cleveland Guardians,52.2,47.8
+2026-08-15 23:10,San Diego Padres vs Cleveland Guardians,San Diego Padres,Cleveland Guardians,52.1,47.9
 2026-08-15 23:10,Seattle Mariners vs Houston Astros,Seattle Mariners,Houston Astros,42.8,57.2
 2026-08-15 23:10,Philadelphia Phillies vs Minnesota Twins,Philadelphia Phillies,Minnesota Twins,55.5,44.5
 2026-08-15 23:15,Arizona Diamondbacks vs Atlanta Braves,Arizona Diamondbacks,Atlanta Braves,44.5,55.5
-2026-08-15 23:15,Milwaukee Brewers vs Los Angeles Dodgers,Milwaukee Brewers,Los Angeles Dodgers,49.5,50.5
-2026-08-15 23:15,Boston Red Sox vs Pittsburgh Pirates,Boston Red Sox,Pittsburgh Pirates,53.4,46.6
+2026-08-15 23:15,Milwaukee Brewers vs Los Angeles Dodgers,Milwaukee Brewers,Los Angeles Dodgers,49.6,50.4
+2026-08-15 23:15,Boston Red Sox vs Pittsburgh Pirates,Boston Red Sox,Pittsburgh Pirates,53.5,46.5
 2026-08-16 16:15,Baltimore Orioles vs Tampa Bay Rays,Baltimore Orioles,Tampa Bay Rays,47.0,53.0
 2026-08-16 17:35,Arizona Diamondbacks vs Atlanta Braves,Arizona Diamondbacks,Atlanta Braves,47.9,52.1
-2026-08-16 17:35,Boston Red Sox vs Pittsburgh Pirates,Boston Red Sox,Pittsburgh Pirates,52.1,47.9
-2026-08-16 17:37,New York Yankees vs Toronto Blue Jays,New York Yankees,Toronto Blue Jays,47.3,52.7
-2026-08-16 17:40,Washington Nationals vs New York Mets,Washington Nationals,New York Mets,41.4,58.6
-2026-08-16 17:40,Miami Marlins vs Cincinnati Reds,Miami Marlins,Cincinnati Reds,47.9,52.1
+2026-08-16 17:35,Boston Red Sox vs Pittsburgh Pirates,Boston Red Sox,Pittsburgh Pirates,52.2,47.8
+2026-08-16 17:37,New York Yankees vs Toronto Blue Jays,New York Yankees,Toronto Blue Jays,47.4,52.6
 2026-08-16 17:40,Chicago White Sox vs Detroit Tigers,Chicago White Sox,Detroit Tigers,44.0,56.0
+2026-08-16 17:40,Miami Marlins vs Cincinnati Reds,Miami Marlins,Cincinnati Reds,48.0,52.0
 2026-08-16 17:40,San Diego Padres vs Cleveland Guardians,San Diego Padres,Cleveland Guardians,51.1,48.9
+2026-08-16 17:40,Washington Nationals vs New York Mets,Washington Nationals,New York Mets,41.5,58.5
 2026-08-16 18:10,Philadelphia Phillies vs Minnesota Twins,Philadelphia Phillies,Minnesota Twins,51.3,48.7
 2026-08-16 19:15,St. Louis Cardinals vs Chicago Cubs,St. Louis Cardinals,Chicago Cubs,38.9,61.1
-2026-08-16 20:05,Colorado Rockies vs San Francisco Giants,Colorado Rockies,San Francisco Giants,39.6,60.4
 2026-08-16 20:05,Texas Rangers vs Oakland Athletics,Texas Rangers,Oakland Athletics,53.2,46.8
+2026-08-16 20:05,Colorado Rockies vs San Francisco Giants,Colorado Rockies,San Francisco Giants,39.6,60.4
 2026-08-16 20:07,Kansas City Royals vs Los Angeles Angels,Kansas City Royals,Los Angeles Angels,48.5,51.5
 2026-08-16 20:10,Milwaukee Brewers vs Los Angeles Dodgers,Milwaukee Brewers,Los Angeles Dodgers,47.1,52.9
 2026-08-16 23:20,Seattle Mariners vs Houston Astros,Seattle Mariners,Houston Astros,43.9,56.1
-2026-08-17 00:05,Chicago White Sox vs Chicago Cubs,Chicago White Sox,Chicago Cubs,38.0,62.0
-2026-08-17 00:40,Los Angeles Dodgers vs Colorado Rockies,Los Angeles Dodgers,Colorado Rockies,64.2,35.8
+2026-08-17 00:05,Chicago White Sox vs Chicago Cubs,Chicago White Sox,Chicago Cubs,37.9,62.1
+2026-08-17 00:40,Los Angeles Dodgers vs Colorado Rockies,Los Angeles Dodgers,Colorado Rockies,64.3,35.7
 2026-08-17 22:05,Baltimore Orioles vs Tampa Bay Rays,Baltimore Orioles,Tampa Bay Rays,44.1,55.9
+2026-08-17 22:40,St. Louis Cardinals vs Cincinnati Reds,St. Louis Cardinals,Cincinnati Reds,48.0,52.0
 2026-08-17 22:40,Miami Marlins vs Philadelphia Phillies,Miami Marlins,Philadelphia Phillies,39.7,60.3
-2026-08-17 22:40,St. Louis Cardinals vs Cincinnati Reds,St. Louis Cardinals,Cincinnati Reds,47.1,52.9
 2026-08-17 23:05,Detroit Tigers vs Pittsburgh Pirates,Detroit Tigers,Pittsburgh Pirates,49.3,50.7
 2026-08-17 23:10,Arizona Diamondbacks vs Boston Red Sox,Arizona Diamondbacks,Boston Red Sox,43.3,56.7
-2026-08-17 23:10,San Diego Padres vs New York Mets,San Diego Padres,New York Mets,48.3,51.7
+2026-08-17 23:10,San Diego Padres vs New York Mets,San Diego Padres,New York Mets,48.4,51.6
 2026-08-17 23:40,Oakland Athletics vs Kansas City Royals,Oakland Athletics,Kansas City Royals,42.6,57.4
 2026-08-17 23:40,Atlanta Braves vs Minnesota Twins,Atlanta Braves,Minnesota Twins,54.3,45.7
-2026-08-18 00:05,Washington Nationals vs Texas Rangers,Washington Nationals,Texas Rangers,44.0,56.0
+2026-08-18 00:05,Washington Nationals vs Texas Rangers,Washington Nationals,Texas Rangers,43.9,56.1
 2026-08-18 00:05,Chicago White Sox vs Chicago Cubs,Chicago White Sox,Chicago Cubs,38.3,61.7
 2026-08-18 00:10,Los Angeles Angels vs Houston Astros,Los Angeles Angels,Houston Astros,39.0,61.0
-2026-08-18 00:40,Los Angeles Dodgers vs Colorado Rockies,Los Angeles Dodgers,Colorado Rockies,63.8,36.2
-2026-08-18 22:35,New York Yankees vs Baltimore Orioles,New York Yankees,Baltimore Orioles,51.4,48.6
+2026-08-18 00:40,Los Angeles Dodgers vs Colorado Rockies,Los Angeles Dodgers,Colorado Rockies,63.9,36.1
+2026-08-18 22:35,New York Yankees vs Baltimore Orioles,New York Yankees,Baltimore Orioles,51.5,48.5
+2026-08-18 22:40,Miami Marlins vs Philadelphia Phillies,Miami Marlins,Philadelphia Phillies,39.1,60.9
 2026-08-18 22:40,San Francisco Giants vs Cleveland Guardians,San Francisco Giants,Cleveland Guardians,40.9,59.1
 2026-08-18 22:40,St. Louis Cardinals vs Cincinnati Reds,St. Louis Cardinals,Cincinnati Reds,48.6,51.4
-2026-08-18 22:40,Toronto Blue Jays vs Tampa Bay Rays,Toronto Blue Jays,Tampa Bay Rays,45.5,54.5
-2026-08-18 22:40,Miami Marlins vs Philadelphia Phillies,Miami Marlins,Philadelphia Phillies,39.0,61.0
 2026-08-18 22:40,Detroit Tigers vs Pittsburgh Pirates,Detroit Tigers,Pittsburgh Pirates,49.7,50.3
+2026-08-18 22:40,Toronto Blue Jays vs Tampa Bay Rays,Toronto Blue Jays,Tampa Bay Rays,45.5,54.5
 2026-08-18 23:10,Arizona Diamondbacks vs Boston Red Sox,Arizona Diamondbacks,Boston Red Sox,41.5,58.5
 2026-08-18 23:10,San Diego Padres vs New York Mets,San Diego Padres,New York Mets,49.8,50.2
+2026-08-18 23:40,Oakland Athletics vs Kansas City Royals,Oakland Athletics,Kansas City Royals,41.9,58.1
 2026-08-18 23:40,Atlanta Braves vs Minnesota Twins,Atlanta Braves,Minnesota Twins,54.2,45.8
 2026-08-18 23:40,Seattle Mariners vs Milwaukee Brewers,Seattle Mariners,Milwaukee Brewers,38.9,61.1
-2026-08-18 23:40,Oakland Athletics vs Kansas City Royals,Oakland Athletics,Kansas City Royals,41.9,58.1
 2026-08-19 00:05,Washington Nationals vs Texas Rangers,Washington Nationals,Texas Rangers,45.2,54.8
 2026-08-19 00:10,Los Angeles Angels vs Houston Astros,Los Angeles Angels,Houston Astros,39.3,60.7
 2026-08-19 00:40,Los Angeles Dodgers vs Colorado Rockies,Los Angeles Dodgers,Colorado Rockies,62.4,37.6
@@ -328,31 +263,31 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-19 17:10,San Diego Padres vs New York Mets,San Diego Padres,New York Mets,53.4,46.6
 2026-08-19 17:40,Atlanta Braves vs Minnesota Twins,Atlanta Braves,Minnesota Twins,51.0,49.0
 2026-08-19 18:20,Chicago White Sox vs Chicago Cubs,Chicago White Sox,Chicago Cubs,35.4,64.6
-2026-08-19 20:10,Arizona Diamondbacks vs Boston Red Sox,Arizona Diamondbacks,Boston Red Sox,43.2,56.8
-2026-08-19 22:05,Miami Marlins vs Philadelphia Phillies,Miami Marlins,Philadelphia Phillies,41.7,58.3
+2026-08-19 20:10,Arizona Diamondbacks vs Boston Red Sox,Arizona Diamondbacks,Boston Red Sox,43.3,56.7
+2026-08-19 22:05,Miami Marlins vs Philadelphia Phillies,Miami Marlins,Philadelphia Phillies,41.8,58.2
 2026-08-19 22:35,New York Yankees vs Baltimore Orioles,New York Yankees,Baltimore Orioles,51.5,48.5
-2026-08-19 22:40,Toronto Blue Jays vs Tampa Bay Rays,Toronto Blue Jays,Tampa Bay Rays,43.4,56.6
-2026-08-19 22:40,San Francisco Giants vs Cleveland Guardians,San Francisco Giants,Cleveland Guardians,40.7,59.3
+2026-08-19 22:40,Toronto Blue Jays vs Tampa Bay Rays,Toronto Blue Jays,Tampa Bay Rays,43.3,56.7
+2026-08-19 22:40,San Francisco Giants vs Cleveland Guardians,San Francisco Giants,Cleveland Guardians,40.8,59.2
 2026-08-19 22:40,St. Louis Cardinals vs Cincinnati Reds,St. Louis Cardinals,Cincinnati Reds,45.8,54.2
 2026-08-19 23:40,Oakland Athletics vs Kansas City Royals,Oakland Athletics,Kansas City Royals,41.4,58.6
 2026-08-19 23:40,Seattle Mariners vs Milwaukee Brewers,Seattle Mariners,Milwaukee Brewers,39.4,60.6
 2026-08-20 00:05,Washington Nationals vs Texas Rangers,Washington Nationals,Texas Rangers,43.0,57.0
 2026-08-20 00:10,Los Angeles Angels vs Houston Astros,Los Angeles Angels,Houston Astros,36.2,63.8
 2026-08-20 16:40,St. Louis Cardinals vs Cincinnati Reds,St. Louis Cardinals,Cincinnati Reds,46.1,53.9
-2026-08-20 17:10,Toronto Blue Jays vs Tampa Bay Rays,Toronto Blue Jays,Tampa Bay Rays,44.4,55.6
 2026-08-20 17:10,San Francisco Giants vs Cleveland Guardians,San Francisco Giants,Cleveland Guardians,41.8,58.2
-2026-08-20 18:10,Atlanta Braves vs Chicago White Sox,Atlanta Braves,Chicago White Sox,51.6,48.4
+2026-08-20 17:10,Toronto Blue Jays vs Tampa Bay Rays,Toronto Blue Jays,Tampa Bay Rays,44.4,55.6
 2026-08-20 18:10,Oakland Athletics vs Kansas City Royals,Oakland Athletics,Kansas City Royals,40.9,59.1
+2026-08-20 18:10,Atlanta Braves vs Chicago White Sox,Atlanta Braves,Chicago White Sox,51.6,48.4
 2026-08-20 18:10,Seattle Mariners vs Milwaukee Brewers,Seattle Mariners,Milwaukee Brewers,38.5,61.5
 2026-08-20 22:35,New York Yankees vs Baltimore Orioles,New York Yankees,Baltimore Orioles,52.6,47.4
 2026-08-21 00:10,Oakland Athletics vs Houston Astros,Oakland Athletics,Houston Astros,38.3,61.7
-2026-08-21 00:10,Detroit Tigers vs Kansas City Royals,Detroit Tigers,Kansas City Royals,50.3,49.7
+2026-08-21 00:10,Detroit Tigers vs Kansas City Royals,Detroit Tigers,Kansas City Royals,50.4,49.6
 2026-08-21 00:15,Los Angeles Angels vs Texas Rangers,Los Angeles Angels,Texas Rangers,39.9,60.1
-2026-08-21 00:40,Cleveland Guardians vs Colorado Rockies,Cleveland Guardians,Colorado Rockies,59.2,40.8
+2026-08-21 00:40,Cleveland Guardians vs Colorado Rockies,Cleveland Guardians,Colorado Rockies,59.1,40.9
 2026-08-21 01:40,Cincinnati Reds vs Arizona Diamondbacks,Cincinnati Reds,Arizona Diamondbacks,42.7,57.3
 2026-08-21 01:40,Minnesota Twins vs San Diego Padres,Minnesota Twins,San Diego Padres,41.4,58.6
-2026-08-21 02:10,Pittsburgh Pirates vs Los Angeles Dodgers,Pittsburgh Pirates,Los Angeles Dodgers,37.1,62.9
 2026-08-21 02:10,Chicago Cubs vs Seattle Mariners,Chicago Cubs,Seattle Mariners,52.4,47.6
+2026-08-21 02:10,Pittsburgh Pirates vs Los Angeles Dodgers,Pittsburgh Pirates,Los Angeles Dodgers,37.1,62.9
 2026-08-21 20:10,Atlanta Braves vs Milwaukee Brewers,Atlanta Braves,Milwaukee Brewers,40.5,59.5
 2026-08-21 22:40,St. Louis Cardinals vs Philadelphia Phillies,St. Louis Cardinals,Philadelphia Phillies,37.9,62.1
 2026-08-21 23:05,Toronto Blue Jays vs New York Yankees,Toronto Blue Jays,New York Yankees,40.5,59.5
@@ -363,7 +298,7 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-22 00:10,Cincinnati Reds vs Arizona Diamondbacks,Cincinnati Reds,Arizona Diamondbacks,40.4,59.6
 2026-08-22 00:10,Cleveland Guardians vs Colorado Rockies,Cleveland Guardians,Colorado Rockies,58.7,41.3
 2026-08-22 00:40,Minnesota Twins vs San Diego Padres,Minnesota Twins,San Diego Padres,38.5,61.5
-2026-08-22 17:35,Toronto Blue Jays vs New York Yankees,Toronto Blue Jays,New York Yankees,42.7,57.3
+2026-08-22 17:35,Toronto Blue Jays vs New York Yankees,Toronto Blue Jays,New York Yankees,42.8,57.2
 2026-08-22 18:10,Atlanta Braves vs Milwaukee Brewers,Atlanta Braves,Milwaukee Brewers,38.7,61.3
 2026-08-22 20:10,Washington Nationals vs Miami Marlins,Washington Nationals,Miami Marlins,40.0,60.0
 2026-08-22 22:05,St. Louis Cardinals vs Philadelphia Phillies,St. Louis Cardinals,Philadelphia Phillies,41.4,58.6
@@ -371,29 +306,29 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-22 23:05,Los Angeles Angels vs Texas Rangers,Los Angeles Angels,Texas Rangers,37.3,62.7
 2026-08-22 23:10,Oakland Athletics vs Houston Astros,Oakland Athletics,Houston Astros,37.6,62.4
 2026-08-22 23:10,New York Mets vs Chicago White Sox,New York Mets,Chicago White Sox,49.5,50.5
-2026-08-22 23:15,Detroit Tigers vs Kansas City Royals,Detroit Tigers,Kansas City Royals,46.9,53.1
 2026-08-22 23:15,Chicago Cubs vs Seattle Mariners,Chicago Cubs,Seattle Mariners,50.8,49.2
 2026-08-22 23:15,San Francisco Giants vs Boston Red Sox,San Francisco Giants,Boston Red Sox,36.6,63.4
+2026-08-22 23:15,Detroit Tigers vs Kansas City Royals,Detroit Tigers,Kansas City Royals,46.9,53.1
 2026-08-22 23:15,Pittsburgh Pirates vs Los Angeles Dodgers,Pittsburgh Pirates,Los Angeles Dodgers,36.6,63.4
-2026-08-23 17:35,Toronto Blue Jays vs New York Yankees,Toronto Blue Jays,New York Yankees,41.1,58.9
 2026-08-23 17:35,St. Louis Cardinals vs Philadelphia Phillies,St. Louis Cardinals,Philadelphia Phillies,41.0,59.0
+2026-08-23 17:35,Toronto Blue Jays vs New York Yankees,Toronto Blue Jays,New York Yankees,41.1,58.9
 2026-08-23 17:35,Tampa Bay Rays vs Baltimore Orioles,Tampa Bay Rays,Baltimore Orioles,48.8,51.2
 2026-08-23 17:40,Washington Nationals vs Miami Marlins,Washington Nationals,Miami Marlins,43.4,56.6
 2026-08-23 18:10,New York Mets vs Chicago White Sox,New York Mets,Chicago White Sox,50.9,49.1
+2026-08-23 18:10,Detroit Tigers vs Kansas City Royals,Detroit Tigers,Kansas City Royals,48.8,51.2
 2026-08-23 18:10,Oakland Athletics vs Houston Astros,Oakland Athletics,Houston Astros,38.3,61.7
-2026-08-23 18:10,Detroit Tigers vs Kansas City Royals,Detroit Tigers,Kansas City Royals,48.7,51.3
 2026-08-23 18:35,Los Angeles Angels vs Texas Rangers,Los Angeles Angels,Texas Rangers,39.8,60.2
 2026-08-23 19:10,Cleveland Guardians vs Colorado Rockies,Cleveland Guardians,Colorado Rockies,60.8,39.2
-2026-08-23 19:15,San Francisco Giants vs Boston Red Sox,San Francisco Giants,Boston Red Sox,35.6,64.4
+2026-08-23 19:15,San Francisco Giants vs Boston Red Sox,San Francisco Giants,Boston Red Sox,35.7,64.3
 2026-08-23 20:10,Pittsburgh Pirates vs Los Angeles Dodgers,Pittsburgh Pirates,Los Angeles Dodgers,36.4,63.6
 2026-08-23 20:10,Minnesota Twins vs San Diego Padres,Minnesota Twins,San Diego Padres,38.7,61.3
 2026-08-23 20:10,Chicago Cubs vs Seattle Mariners,Chicago Cubs,Seattle Mariners,51.8,48.2
 2026-08-23 20:15,Cincinnati Reds vs Arizona Diamondbacks,Cincinnati Reds,Arizona Diamondbacks,44.4,55.6
 2026-08-23 23:10,Atlanta Braves vs Milwaukee Brewers,Atlanta Braves,Milwaukee Brewers,40.8,59.2
 2026-08-24 01:38,Cleveland Guardians vs Los Angeles Angels,Cleveland Guardians,Los Angeles Angels,56.4,43.6
-2026-08-24 01:40,Pittsburgh Pirates vs San Diego Padres,Pittsburgh Pirates,San Diego Padres,39.1,60.9
 2026-08-24 01:40,Minnesota Twins vs Oakland Athletics,Minnesota Twins,Oakland Athletics,50.7,49.3
-2026-08-24 01:40,Philadelphia Phillies vs Seattle Mariners,Philadelphia Phillies,Seattle Mariners,51.7,48.3
+2026-08-24 01:40,Pittsburgh Pirates vs San Diego Padres,Pittsburgh Pirates,San Diego Padres,39.1,60.9
+2026-08-24 01:40,Philadelphia Phillies vs Seattle Mariners,Philadelphia Phillies,Seattle Mariners,51.8,48.2
 2026-08-24 01:40,Chicago Cubs vs Arizona Diamondbacks,Chicago Cubs,Arizona Diamondbacks,50.2,49.8
 2026-08-24 01:45,Cincinnati Reds vs San Francisco Giants,Cincinnati Reds,San Francisco Giants,53.1,46.9
 2026-08-24 22:40,Tampa Bay Rays vs Detroit Tigers,Tampa Bay Rays,Detroit Tigers,51.6,48.4
@@ -401,205 +336,270 @@ date_time,match,team1,team2,team1_pct,team2_pct
 2026-08-24 22:45,Colorado Rockies vs Washington Nationals,Colorado Rockies,Washington Nationals,35.4,64.6
 2026-08-24 23:40,Texas Rangers vs Chicago White Sox,Texas Rangers,Chicago White Sox,48.4,51.6
 2026-08-25 01:38,Cleveland Guardians vs Los Angeles Angels,Cleveland Guardians,Los Angeles Angels,55.0,45.0
-2026-08-25 01:40,Chicago Cubs vs Arizona Diamondbacks,Chicago Cubs,Arizona Diamondbacks,49.7,50.3
-2026-08-25 01:40,Pittsburgh Pirates vs San Diego Padres,Pittsburgh Pirates,San Diego Padres,39.8,60.2
+2026-08-25 01:40,Pittsburgh Pirates vs San Diego Padres,Pittsburgh Pirates,San Diego Padres,39.7,60.3
+2026-08-25 01:40,Chicago Cubs vs Arizona Diamondbacks,Chicago Cubs,Arizona Diamondbacks,49.5,50.5
 2026-08-25 01:40,Minnesota Twins vs Oakland Athletics,Minnesota Twins,Oakland Athletics,51.1,48.9
-2026-08-25 01:40,Philadelphia Phillies vs Seattle Mariners,Philadelphia Phillies,Seattle Mariners,50.9,49.1
-2026-08-25 01:45,Cincinnati Reds vs San Francisco Giants,Cincinnati Reds,San Francisco Giants,50.7,49.3
-2026-08-25 22:40,Tampa Bay Rays vs Detroit Tigers,Tampa Bay Rays,Detroit Tigers,51.5,48.5
-2026-08-25 22:40,Boston Red Sox vs Miami Marlins,Boston Red Sox,Miami Marlins,53.4,46.6
-2026-08-25 22:45,Colorado Rockies vs Washington Nationals,Colorado Rockies,Washington Nationals,38.2,61.8
-2026-08-25 23:05,Houston Astros vs New York Yankees,Houston Astros,New York Yankees,42.1,57.9
-2026-08-25 23:07,Kansas City Royals vs Toronto Blue Jays,Kansas City Royals,Toronto Blue Jays,43.2,56.8
-2026-08-25 23:10,Milwaukee Brewers vs New York Mets,Milwaukee Brewers,New York Mets,54.6,45.4
-2026-08-25 23:15,Los Angeles Dodgers vs Atlanta Braves,Los Angeles Dodgers,Atlanta Braves,54.7,45.3
-2026-08-25 23:40,Texas Rangers vs Chicago White Sox,Texas Rangers,Chicago White Sox,49.7,50.3
-2026-08-25 23:45,Baltimore Orioles vs St. Louis Cardinals,Baltimore Orioles,St. Louis Cardinals,46.2,53.8
-2026-08-26 01:05,Minnesota Twins vs Oakland Athletics,Minnesota Twins,Oakland Athletics,50.9,49.1
-2026-08-26 17:10,Tampa Bay Rays vs Detroit Tigers,Tampa Bay Rays,Detroit Tigers,46.3,53.7
-2026-08-26 19:40,Chicago Cubs vs Arizona Diamondbacks,Chicago Cubs,Arizona Diamondbacks,50.1,49.9
-2026-08-26 19:45,Cincinnati Reds vs San Francisco Giants,Cincinnati Reds,San Francisco Giants,48.9,51.1
-2026-08-26 20:07,Cleveland Guardians vs Los Angeles Angels,Cleveland Guardians,Los Angeles Angels,56.4,43.6
-2026-08-26 20:10,Philadelphia Phillies vs Seattle Mariners,Philadelphia Phillies,Seattle Mariners,53.8,46.2
-2026-08-26 20:10,Pittsburgh Pirates vs San Diego Padres,Pittsburgh Pirates,San Diego Padres,40.3,59.7
-2026-08-26 22:40,Boston Red Sox vs Miami Marlins,Boston Red Sox,Miami Marlins,54.5,45.5
-2026-08-26 22:45,Colorado Rockies vs Washington Nationals,Colorado Rockies,Washington Nationals,36.9,63.1
-2026-08-26 23:05,Houston Astros vs New York Yankees,Houston Astros,New York Yankees,41.1,58.9
-2026-08-26 23:07,Kansas City Royals vs Toronto Blue Jays,Kansas City Royals,Toronto Blue Jays,43.5,56.5
-2026-08-26 23:10,Milwaukee Brewers vs New York Mets,Milwaukee Brewers,New York Mets,57.8,42.2
-2026-08-26 23:15,Los Angeles Dodgers vs Atlanta Braves,Los Angeles Dodgers,Atlanta Braves,50.4,49.6
-2026-08-26 23:40,Texas Rangers vs Chicago White Sox,Texas Rangers,Chicago White Sox,47.9,52.1
-2026-08-26 23:45,Baltimore Orioles vs St. Louis Cardinals,Baltimore Orioles,St. Louis Cardinals,48.7,51.3
-2026-08-27 01:45,Arizona Diamondbacks vs San Francisco Giants,Arizona Diamondbacks,San Francisco Giants,52.0,48.0
-2026-08-27 17:05,Colorado Rockies vs Washington Nationals,Colorado Rockies,Washington Nationals,38.7,61.3
-2026-08-27 18:15,Baltimore Orioles vs St. Louis Cardinals,Baltimore Orioles,St. Louis Cardinals,49.5,50.5
-2026-08-27 23:05,Houston Astros vs New York Yankees,Houston Astros,New York Yankees,39.8,60.2
-2026-08-27 23:07,Kansas City Royals vs Toronto Blue Jays,Kansas City Royals,Toronto Blue Jays,43.2,56.8
-2026-08-27 23:10,Milwaukee Brewers vs New York Mets,Milwaukee Brewers,New York Mets,58.2,41.8
-2026-08-27 23:15,Los Angeles Dodgers vs Atlanta Braves,Los Angeles Dodgers,Atlanta Braves,51.3,48.7
-2026-08-28 00:10,Chicago White Sox vs Minnesota Twins,Chicago White Sox,Minnesota Twins,44.6,55.4
-2026-08-28 00:15,Pittsburgh Pirates vs St. Louis Cardinals,Pittsburgh Pirates,St. Louis Cardinals,46.3,53.7
-2026-08-28 01:38,Philadelphia Phillies vs Los Angeles Angels,Philadelphia Phillies,Los Angeles Angels,58.9,41.1
-2026-08-28 01:40,Baltimore Orioles vs Oakland Athletics,Baltimore Orioles,Oakland Athletics,53.3,46.7
-2026-08-28 02:15,Arizona Diamondbacks vs San Francisco Giants,Arizona Diamondbacks,San Francisco Giants,52.0,48.0
-2026-08-28 18:20,Cincinnati Reds vs Chicago Cubs,Cincinnati Reds,Chicago Cubs,37.9,62.1
-2026-08-28 22:40,Los Angeles Dodgers vs Detroit Tigers,Los Angeles Dodgers,Detroit Tigers,55.3,44.7
-2026-08-28 22:45,Miami Marlins vs Washington Nationals,Miami Marlins,Washington Nationals,49.1,50.9
-2026-08-28 23:10,San Diego Padres vs Tampa Bay Rays,San Diego Padres,Tampa Bay Rays,48.3,51.7
-2026-08-28 23:10,Houston Astros vs New York Mets,Houston Astros,New York Mets,47.2,52.8
-2026-08-28 23:10,Kansas City Royals vs Cleveland Guardians,Kansas City Royals,Cleveland Guardians,43.1,56.9
-2026-08-28 23:15,Colorado Rockies vs Atlanta Braves,Colorado Rockies,Atlanta Braves,32.6,67.4
-2026-08-28 23:15,Seattle Mariners vs Toronto Blue Jays,Seattle Mariners,Toronto Blue Jays,46.0,54.0
-2026-08-28 23:15,Boston Red Sox vs New York Yankees,Boston Red Sox,New York Yankees,45.2,54.8
-2026-08-28 23:40,Texas Rangers vs Milwaukee Brewers,Texas Rangers,Milwaukee Brewers,38.1,61.9
-2026-08-29 02:05,Arizona Diamondbacks vs San Francisco Giants,Arizona Diamondbacks,San Francisco Giants,51.7,48.3
+2026-08-25 01:40,Philadelphia Phillies vs Seattle Mariners,Philadelphia Phillies,Seattle Mariners,51.7,48.3
+2026-08-25 01:45,Cincinnati Reds vs San Francisco Giants,Cincinnati Reds,San Francisco Giants,49.2,50.8
+2026-08-25 22:40,Tampa Bay Rays vs Detroit Tigers,Tampa Bay Rays,Detroit Tigers,51.4,48.6
+2026-08-25 22:40,Boston Red Sox vs Miami Marlins,Boston Red Sox,Miami Marlins,54.2,45.8
+2026-08-25 22:45,Colorado Rockies vs Washington Nationals,Colorado Rockies,Washington Nationals,38.3,61.7
+2026-08-25 23:05,Houston Astros vs New York Yankees,Houston Astros,New York Yankees,42.0,58.0
+2026-08-25 23:07,Kansas City Royals vs Toronto Blue Jays,Kansas City Royals,Toronto Blue Jays,44.1,55.9
+2026-08-25 23:10,Milwaukee Brewers vs New York Mets,Milwaukee Brewers,New York Mets,54.9,45.1
+2026-08-25 23:15,Los Angeles Dodgers vs Atlanta Braves,Los Angeles Dodgers,Atlanta Braves,54.1,45.9
+2026-08-25 23:40,Texas Rangers vs Chicago White Sox,Texas Rangers,Chicago White Sox,50.1,49.9
+2026-08-25 23:45,Baltimore Orioles vs St. Louis Cardinals,Baltimore Orioles,St. Louis Cardinals,46.7,53.3
+2026-08-26 01:05,Minnesota Twins vs Oakland Athletics,Minnesota Twins,Oakland Athletics,50.0,50.0
+2026-08-26 17:10,Tampa Bay Rays vs Detroit Tigers,Tampa Bay Rays,Detroit Tigers,46.6,53.4
+2026-08-26 19:40,Chicago Cubs vs Arizona Diamondbacks,Chicago Cubs,Arizona Diamondbacks,49.0,51.0
+2026-08-26 19:45,Cincinnati Reds vs San Francisco Giants,Cincinnati Reds,San Francisco Giants,46.8,53.2
+2026-08-26 20:07,Cleveland Guardians vs Los Angeles Angels,Cleveland Guardians,Los Angeles Angels,55.9,44.1
+2026-08-26 20:10,Pittsburgh Pirates vs San Diego Padres,Pittsburgh Pirates,San Diego Padres,41.9,58.1
+2026-08-26 20:10,Philadelphia Phillies vs Seattle Mariners,Philadelphia Phillies,Seattle Mariners,52.2,47.8
+2026-08-26 22:40,Boston Red Sox vs Miami Marlins,Boston Red Sox,Miami Marlins,54.9,45.1
+2026-08-26 22:45,Colorado Rockies vs Washington Nationals,Colorado Rockies,Washington Nationals,39.6,60.4
+2026-08-26 23:05,Houston Astros vs New York Yankees,Houston Astros,New York Yankees,41.6,58.4
+2026-08-26 23:07,Kansas City Royals vs Toronto Blue Jays,Kansas City Royals,Toronto Blue Jays,43.3,56.7
+2026-08-26 23:10,Milwaukee Brewers vs New York Mets,Milwaukee Brewers,New York Mets,55.2,44.8
+2026-08-26 23:15,Los Angeles Dodgers vs Atlanta Braves,Los Angeles Dodgers,Atlanta Braves,50.0,50.0
+2026-08-26 23:40,Texas Rangers vs Chicago White Sox,Texas Rangers,Chicago White Sox,47.4,52.6
+2026-08-26 23:45,Baltimore Orioles vs St. Louis Cardinals,Baltimore Orioles,St. Louis Cardinals,48.9,51.1
+2026-08-27 01:45,Arizona Diamondbacks vs San Francisco Giants,Arizona Diamondbacks,San Francisco Giants,52.5,47.5
+2026-08-27 17:05,Colorado Rockies vs Washington Nationals,Colorado Rockies,Washington Nationals,40.7,59.3
+2026-08-27 18:15,Baltimore Orioles vs St. Louis Cardinals,Baltimore Orioles,St. Louis Cardinals,50.9,49.1
+2026-08-27 23:05,Houston Astros vs New York Yankees,Houston Astros,New York Yankees,39.4,60.6
+2026-08-27 23:07,Kansas City Royals vs Toronto Blue Jays,Kansas City Royals,Toronto Blue Jays,45.0,55.0
+2026-08-27 23:10,Milwaukee Brewers vs New York Mets,Milwaukee Brewers,New York Mets,57.3,42.7
+2026-08-27 23:15,Los Angeles Dodgers vs Atlanta Braves,Los Angeles Dodgers,Atlanta Braves,49.2,50.8
+2026-08-28 00:10,Chicago White Sox vs Minnesota Twins,Chicago White Sox,Minnesota Twins,45.5,54.5
+2026-08-28 00:15,Pittsburgh Pirates vs St. Louis Cardinals,Pittsburgh Pirates,St. Louis Cardinals,46.6,53.4
+2026-08-28 01:38,Philadelphia Phillies vs Los Angeles Angels,Philadelphia Phillies,Los Angeles Angels,57.6,42.4
+2026-08-28 01:40,Baltimore Orioles vs Oakland Athletics,Baltimore Orioles,Oakland Athletics,52.7,47.3
+2026-08-28 02:15,Arizona Diamondbacks vs San Francisco Giants,Arizona Diamondbacks,San Francisco Giants,52.1,47.9
+2026-08-28 18:20,Cincinnati Reds vs Chicago Cubs,Cincinnati Reds,Chicago Cubs,38.5,61.5
+2026-08-28 22:40,Los Angeles Dodgers vs Detroit Tigers,Los Angeles Dodgers,Detroit Tigers,57.0,43.0
+2026-08-28 22:45,Miami Marlins vs Washington Nationals,Miami Marlins,Washington Nationals,51.6,48.4
+2026-08-28 23:10,San Diego Padres vs Tampa Bay Rays,San Diego Padres,Tampa Bay Rays,47.8,52.2
+2026-08-28 23:10,Houston Astros vs New York Mets,Houston Astros,New York Mets,47.0,53.0
+2026-08-28 23:10,Kansas City Royals vs Cleveland Guardians,Kansas City Royals,Cleveland Guardians,43.7,56.3
+2026-08-28 23:15,Colorado Rockies vs Atlanta Braves,Colorado Rockies,Atlanta Braves,30.3,69.7
+2026-08-28 23:15,Seattle Mariners vs Toronto Blue Jays,Seattle Mariners,Toronto Blue Jays,43.4,56.6
+2026-08-28 23:15,Boston Red Sox vs New York Yankees,Boston Red Sox,New York Yankees,44.1,55.9
+2026-08-28 23:40,Texas Rangers vs Milwaukee Brewers,Texas Rangers,Milwaukee Brewers,35.9,64.1
+2026-08-29 02:05,Arizona Diamondbacks vs San Francisco Giants,Arizona Diamondbacks,San Francisco Giants,51.3,48.7
 2026-08-29 02:05,Baltimore Orioles vs Oakland Athletics,Baltimore Orioles,Oakland Athletics,53.4,46.6
-2026-08-29 02:07,Philadelphia Phillies vs Los Angeles Angels,Philadelphia Phillies,Los Angeles Angels,58.9,41.1
-2026-08-29 17:10,Los Angeles Dodgers vs Detroit Tigers,Los Angeles Dodgers,Detroit Tigers,55.1,44.9
-2026-08-29 18:10,Chicago White Sox vs Minnesota Twins,Chicago White Sox,Minnesota Twins,44.9,55.1
-2026-08-29 18:15,Pittsburgh Pirates vs St. Louis Cardinals,Pittsburgh Pirates,St. Louis Cardinals,46.3,53.7
-2026-08-29 18:20,Cincinnati Reds vs Chicago Cubs,Cincinnati Reds,Chicago Cubs,38.9,61.1
-2026-08-29 19:07,Seattle Mariners vs Toronto Blue Jays,Seattle Mariners,Toronto Blue Jays,46.1,53.9
-2026-08-29 20:05,Miami Marlins vs Washington Nationals,Miami Marlins,Washington Nationals,49.2,50.8
-2026-08-29 20:10,Houston Astros vs New York Mets,Houston Astros,New York Mets,47.5,52.5
-2026-08-29 20:10,Kansas City Royals vs Cleveland Guardians,Kansas City Royals,Cleveland Guardians,43.5,56.5
-2026-08-29 20:10,Colorado Rockies vs Atlanta Braves,Colorado Rockies,Atlanta Braves,32.9,67.1
-2026-08-29 20:10,San Diego Padres vs Tampa Bay Rays,San Diego Padres,Tampa Bay Rays,48.1,51.9
-2026-08-29 23:15,Boston Red Sox vs New York Yankees,Boston Red Sox,New York Yankees,45.7,54.3
-2026-08-29 23:15,Texas Rangers vs Milwaukee Brewers,Texas Rangers,Milwaukee Brewers,38.5,61.5
-2026-08-30 16:15,Miami Marlins vs Washington Nationals,Miami Marlins,Washington Nationals,49.4,50.6
-2026-08-30 17:35,Colorado Rockies vs Atlanta Braves,Colorado Rockies,Atlanta Braves,33.1,66.9
-2026-08-30 17:35,Boston Red Sox vs New York Yankees,Boston Red Sox,New York Yankees,46.1,53.9
-2026-08-30 17:37,Seattle Mariners vs Toronto Blue Jays,Seattle Mariners,Toronto Blue Jays,46.3,53.7
-2026-08-30 17:40,San Diego Padres vs Tampa Bay Rays,San Diego Padres,Tampa Bay Rays,48.3,51.7
-2026-08-30 17:40,Kansas City Royals vs Cleveland Guardians,Kansas City Royals,Cleveland Guardians,43.5,56.5
-2026-08-30 17:40,Los Angeles Dodgers vs Detroit Tigers,Los Angeles Dodgers,Detroit Tigers,55.1,44.9
-2026-08-30 18:10,Chicago White Sox vs Minnesota Twins,Chicago White Sox,Minnesota Twins,44.9,55.1
-2026-08-30 18:10,Texas Rangers vs Milwaukee Brewers,Texas Rangers,Milwaukee Brewers,38.2,61.8
-2026-08-30 18:15,Pittsburgh Pirates vs St. Louis Cardinals,Pittsburgh Pirates,St. Louis Cardinals,46.6,53.4
-2026-08-30 19:10,Houston Astros vs New York Mets,Houston Astros,New York Mets,47.7,52.3
-2026-08-30 20:05,Baltimore Orioles vs Oakland Athletics,Baltimore Orioles,Oakland Athletics,53.6,46.4
-2026-08-30 20:07,Philadelphia Phillies vs Los Angeles Angels,Philadelphia Phillies,Los Angeles Angels,58.9,41.1
-2026-08-30 23:20,Cincinnati Reds vs Chicago Cubs,Cincinnati Reds,Chicago Cubs,39.5,60.5
-2026-08-31 00:05,Oakland Athletics vs Texas Rangers,Oakland Athletics,Texas Rangers,39.0,61.0
-2026-08-31 00:10,Chicago White Sox vs Houston Astros,Chicago White Sox,Houston Astros,42.5,57.5
-2026-08-31 00:40,Baltimore Orioles vs Colorado Rockies,Baltimore Orioles,Colorado Rockies,57.7,42.3
-2026-08-31 01:38,New York Yankees vs Los Angeles Angels,New York Yankees,Los Angeles Angels,60.2,39.8
-2026-08-31 01:40,Philadelphia Phillies vs Arizona Diamondbacks,Philadelphia Phillies,Arizona Diamondbacks,50.6,49.4
-2026-08-31 22:05,San Francisco Giants vs Atlanta Braves,San Francisco Giants,Atlanta Braves,39.4,60.6
-2026-08-31 22:40,San Diego Padres vs Cincinnati Reds,San Diego Padres,Cincinnati Reds,51.8,48.2
-2026-08-31 22:40,New York Mets vs Tampa Bay Rays,New York Mets,Tampa Bay Rays,44.1,55.9
-2026-08-31 22:45,Seattle Mariners vs Boston Red Sox,Seattle Mariners,Boston Red Sox,41.7,58.3
-2026-08-31 22:45,Miami Marlins vs Washington Nationals,Miami Marlins,Washington Nationals,49.7,50.3
-2026-08-31 23:40,Detroit Tigers vs Minnesota Twins,Detroit Tigers,Minnesota Twins,48.9,51.1
-2026-08-31 23:40,Milwaukee Brewers vs Chicago Cubs,Milwaukee Brewers,Chicago Cubs,49.8,50.2
-2026-09-01 00:05,Oakland Athletics vs Texas Rangers,Oakland Athletics,Texas Rangers,39.2,60.8
-2026-09-01 00:10,Chicago White Sox vs Houston Astros,Chicago White Sox,Houston Astros,42.4,57.6
-2026-09-01 00:40,Baltimore Orioles vs Colorado Rockies,Baltimore Orioles,Colorado Rockies,57.9,42.1
-2026-09-01 01:38,New York Yankees vs Los Angeles Angels,New York Yankees,Los Angeles Angels,60.5,39.5
-2026-09-01 01:40,Philadelphia Phillies vs Arizona Diamondbacks,Philadelphia Phillies,Arizona Diamondbacks,50.8,49.2
-2026-09-01 02:10,St. Louis Cardinals vs Los Angeles Dodgers,St. Louis Cardinals,Los Angeles Dodgers,38.0,62.0
-2026-09-01 22:40,San Diego Padres vs Cincinnati Reds,San Diego Padres,Cincinnati Reds,52.2,47.8
-2026-09-01 22:40,San Francisco Giants vs Pittsburgh Pirates,San Francisco Giants,Pittsburgh Pirates,43.5,56.5
-2026-09-01 22:40,New York Mets vs Tampa Bay Rays,New York Mets,Tampa Bay Rays,44.2,55.8
-2026-09-01 22:40,Toronto Blue Jays vs Cleveland Guardians,Toronto Blue Jays,Cleveland Guardians,47.3,52.7
-2026-09-01 22:45,Atlanta Braves vs Washington Nationals,Atlanta Braves,Washington Nationals,54.4,45.6
-2026-09-01 22:45,Seattle Mariners vs Boston Red Sox,Seattle Mariners,Boston Red Sox,41.9,58.1
-2026-09-01 23:40,Detroit Tigers vs Minnesota Twins,Detroit Tigers,Minnesota Twins,49.3,50.7
-2026-09-01 23:40,Milwaukee Brewers vs Chicago Cubs,Milwaukee Brewers,Chicago Cubs,49.9,50.1
-2026-09-01 23:40,Miami Marlins vs Kansas City Royals,Miami Marlins,Kansas City Royals,46.3,53.7
-2026-09-02 00:10,Chicago White Sox vs Houston Astros,Chicago White Sox,Houston Astros,42.7,57.3
-2026-09-02 01:38,New York Yankees vs Los Angeles Angels,New York Yankees,Los Angeles Angels,60.5,39.5
-2026-09-02 02:10,St. Louis Cardinals vs Los Angeles Dodgers,St. Louis Cardinals,Los Angeles Dodgers,38.2,61.8
-2026-09-02 16:40,San Diego Padres vs Cincinnati Reds,San Diego Padres,Cincinnati Reds,52.2,47.8
-2026-09-02 17:05,Atlanta Braves vs Washington Nationals,Atlanta Braves,Washington Nationals,54.4,45.6
-2026-09-02 18:35,Oakland Athletics vs Texas Rangers,Oakland Athletics,Texas Rangers,39.5,60.5
-2026-09-02 19:10,Baltimore Orioles vs Colorado Rockies,Baltimore Orioles,Colorado Rockies,57.9,42.1
-2026-09-02 19:40,Philadelphia Phillies vs Arizona Diamondbacks,Philadelphia Phillies,Arizona Diamondbacks,51.0,49.0
-2026-09-02 20:10,Seattle Mariners vs Boston Red Sox,Seattle Mariners,Boston Red Sox,42.6,57.4
-2026-09-02 22:40,San Francisco Giants vs Pittsburgh Pirates,San Francisco Giants,Pittsburgh Pirates,43.6,56.4
-2026-09-02 22:40,Toronto Blue Jays vs Cleveland Guardians,Toronto Blue Jays,Cleveland Guardians,47.2,52.8
-2026-09-02 22:40,New York Mets vs Tampa Bay Rays,New York Mets,Tampa Bay Rays,44.0,56.0
-2026-09-02 23:40,Milwaukee Brewers vs Chicago Cubs,Milwaukee Brewers,Chicago Cubs,50.1,49.9
-2026-09-02 23:40,Detroit Tigers vs Minnesota Twins,Detroit Tigers,Minnesota Twins,49.3,50.7
-2026-09-02 23:40,Miami Marlins vs Kansas City Royals,Miami Marlins,Kansas City Royals,46.4,53.6
-2026-09-03 00:05,Tampa Bay Rays vs Texas Rangers,Tampa Bay Rays,Texas Rangers,49.9,50.1
-2026-09-03 01:40,Oakland Athletics vs Seattle Mariners,Oakland Athletics,Seattle Mariners,39.1,60.9
-2026-09-03 02:10,St. Louis Cardinals vs Los Angeles Dodgers,St. Louis Cardinals,Los Angeles Dodgers,38.5,61.5
-2026-09-03 16:35,San Francisco Giants vs Pittsburgh Pirates,San Francisco Giants,Pittsburgh Pirates,43.5,56.5
-2026-09-03 17:10,Toronto Blue Jays vs Cleveland Guardians,Toronto Blue Jays,Cleveland Guardians,47.3,52.7
-2026-09-03 18:10,Chicago White Sox vs Houston Astros,Chicago White Sox,Houston Astros,42.7,57.3
-2026-09-03 23:15,Boston Red Sox vs Baltimore Orioles,Boston Red Sox,Baltimore Orioles,51.8,48.2
-2026-09-03 23:15,Milwaukee Brewers vs Chicago Cubs,Milwaukee Brewers,Chicago Cubs,50.0,50.0
-2026-09-03 23:40,Miami Marlins vs Kansas City Royals,Miami Marlins,Kansas City Royals,46.7,53.3
-2026-09-04 00:05,Tampa Bay Rays vs Texas Rangers,Tampa Bay Rays,Texas Rangers,49.8,50.2
-2026-09-04 00:10,Arizona Diamondbacks vs Houston Astros,Arizona Diamondbacks,Houston Astros,48.4,51.6
-2026-09-04 00:10,Toronto Blue Jays vs Kansas City Royals,Toronto Blue Jays,Kansas City Royals,49.3,50.7
-2026-09-04 00:40,St. Louis Cardinals vs Colorado Rockies,St. Louis Cardinals,Colorado Rockies,57.7,42.3
-2026-09-04 01:40,New York Yankees vs San Diego Padres,New York Yankees,San Diego Padres,48.2,51.8
-2026-09-04 02:10,Oakland Athletics vs Seattle Mariners,Oakland Athletics,Seattle Mariners,39.1,60.9
-2026-09-04 02:10,Washington Nationals vs Los Angeles Dodgers,Washington Nationals,Los Angeles Dodgers,35.7,64.3
-2026-09-04 22:10,Milwaukee Brewers vs Cincinnati Reds,Milwaukee Brewers,Cincinnati Reds,56.8,43.2
-2026-09-04 22:40,Atlanta Braves vs Philadelphia Phillies,Atlanta Braves,Philadelphia Phillies,44.0,56.0
-2026-09-04 22:45,Los Angeles Angels vs Pittsburgh Pirates,Los Angeles Angels,Pittsburgh Pirates,40.5,59.5
-2026-09-04 23:05,Boston Red Sox vs Baltimore Orioles,Boston Red Sox,Baltimore Orioles,51.9,48.1
-2026-09-04 23:10,Chicago Cubs vs Miami Marlins,Chicago Cubs,Miami Marlins,52.8,47.2
-2026-09-04 23:10,San Francisco Giants vs New York Mets,San Francisco Giants,New York Mets,43.4,56.6
-2026-09-04 23:15,Detroit Tigers vs Cleveland Guardians,Detroit Tigers,Cleveland Guardians,46.1,53.9
-2026-09-04 23:40,Minnesota Twins vs Chicago White Sox,Minnesota Twins,Chicago White Sox,47.7,52.3
-2026-09-05 00:10,St. Louis Cardinals vs Colorado Rockies,St. Louis Cardinals,Colorado Rockies,57.6,42.4
-2026-09-05 01:10,Washington Nationals vs Los Angeles Dodgers,Washington Nationals,Los Angeles Dodgers,35.7,64.3
-2026-09-05 01:40,Oakland Athletics vs Seattle Mariners,Oakland Athletics,Seattle Mariners,39.1,60.9
-2026-09-05 20:10,Chicago Cubs vs Miami Marlins,Chicago Cubs,Miami Marlins,53.0,47.0
-2026-09-05 20:10,San Francisco Giants vs New York Mets,San Francisco Giants,New York Mets,43.6,56.4
-2026-09-05 22:05,Atlanta Braves vs Philadelphia Phillies,Atlanta Braves,Philadelphia Phillies,44.2,55.8
-2026-09-05 22:10,Detroit Tigers vs Cleveland Guardians,Detroit Tigers,Cleveland Guardians,46.4,53.6
-2026-09-05 22:40,Los Angeles Angels vs Pittsburgh Pirates,Los Angeles Angels,Pittsburgh Pirates,40.6,59.4
-2026-09-05 22:40,Milwaukee Brewers vs Cincinnati Reds,Milwaukee Brewers,Cincinnati Reds,56.7,43.3
-2026-09-05 23:05,Boston Red Sox vs Baltimore Orioles,Boston Red Sox,Baltimore Orioles,52.0,48.0
-2026-09-05 23:05,Tampa Bay Rays vs Texas Rangers,Tampa Bay Rays,Texas Rangers,50.0,50.0
-2026-09-05 23:10,Toronto Blue Jays vs Kansas City Royals,Toronto Blue Jays,Kansas City Royals,49.5,50.5
-2026-09-05 23:10,Minnesota Twins vs Chicago White Sox,Minnesota Twins,Chicago White Sox,47.7,52.3
-2026-09-05 23:15,Arizona Diamondbacks vs Houston Astros,Arizona Diamondbacks,Houston Astros,48.5,51.5
+2026-08-29 02:07,Philadelphia Phillies vs Los Angeles Angels,Philadelphia Phillies,Los Angeles Angels,61.6,38.4
+2026-08-29 17:10,Los Angeles Dodgers vs Detroit Tigers,Los Angeles Dodgers,Detroit Tigers,55.7,44.3
+2026-08-29 18:10,Chicago White Sox vs Minnesota Twins,Chicago White Sox,Minnesota Twins,47.2,52.8
+2026-08-29 18:15,Pittsburgh Pirates vs St. Louis Cardinals,Pittsburgh Pirates,St. Louis Cardinals,44.4,55.6
+2026-08-29 18:20,Cincinnati Reds vs Chicago Cubs,Cincinnati Reds,Chicago Cubs,39.9,60.1
+2026-08-29 19:07,Seattle Mariners vs Toronto Blue Jays,Seattle Mariners,Toronto Blue Jays,44.6,55.4
+2026-08-29 20:05,Miami Marlins vs Washington Nationals,Miami Marlins,Washington Nationals,48.9,51.1
+2026-08-29 20:10,Houston Astros vs New York Mets,Houston Astros,New York Mets,47.1,52.9
+2026-08-29 20:10,Kansas City Royals vs Cleveland Guardians,Kansas City Royals,Cleveland Guardians,42.4,57.6
+2026-08-29 20:10,San Diego Padres vs Tampa Bay Rays,San Diego Padres,Tampa Bay Rays,45.8,54.2
+2026-08-29 20:10,Colorado Rockies vs Atlanta Braves,Colorado Rockies,Atlanta Braves,31.2,68.8
+2026-08-29 23:15,Boston Red Sox vs New York Yankees,Boston Red Sox,New York Yankees,44.0,56.0
+2026-08-29 23:15,Texas Rangers vs Milwaukee Brewers,Texas Rangers,Milwaukee Brewers,37.2,62.8
+2026-08-30 16:15,Miami Marlins vs Washington Nationals,Miami Marlins,Washington Nationals,46.3,53.7
+2026-08-30 17:35,Colorado Rockies vs Atlanta Braves,Colorado Rockies,Atlanta Braves,30.0,70.0
+2026-08-30 17:35,Boston Red Sox vs New York Yankees,Boston Red Sox,New York Yankees,47.1,52.9
+2026-08-30 17:37,Seattle Mariners vs Toronto Blue Jays,Seattle Mariners,Toronto Blue Jays,48.1,51.9
+2026-08-30 17:40,San Diego Padres vs Tampa Bay Rays,San Diego Padres,Tampa Bay Rays,46.4,53.6
+2026-08-30 17:40,Kansas City Royals vs Cleveland Guardians,Kansas City Royals,Cleveland Guardians,42.3,57.7
+2026-08-30 17:40,Los Angeles Dodgers vs Detroit Tigers,Los Angeles Dodgers,Detroit Tigers,55.3,44.7
+2026-08-30 18:10,Chicago White Sox vs Minnesota Twins,Chicago White Sox,Minnesota Twins,47.9,52.1
+2026-08-30 18:10,Texas Rangers vs Milwaukee Brewers,Texas Rangers,Milwaukee Brewers,34.3,65.7
+2026-08-30 18:15,Pittsburgh Pirates vs St. Louis Cardinals,Pittsburgh Pirates,St. Louis Cardinals,47.0,53.0
+2026-08-30 19:10,Houston Astros vs New York Mets,Houston Astros,New York Mets,47.6,52.4
+2026-08-30 20:05,Baltimore Orioles vs Oakland Athletics,Baltimore Orioles,Oakland Athletics,54.2,45.8
+2026-08-30 20:07,Philadelphia Phillies vs Los Angeles Angels,Philadelphia Phillies,Los Angeles Angels,61.6,38.4
+2026-08-30 23:20,Cincinnati Reds vs Chicago Cubs,Cincinnati Reds,Chicago Cubs,40.5,59.5
+2026-08-31 00:05,Oakland Athletics vs Texas Rangers,Oakland Athletics,Texas Rangers,40.3,59.7
+2026-08-31 00:10,Chicago White Sox vs Houston Astros,Chicago White Sox,Houston Astros,43.8,56.2
+2026-08-31 00:40,Baltimore Orioles vs Colorado Rockies,Baltimore Orioles,Colorado Rockies,58.8,41.2
+2026-08-31 01:38,New York Yankees vs Los Angeles Angels,New York Yankees,Los Angeles Angels,61.1,38.9
+2026-08-31 01:40,Philadelphia Phillies vs Arizona Diamondbacks,Philadelphia Phillies,Arizona Diamondbacks,50.1,49.9
+2026-08-31 22:05,San Francisco Giants vs Atlanta Braves,San Francisco Giants,Atlanta Braves,37.0,63.0
+2026-08-31 22:40,New York Mets vs Tampa Bay Rays,New York Mets,Tampa Bay Rays,41.1,58.9
+2026-08-31 22:40,San Diego Padres vs Cincinnati Reds,San Diego Padres,Cincinnati Reds,51.5,48.5
+2026-08-31 22:45,Miami Marlins vs Washington Nationals,Miami Marlins,Washington Nationals,47.3,52.7
+2026-08-31 22:45,Seattle Mariners vs Boston Red Sox,Seattle Mariners,Boston Red Sox,41.5,58.5
+2026-08-31 23:40,Detroit Tigers vs Minnesota Twins,Detroit Tigers,Minnesota Twins,50.5,49.5
+2026-08-31 23:40,Milwaukee Brewers vs Chicago Cubs,Milwaukee Brewers,Chicago Cubs,51.4,48.6
+2026-09-01 00:05,Oakland Athletics vs Texas Rangers,Oakland Athletics,Texas Rangers,40.2,59.8
+2026-09-01 00:10,Chicago White Sox vs Houston Astros,Chicago White Sox,Houston Astros,43.4,56.6
+2026-09-01 00:40,Baltimore Orioles vs Colorado Rockies,Baltimore Orioles,Colorado Rockies,59.0,41.0
+2026-09-01 01:38,New York Yankees vs Los Angeles Angels,New York Yankees,Los Angeles Angels,61.5,38.5
+2026-09-01 01:40,Philadelphia Phillies vs Arizona Diamondbacks,Philadelphia Phillies,Arizona Diamondbacks,50.5,49.5
+2026-09-01 02:10,St. Louis Cardinals vs Los Angeles Dodgers,St. Louis Cardinals,Los Angeles Dodgers,38.5,61.5
+2026-09-01 22:40,San Diego Padres vs Cincinnati Reds,San Diego Padres,Cincinnati Reds,52.5,47.5
+2026-09-01 22:40,San Francisco Giants vs Pittsburgh Pirates,San Francisco Giants,Pittsburgh Pirates,43.4,56.6
+2026-09-01 22:40,New York Mets vs Tampa Bay Rays,New York Mets,Tampa Bay Rays,42.7,57.3
+2026-09-01 22:40,Toronto Blue Jays vs Cleveland Guardians,Toronto Blue Jays,Cleveland Guardians,44.8,55.2
+2026-09-01 22:45,Seattle Mariners vs Boston Red Sox,Seattle Mariners,Boston Red Sox,41.5,58.5
+2026-09-01 22:45,Atlanta Braves vs Washington Nationals,Atlanta Braves,Washington Nationals,54.7,45.3
+2026-09-01 23:40,Milwaukee Brewers vs Chicago Cubs,Milwaukee Brewers,Chicago Cubs,51.6,48.4
+2026-09-01 23:40,Detroit Tigers vs Minnesota Twins,Detroit Tigers,Minnesota Twins,50.5,49.5
+2026-09-01 23:40,Miami Marlins vs Kansas City Royals,Miami Marlins,Kansas City Royals,44.6,55.4
+2026-09-02 00:10,Chicago White Sox vs Houston Astros,Chicago White Sox,Houston Astros,43.7,56.3
+2026-09-02 01:38,New York Yankees vs Los Angeles Angels,New York Yankees,Los Angeles Angels,61.3,38.7
+2026-09-02 02:10,St. Louis Cardinals vs Los Angeles Dodgers,St. Louis Cardinals,Los Angeles Dodgers,38.7,61.3
+2026-09-02 16:40,San Diego Padres vs Cincinnati Reds,San Diego Padres,Cincinnati Reds,51.7,48.3
+2026-09-02 17:05,Atlanta Braves vs Washington Nationals,Atlanta Braves,Washington Nationals,54.6,45.4
+2026-09-02 18:35,Oakland Athletics vs Texas Rangers,Oakland Athletics,Texas Rangers,40.3,59.7
+2026-09-02 19:10,Baltimore Orioles vs Colorado Rockies,Baltimore Orioles,Colorado Rockies,59.0,41.0
+2026-09-02 19:40,Philadelphia Phillies vs Arizona Diamondbacks,Philadelphia Phillies,Arizona Diamondbacks,50.6,49.4
+2026-09-02 20:10,Seattle Mariners vs Boston Red Sox,Seattle Mariners,Boston Red Sox,41.7,58.3
+2026-09-02 22:40,San Francisco Giants vs Pittsburgh Pirates,San Francisco Giants,Pittsburgh Pirates,43.4,56.6
+2026-09-02 22:40,Toronto Blue Jays vs Cleveland Guardians,Toronto Blue Jays,Cleveland Guardians,50.5,49.5
+2026-09-02 22:40,New York Mets vs Tampa Bay Rays,New York Mets,Tampa Bay Rays,43.1,56.9
+2026-09-02 23:40,Milwaukee Brewers vs Chicago Cubs,Milwaukee Brewers,Chicago Cubs,53.6,46.4
+2026-09-02 23:40,Detroit Tigers vs Minnesota Twins,Detroit Tigers,Minnesota Twins,50.5,49.5
+2026-09-02 23:40,Miami Marlins vs Kansas City Royals,Miami Marlins,Kansas City Royals,44.4,55.6
+2026-09-03 00:05,Tampa Bay Rays vs Texas Rangers,Tampa Bay Rays,Texas Rangers,51.4,48.6
+2026-09-03 01:40,Oakland Athletics vs Seattle Mariners,Oakland Athletics,Seattle Mariners,39.3,60.7
+2026-09-03 02:10,St. Louis Cardinals vs Los Angeles Dodgers,St. Louis Cardinals,Los Angeles Dodgers,38.7,61.3
+2026-09-03 16:35,San Francisco Giants vs Pittsburgh Pirates,San Francisco Giants,Pittsburgh Pirates,43.4,56.6
+2026-09-03 17:10,Toronto Blue Jays vs Cleveland Guardians,Toronto Blue Jays,Cleveland Guardians,48.2,51.8
+2026-09-03 18:10,Chicago White Sox vs Houston Astros,Chicago White Sox,Houston Astros,43.7,56.3
+2026-09-03 23:15,Boston Red Sox vs Baltimore Orioles,Boston Red Sox,Baltimore Orioles,51.0,49.0
+2026-09-03 23:15,Milwaukee Brewers vs Chicago Cubs,Milwaukee Brewers,Chicago Cubs,52.5,47.5
+2026-09-03 23:40,Miami Marlins vs Kansas City Royals,Miami Marlins,Kansas City Royals,45.0,55.0
+2026-09-04 00:05,Tampa Bay Rays vs Texas Rangers,Tampa Bay Rays,Texas Rangers,51.1,48.9
+2026-09-04 00:10,Arizona Diamondbacks vs Houston Astros,Arizona Diamondbacks,Houston Astros,48.7,51.3
+2026-09-04 00:10,Toronto Blue Jays vs Kansas City Royals,Toronto Blue Jays,Kansas City Royals,48.8,51.2
+2026-09-04 00:40,St. Louis Cardinals vs Colorado Rockies,St. Louis Cardinals,Colorado Rockies,57.1,42.9
+2026-09-04 01:40,New York Yankees vs San Diego Padres,New York Yankees,San Diego Padres,48.5,51.5
+2026-09-04 02:10,Oakland Athletics vs Seattle Mariners,Oakland Athletics,Seattle Mariners,39.3,60.7
+2026-09-04 02:10,Washington Nationals vs Los Angeles Dodgers,Washington Nationals,Los Angeles Dodgers,36.6,63.4
+2026-09-04 22:10,Milwaukee Brewers vs Cincinnati Reds,Milwaukee Brewers,Cincinnati Reds,57.5,42.5
+2026-09-04 22:40,Atlanta Braves vs Philadelphia Phillies,Atlanta Braves,Philadelphia Phillies,44.8,55.2
+2026-09-04 22:45,Los Angeles Angels vs Pittsburgh Pirates,Los Angeles Angels,Pittsburgh Pirates,39.3,60.7
+2026-09-04 23:05,Boston Red Sox vs Baltimore Orioles,Boston Red Sox,Baltimore Orioles,51.1,48.9
+2026-09-04 23:10,Chicago Cubs vs Miami Marlins,Chicago Cubs,Miami Marlins,52.5,47.5
+2026-09-04 23:10,San Francisco Giants vs New York Mets,San Francisco Giants,New York Mets,43.0,57.0
+2026-09-04 23:15,Detroit Tigers vs Cleveland Guardians,Detroit Tigers,Cleveland Guardians,46.5,53.5
+2026-09-04 23:40,Minnesota Twins vs Chicago White Sox,Minnesota Twins,Chicago White Sox,45.4,54.6
+2026-09-05 00:10,St. Louis Cardinals vs Colorado Rockies,St. Louis Cardinals,Colorado Rockies,57.1,42.9
+2026-09-05 01:10,Washington Nationals vs Los Angeles Dodgers,Washington Nationals,Los Angeles Dodgers,36.3,63.7
+2026-09-05 01:40,Oakland Athletics vs Seattle Mariners,Oakland Athletics,Seattle Mariners,39.2,60.8
+2026-09-05 20:10,Chicago Cubs vs Miami Marlins,Chicago Cubs,Miami Marlins,52.7,47.3
+2026-09-05 20:10,San Francisco Giants vs New York Mets,San Francisco Giants,New York Mets,43.2,56.8
+2026-09-05 22:05,Atlanta Braves vs Philadelphia Phillies,Atlanta Braves,Philadelphia Phillies,44.9,55.1
+2026-09-05 22:10,Detroit Tigers vs Cleveland Guardians,Detroit Tigers,Cleveland Guardians,46.5,53.5
+2026-09-05 22:40,Los Angeles Angels vs Pittsburgh Pirates,Los Angeles Angels,Pittsburgh Pirates,39.6,60.4
+2026-09-05 22:40,Milwaukee Brewers vs Cincinnati Reds,Milwaukee Brewers,Cincinnati Reds,57.5,42.5
+2026-09-05 23:05,Boston Red Sox vs Baltimore Orioles,Boston Red Sox,Baltimore Orioles,51.3,48.7
+2026-09-05 23:05,Tampa Bay Rays vs Texas Rangers,Tampa Bay Rays,Texas Rangers,51.3,48.7
+2026-09-05 23:10,Toronto Blue Jays vs Kansas City Royals,Toronto Blue Jays,Kansas City Royals,49.0,51.0
+2026-09-05 23:10,Minnesota Twins vs Chicago White Sox,Minnesota Twins,Chicago White Sox,45.4,54.6
+2026-09-05 23:15,Arizona Diamondbacks vs Houston Astros,Arizona Diamondbacks,Houston Astros,48.8,51.2
 2026-09-05 23:15,New York Yankees vs San Diego Padres,New York Yankees,San Diego Padres,48.5,51.5
-2026-09-06 02:10,Washington Nationals vs Los Angeles Dodgers,Washington Nationals,Los Angeles Dodgers,35.9,64.1
-2026-09-06 16:10,Milwaukee Brewers vs Cincinnati Reds,Milwaukee Brewers,Cincinnati Reds,56.7,43.3
-2026-09-06 17:10,Atlanta Braves vs Philadelphia Phillies,Atlanta Braves,Philadelphia Phillies,44.1,55.9
-2026-09-06 17:35,Boston Red Sox vs Baltimore Orioles,Boston Red Sox,Baltimore Orioles,52.4,47.6
-2026-09-06 17:35,Los Angeles Angels vs Pittsburgh Pirates,Los Angeles Angels,Pittsburgh Pirates,40.9,59.1
-2026-09-06 17:40,Chicago Cubs vs Miami Marlins,Chicago Cubs,Miami Marlins,53.2,46.8
-2026-09-06 17:40,San Francisco Giants vs New York Mets,San Francisco Giants,New York Mets,43.8,56.2
-2026-09-06 17:40,Detroit Tigers vs Cleveland Guardians,Detroit Tigers,Cleveland Guardians,46.3,53.7
-2026-09-06 18:10,Toronto Blue Jays vs Kansas City Royals,Toronto Blue Jays,Kansas City Royals,49.8,50.2
-2026-09-06 18:10,Arizona Diamondbacks vs Houston Astros,Arizona Diamondbacks,Houston Astros,48.6,51.4
-2026-09-06 18:35,Tampa Bay Rays vs Texas Rangers,Tampa Bay Rays,Texas Rangers,50.0,50.0
-2026-09-06 19:10,St. Louis Cardinals vs Colorado Rockies,St. Louis Cardinals,Colorado Rockies,57.7,42.3
-2026-09-06 20:10,Oakland Athletics vs Seattle Mariners,Oakland Athletics,Seattle Mariners,39.1,60.9
+2026-09-06 02:10,Washington Nationals vs Los Angeles Dodgers,Washington Nationals,Los Angeles Dodgers,36.6,63.4
+2026-09-06 16:10,Milwaukee Brewers vs Cincinnati Reds,Milwaukee Brewers,Cincinnati Reds,57.4,42.6
+2026-09-06 17:10,Atlanta Braves vs Philadelphia Phillies,Atlanta Braves,Philadelphia Phillies,44.9,55.1
+2026-09-06 17:35,Boston Red Sox vs Baltimore Orioles,Boston Red Sox,Baltimore Orioles,51.6,48.4
+2026-09-06 17:35,Los Angeles Angels vs Pittsburgh Pirates,Los Angeles Angels,Pittsburgh Pirates,39.9,60.1
+2026-09-06 17:40,Chicago Cubs vs Miami Marlins,Chicago Cubs,Miami Marlins,53.0,47.0
+2026-09-06 17:40,San Francisco Giants vs New York Mets,San Francisco Giants,New York Mets,43.4,56.6
+2026-09-06 17:40,Detroit Tigers vs Cleveland Guardians,Detroit Tigers,Cleveland Guardians,46.4,53.6
+2026-09-06 18:10,Toronto Blue Jays vs Kansas City Royals,Toronto Blue Jays,Kansas City Royals,49.2,50.8
+2026-09-06 18:10,Arizona Diamondbacks vs Houston Astros,Arizona Diamondbacks,Houston Astros,48.7,51.3
+2026-09-06 18:35,Tampa Bay Rays vs Texas Rangers,Tampa Bay Rays,Texas Rangers,51.2,48.8
+2026-09-06 19:10,St. Louis Cardinals vs Colorado Rockies,St. Louis Cardinals,Colorado Rockies,57.2,42.8
+2026-09-06 20:10,Oakland Athletics vs Seattle Mariners,Oakland Athletics,Seattle Mariners,39.3,60.7
 2026-09-06 20:10,New York Yankees vs San Diego Padres,New York Yankees,San Diego Padres,48.7,51.3
-2026-09-06 22:20,Minnesota Twins vs Chicago White Sox,Minnesota Twins,Chicago White Sox,48.0,52.0
-2026-09-07 00:10,St. Louis Cardinals vs San Francisco Giants,St. Louis Cardinals,San Francisco Giants,50.0,50.0
-2026-09-07 01:10,Cincinnati Reds vs Los Angeles Dodgers,Cincinnati Reds,Los Angeles Dodgers,38.3,61.7
-2026-09-07 02:05,Toronto Blue Jays vs Oakland Athletics,Toronto Blue Jays,Oakland Athletics,54.9,45.1
-2026-09-07 17:05,Atlanta Braves vs Philadelphia Phillies,Atlanta Braves,Philadelphia Phillies,44.1,55.9
+2026-09-06 22:20,Minnesota Twins vs Chicago White Sox,Minnesota Twins,Chicago White Sox,45.7,54.3
+2026-09-07 00:10,St. Louis Cardinals vs San Francisco Giants,St. Louis Cardinals,San Francisco Giants,48.9,51.1
+2026-09-07 01:10,Cincinnati Reds vs Los Angeles Dodgers,Cincinnati Reds,Los Angeles Dodgers,39.0,61.0
+2026-09-07 02:05,Toronto Blue Jays vs Oakland Athletics,Toronto Blue Jays,Oakland Athletics,54.4,45.6
+2026-09-07 17:05,Atlanta Braves vs Philadelphia Phillies,Atlanta Braves,Philadelphia Phillies,44.7,55.3
 2026-09-07 17:10,New York Mets vs Miami Marlins,New York Mets,Miami Marlins,47.2,52.8
-2026-09-07 17:35,Los Angeles Angels vs Boston Red Sox,Los Angeles Angels,Boston Red Sox,34.8,65.2
-2026-09-07 17:35,Cleveland Guardians vs Baltimore Orioles,Cleveland Guardians,Baltimore Orioles,48.3,51.7
-2026-09-07 18:10,Chicago Cubs vs Milwaukee Brewers,Chicago Cubs,Milwaukee Brewers,44.4,55.6
-2026-09-07 18:10,Arizona Diamondbacks vs Kansas City Royals,Arizona Diamondbacks,Kansas City Royals,50.4,49.6
-2026-09-07 19:10,Minnesota Twins vs Detroit Tigers,Minnesota Twins,Detroit Tigers,44.7,55.3
-2026-09-07 21:10,Washington Nationals vs San Diego Padres,Washington Nationals,San Diego Padres,38.7,61.3
-2026-09-08 01:40,Washington Nationals vs San Diego Padres,Washington Nationals,San Diego Padres,38.9,61.1
-2026-09-08 01:40,Toronto Blue Jays vs Oakland Athletics,Toronto Blue Jays,Oakland Athletics,54.9,45.1
-2026-09-08 01:40,Texas Rangers vs Seattle Mariners,Texas Rangers,Seattle Mariners,45.4,54.6
-2026-09-08 01:45,St. Louis Cardinals vs San Francisco Giants,St. Louis Cardinals,San Francisco Giants,50.1,49.9
-2026-09-08 02:10,Cincinnati Reds vs Los Angeles Dodgers,Cincinnati Reds,Los Angeles Dodgers,38.4,61.6
-2026-09-08 22:35,Cleveland Guardians vs Baltimore Orioles,Cleveland Guardians,Baltimore Orioles,48.2,51.8
-2026-09-08 22:40,Minnesota Twins vs Detroit Tigers,Minnesota Twins,Detroit Tigers,45.0,55.0
+2026-09-07 17:35,Los Angeles Angels vs Boston Red Sox,Los Angeles Angels,Boston Red Sox,34.3,65.7
+2026-09-07 17:35,Cleveland Guardians vs Baltimore Orioles,Cleveland Guardians,Baltimore Orioles,47.5,52.5
+2026-09-07 18:10,Chicago Cubs vs Milwaukee Brewers,Chicago Cubs,Milwaukee Brewers,42.9,57.1
+2026-09-07 18:10,Arizona Diamondbacks vs Kansas City Royals,Arizona Diamondbacks,Kansas City Royals,49.9,50.1
+2026-09-07 19:10,Minnesota Twins vs Detroit Tigers,Minnesota Twins,Detroit Tigers,43.2,56.8
+2026-09-07 21:10,Washington Nationals vs San Diego Padres,Washington Nationals,San Diego Padres,39.1,60.9
+2026-09-08 01:40,Washington Nationals vs San Diego Padres,Washington Nationals,San Diego Padres,39.2,60.8
+2026-09-08 01:40,Texas Rangers vs Seattle Mariners,Texas Rangers,Seattle Mariners,44.7,55.3
+2026-09-08 01:40,Toronto Blue Jays vs Oakland Athletics,Toronto Blue Jays,Oakland Athletics,54.5,45.5
+2026-09-08 01:45,St. Louis Cardinals vs San Francisco Giants,St. Louis Cardinals,San Francisco Giants,48.9,51.1
+2026-09-08 02:10,Cincinnati Reds vs Los Angeles Dodgers,Cincinnati Reds,Los Angeles Dodgers,39.0,61.0
+2026-09-08 22:35,Cleveland Guardians vs Baltimore Orioles,Cleveland Guardians,Baltimore Orioles,47.4,52.6
+2026-09-08 22:40,Minnesota Twins vs Detroit Tigers,Minnesota Twins,Detroit Tigers,43.5,56.5
 2026-09-08 22:40,Houston Astros vs Philadelphia Phillies,Houston Astros,Philadelphia Phillies,41.8,58.2
 2026-09-08 22:40,New York Mets vs Miami Marlins,New York Mets,Miami Marlins,47.2,52.8
-2026-09-08 22:45,Los Angeles Angels vs Boston Red Sox,Los Angeles Angels,Boston Red Sox,34.7,65.3
-2026-09-08 23:05,Colorado Rockies vs New York Yankees,Colorado Rockies,New York Yankees,30.8,69.2
-2026-09-08 23:15,Tampa Bay Rays vs Atlanta Braves,Tampa Bay Rays,Atlanta Braves,46.8,53.2
-2026-09-08 23:40,Arizona Diamondbacks vs Kansas City Royals,Arizona Diamondbacks,Kansas City Royals,50.6,49.4
-2026-09-08 23:40,Pittsburgh Pirates vs Chicago White Sox,Pittsburgh Pirates,Chicago White Sox,49.0,51.0
-2026-09-08 23:40,Chicago Cubs vs Milwaukee Brewers,Chicago Cubs,Milwaukee Brewers,44.6,55.4
+2026-09-08 22:45,Los Angeles Angels vs Boston Red Sox,Los Angeles Angels,Boston Red Sox,34.2,65.8
+2026-09-08 23:05,Colorado Rockies vs New York Yankees,Colorado Rockies,New York Yankees,30.3,69.7
+2026-09-08 23:15,Tampa Bay Rays vs Atlanta Braves,Tampa Bay Rays,Atlanta Braves,45.1,54.9
+2026-09-08 23:40,Chicago Cubs vs Milwaukee Brewers,Chicago Cubs,Milwaukee Brewers,43.1,56.9
+2026-09-08 23:40,Arizona Diamondbacks vs Kansas City Royals,Arizona Diamondbacks,Kansas City Royals,50.2,49.8
+2026-09-08 23:40,Pittsburgh Pirates vs Chicago White Sox,Pittsburgh Pirates,Chicago White Sox,47.8,52.2
+2026-09-09 02:10,Cincinnati Reds vs Los Angeles Dodgers,Cincinnati Reds,Los Angeles Dodgers,39.3,60.7
+2026-09-09 17:10,Minnesota Twins vs Detroit Tigers,Minnesota Twins,Detroit Tigers,43.6,56.4
+2026-09-09 19:05,Toronto Blue Jays vs Oakland Athletics,Toronto Blue Jays,Oakland Athletics,54.7,45.3
+2026-09-09 19:45,St. Louis Cardinals vs San Francisco Giants,St. Louis Cardinals,San Francisco Giants,49.3,50.7
+2026-09-09 20:10,Texas Rangers vs Seattle Mariners,Texas Rangers,Seattle Mariners,45.0,55.0
+2026-09-09 20:10,Washington Nationals vs San Diego Padres,Washington Nationals,San Diego Padres,39.5,60.5
+2026-09-09 22:35,Cleveland Guardians vs Baltimore Orioles,Cleveland Guardians,Baltimore Orioles,47.3,52.7
+2026-09-09 22:40,Houston Astros vs Philadelphia Phillies,Houston Astros,Philadelphia Phillies,42.0,58.0
+2026-09-09 22:40,New York Mets vs Miami Marlins,New York Mets,Miami Marlins,47.3,52.7
+2026-09-09 22:45,Los Angeles Angels vs Boston Red Sox,Los Angeles Angels,Boston Red Sox,34.5,65.5
+2026-09-09 23:05,Colorado Rockies vs New York Yankees,Colorado Rockies,New York Yankees,30.6,69.4
+2026-09-09 23:15,Tampa Bay Rays vs Atlanta Braves,Tampa Bay Rays,Atlanta Braves,45.2,54.8
+2026-09-09 23:40,Pittsburgh Pirates vs Chicago White Sox,Pittsburgh Pirates,Chicago White Sox,47.7,52.3
+2026-09-09 23:40,Chicago Cubs vs Milwaukee Brewers,Chicago Cubs,Milwaukee Brewers,43.3,56.7
+2026-09-09 23:40,Arizona Diamondbacks vs Kansas City Royals,Arizona Diamondbacks,Kansas City Royals,50.4,49.6
+2026-09-10 16:15,Tampa Bay Rays vs Atlanta Braves,Tampa Bay Rays,Atlanta Braves,45.3,54.7
+2026-09-10 17:05,Houston Astros vs Philadelphia Phillies,Houston Astros,Philadelphia Phillies,42.3,57.7
+2026-09-10 20:10,Texas Rangers vs Seattle Mariners,Texas Rangers,Seattle Mariners,45.3,54.7
+2026-09-10 23:05,Colorado Rockies vs New York Yankees,Colorado Rockies,New York Yankees,30.6,69.4
+2026-09-10 23:40,Pittsburgh Pirates vs Chicago White Sox,Pittsburgh Pirates,Chicago White Sox,48.0,52.0
+2026-09-11 00:10,Cleveland Guardians vs Minnesota Twins,Cleveland Guardians,Minnesota Twins,51.1,48.9
+2026-09-11 00:15,Chicago White Sox vs St. Louis Cardinals,Chicago White Sox,St. Louis Cardinals,44.6,55.4
+2026-09-11 01:40,Seattle Mariners vs Oakland Athletics,Seattle Mariners,Oakland Athletics,53.9,46.1
+2026-09-11 01:40,Texas Rangers vs Arizona Diamondbacks,Texas Rangers,Arizona Diamondbacks,43.5,56.5
+2026-09-11 02:15,San Diego Padres vs San Francisco Giants,San Diego Padres,San Francisco Giants,53.8,46.2
+2026-09-11 18:20,Pittsburgh Pirates vs Chicago Cubs,Pittsburgh Pirates,Chicago Cubs,40.5,59.5
+2026-09-11 22:40,Colorado Rockies vs Detroit Tigers,Colorado Rockies,Detroit Tigers,36.3,63.7
+2026-09-11 22:45,Los Angeles Angels vs Washington Nationals,Los Angeles Angels,Washington Nationals,42.3,57.7
+2026-09-11 23:05,New York Mets vs New York Yankees,New York Mets,New York Yankees,40.1,59.9
+2026-09-11 23:07,Baltimore Orioles vs Toronto Blue Jays,Baltimore Orioles,Toronto Blue Jays,45.6,54.4
+2026-09-11 23:10,Los Angeles Dodgers vs Miami Marlins,Los Angeles Dodgers,Miami Marlins,55.2,44.8
+2026-09-11 23:10,Kansas City Royals vs Boston Red Sox,Kansas City Royals,Boston Red Sox,41.4,58.6
+2026-09-11 23:10,Houston Astros vs Tampa Bay Rays,Houston Astros,Tampa Bay Rays,44.6,55.4
+2026-09-11 23:15,Philadelphia Phillies vs Atlanta Braves,Philadelphia Phillies,Atlanta Braves,48.2,51.8
+2026-09-11 23:45,Cincinnati Reds vs Milwaukee Brewers,Cincinnati Reds,Milwaukee Brewers,37.1,62.9
+2026-09-12 00:10,Texas Rangers vs Arizona Diamondbacks,Texas Rangers,Arizona Diamondbacks,43.5,56.5
+2026-09-12 01:40,Seattle Mariners vs Oakland Athletics,Seattle Mariners,Oakland Athletics,54.1,45.9
+2026-09-12 17:10,Colorado Rockies vs Detroit Tigers,Colorado Rockies,Detroit Tigers,36.3,63.7
+2026-09-12 17:35,New York Mets vs New York Yankees,New York Mets,New York Yankees,40.2,59.8
+2026-09-12 18:20,Pittsburgh Pirates vs Chicago Cubs,Pittsburgh Pirates,Chicago Cubs,40.8,59.2
+2026-09-12 19:07,Baltimore Orioles vs Toronto Blue Jays,Baltimore Orioles,Toronto Blue Jays,45.5,54.5
+2026-09-12 20:05,Los Angeles Angels vs Washington Nationals,Los Angeles Angels,Washington Nationals,42.6,57.4
+2026-09-12 20:05,San Diego Padres vs San Francisco Giants,San Diego Padres,San Francisco Giants,54.0,46.0
+2026-09-12 20:10,Kansas City Royals vs Boston Red Sox,Kansas City Royals,Boston Red Sox,41.4,58.6
+2026-09-12 20:10,Los Angeles Dodgers vs Miami Marlins,Los Angeles Dodgers,Miami Marlins,55.5,44.5
+2026-09-12 20:10,Cleveland Guardians vs Minnesota Twins,Cleveland Guardians,Minnesota Twins,51.2,48.8
+2026-09-12 22:10,Houston Astros vs Tampa Bay Rays,Houston Astros,Tampa Bay Rays,44.8,55.2
+2026-09-12 23:10,Cincinnati Reds vs Milwaukee Brewers,Cincinnati Reds,Milwaukee Brewers,37.3,62.7
+2026-09-12 23:15,Chicago White Sox vs St. Louis Cardinals,Chicago White Sox,St. Louis Cardinals,44.9,55.1
+2026-09-12 23:15,Philadelphia Phillies vs Atlanta Braves,Philadelphia Phillies,Atlanta Braves,48.4,51.6
+2026-09-13 16:10,Colorado Rockies vs Detroit Tigers,Colorado Rockies,Detroit Tigers,36.3,63.7
+2026-09-13 17:35,Kansas City Royals vs Boston Red Sox,Kansas City Royals,Boston Red Sox,41.7,58.3
+2026-09-13 17:35,Los Angeles Angels vs Washington Nationals,Los Angeles Angels,Washington Nationals,42.6,57.4
+2026-09-13 17:35,Philadelphia Phillies vs Atlanta Braves,Philadelphia Phillies,Atlanta Braves,48.6,51.4
+2026-09-13 17:35,New York Mets vs New York Yankees,New York Mets,New York Yankees,40.4,59.6
+2026-09-13 17:37,Baltimore Orioles vs Toronto Blue Jays,Baltimore Orioles,Toronto Blue Jays,45.7,54.3
+2026-09-13 17:40,Houston Astros vs Tampa Bay Rays,Houston Astros,Tampa Bay Rays,44.8,55.2
+2026-09-13 17:40,Los Angeles Dodgers vs Miami Marlins,Los Angeles Dodgers,Miami Marlins,55.5,44.5
+2026-09-13 18:10,Cincinnati Reds vs Milwaukee Brewers,Cincinnati Reds,Milwaukee Brewers,37.4,62.6
+2026-09-13 18:10,Cleveland Guardians vs Minnesota Twins,Cleveland Guardians,Minnesota Twins,51.3,48.7
+2026-09-13 18:15,Chicago White Sox vs St. Louis Cardinals,Chicago White Sox,St. Louis Cardinals,45.0,55.0
+2026-09-13 18:20,Pittsburgh Pirates vs Chicago Cubs,Pittsburgh Pirates,Chicago Cubs,41.1,58.9
+2026-09-13 20:05,Seattle Mariners vs Oakland Athletics,Seattle Mariners,Oakland Athletics,54.0,46.0
+2026-09-13 20:10,Texas Rangers vs Arizona Diamondbacks,Texas Rangers,Arizona Diamondbacks,43.7,56.3
+2026-09-13 23:20,San Diego Padres vs San Francisco Giants,San Diego Padres,San Francisco Giants,54.2,45.8

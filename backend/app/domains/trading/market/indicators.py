@@ -64,11 +64,26 @@ def aggregate(bars: list[dict], factor: int) -> list[dict]:
         buckets.setdefault(moment.toordinal() * 10_000 + slot, []).append(bar)
 
     out = []
-    for key in sorted(buckets):
+    ordered = sorted(buckets)
+    for key in ordered:
         group = buckets[key]
-        # A partial bucket at the right-hand edge is the bar still forming.
-        # Dropping it stops the newest reading flickering as it fills.
-        if len(group) < factor:
+        # ONLY the last bucket is dropped when short, and only because it is
+        # the bar still forming -- keeping it would make the newest reading
+        # flicker as it fills.
+        #
+        # This used to drop EVERY short bucket, which is a different rule
+        # wearing the same comment. On a contiguous feed the two are
+        # identical, because only the final bucket is ever partial. On a feed
+        # with gaps they are not: a thinly traded market publishes no candle
+        # for a minute with no trades, so most of its buckets are short and
+        # nearly the whole series was being discarded. BNB spanned 531
+        # minutes and produced 15 five-minute bars instead of ~106, which is
+        # below what an ADX needs -- the column simply went blank, with
+        # nothing anywhere saying why.
+        #
+        # An interior bucket missing a minute is still the right time window.
+        # Its high, low and close are all real; there is just less inside it.
+        if len(group) < factor and key == ordered[-1]:
             continue
         out.append({
             "time": group[0].get("time") or group[0].get("timestamp"),
@@ -95,14 +110,26 @@ def _wilder(values: list[float], period: int) -> list[float | None]:
     return out
 
 
-def dmi(bars: list[dict], period: int = 14) -> dict | None:
+# Wilder's DMI needs two full periods plus the seed bar before ADX means
+# anything. Named here rather than left inline, because callers have to be
+# able to ask "is there enough data yet?" without re-deriving the arithmetic
+# and drifting from what dmi() actually enforces.
+DEFAULT_PERIOD = 14
+MIN_BARS = DEFAULT_PERIOD * 2 + 1
+
+
+def min_bars(period: int = DEFAULT_PERIOD) -> int:
+    return period * 2 + 1
+
+
+def dmi(bars: list[dict], period: int = DEFAULT_PERIOD) -> dict | None:
     """+DI, -DI and ADX from the latest bar.
 
     Returns None rather than a partial reading when there are not enough bars.
     A number computed from its own seed looks exactly like a real one on a
     board, and there is no way for the operator to tell.
     """
-    if len(bars) < period * 2 + 1:
+    if len(bars) < min_bars(period):
         return None
 
     highs = [float(b.get("high") or 0) for b in bars]

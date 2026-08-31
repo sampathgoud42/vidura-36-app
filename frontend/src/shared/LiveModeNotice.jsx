@@ -51,9 +51,7 @@ export default function LiveModeNotice({ mode, accent = '#f87171' }) {
   if (lock && !lock.paperOnly) {
     return (
       <div className="vw-live-note armed" style={{ '--lm': accent }} role="alert">
-        <b>🔴 LIVE ARMED — real money.</b> The next start places real orders on
-        Kalshi with the credentials in your user folder. Check your balance and
-        contract size first; the bot will not ask again after the confirmation.
+        <b>🔴 LIVE ARMED — real money.</b>
       </div>
     );
   }

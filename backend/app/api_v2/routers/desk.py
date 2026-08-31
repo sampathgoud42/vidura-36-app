@@ -235,16 +235,46 @@ def quotes(symbols: str = Query(...), live: bool = Query(default=False),
     wanted = [s.strip().upper() for s in symbols.split(",") if s.strip()]
     if not wanted:
         raise HTTPException(status_code=422, detail="no symbols given")
-    _credential(db, tenant, kr, live=live)
+    cred = _credential(db, tenant, kr, live=live)
+
+    try:
+        rows = venue_mod.quotes(wanted, cred=cred, sandbox=not live)
+    except Exception:                                   # noqa: BLE001
+        logger.info("quotes unavailable for %s", tenant.slug)
+        rows = []
 
     # A LIST, always, and always present. The desk does
     #     for (const q of data.quotes)
     # with no guard (TradierSite.jsx:1896), so an object here raises
     # "quotes is not iterable", React unmounts, and the whole world renders
-    # BLANK. It is not a missing-data bug on the page -- the page never gets
-    # to run. Returning the right container even when it is empty is the
-    # difference between "no prices yet" and a white screen.
-    return {"symbols": wanted, "quotes": [], "source": "snapshot"}
+    # BLANK -- the page never gets to run at all. Returning the right
+    # container even when empty is the difference between "no prices yet" and
+    # a white screen.
+    by_symbol = {str(q.get("symbol", "")).upper(): q for q in rows}
+    out = []
+    for sym in wanted:
+        q = by_symbol.get(sym)
+        if q is None:
+            # Present but null rather than absent: the ticker rail lays out one
+            # row per symbol asked for, and a dropped row reads as a rendering
+            # bug rather than "no quote".
+            out.append({"symbol": sym, "last": None, "bid": None, "ask": None,
+                        "change": None, "change_percentage": None,
+                        "volume": None, "available": False})
+            continue
+        out.append({
+            "symbol": sym,
+            "description": q.get("description"),
+            "last": q.get("last"), "bid": q.get("bid"), "ask": q.get("ask"),
+            "open": q.get("open"), "high": q.get("high"), "low": q.get("low"),
+            "close": q.get("close"), "prevclose": q.get("prevclose"),
+            "change": q.get("change"),
+            "change_percentage": q.get("change_percentage"),
+            "volume": q.get("volume"), "available": True,
+        })
+    return {"symbols": wanted, "quotes": out,
+            "venue": "live" if live else "sandbox",
+            "source": "tradier"}
 
 
 @market_router.get("/chain", operation_id="previewTradierChain")
@@ -310,36 +340,183 @@ def timesales(symbol: str = Query(...), interval: str = Query(default="5min"),
               tenant: Tenant = Depends(deps.current_tenant),
               db: DbSession = Depends(deps.get_db),
               kr: Keyring = Depends(deps.keyring)) -> dict:
-    _credential(db, tenant, kr, live=live)
-    return {"symbol": symbol, "interval": interval, "days": days, "bars": []}
+    cred = _credential(db, tenant, kr, live=live)
+    from app.domains.trading.market import indicators
+
+    try:
+        native, factor = indicators.source_interval(interval)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    try:
+        bars = venue_mod.timesales(
+            symbol.upper(), cred=cred, interval=native, sandbox=not live,
+            start=indicators.start_date(interval))
+        bars = indicators.aggregate(bars, factor)
+    except Exception:                                   # noqa: BLE001
+        logger.info("timesales unavailable for %s/%s", tenant.slug, symbol)
+        bars = []
+    return {"symbol": symbol.upper(), "interval": interval, "days": days,
+            "native_interval": native, "bars": bars,
+            "venue": "live" if live else "sandbox"}
 
 
-def _snapshot(kind: str) -> dict:
-    """Background-swept boards read a snapshot and never wait on the venue."""
-    return {"kind": kind, "rows": [], "as_of": None, "source": "snapshot"}
+def _scan(cred, symbols: list[str], interval: str, *, sandbox: bool,
+          gate: bool) -> list[dict]:
+    """DMI over a list of symbols, through the ONE indicator implementation.
+
+    ``gate`` is the only difference between the HOT board and the DMI board:
+    HOT shows names that clear a trend threshold, DMI shows whatever was
+    asked for. Same maths, same bars, one filter -- which is why Phase 4 kept
+    them as separate endpoints sharing code rather than merging them behind a
+    mode flag.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
+    from app.core.config import get_settings
+    from app.domains.trading.market import indicators
+
+    settings = get_settings()
+    native, factor = indicators.source_interval(interval)
+    start = indicators.start_date(interval)
+
+    def one(symbol: str) -> dict:
+        try:
+            bars = venue_mod.timesales(symbol, cred=cred, interval=native,
+                                       sandbox=sandbox, start=start)
+            reading = indicators.dmi(indicators.aggregate(bars, factor))
+        except Exception:                               # noqa: BLE001
+            # An unknown or illiquid ticker is an ordinary outcome on a board
+            # the operator types into. One bad symbol must not empty the rest.
+            reading = None
+        return {"symbol": symbol, "plus_di": (reading or {}).get("plus_di"),
+                "minus_di": (reading or {}).get("minus_di"),
+                "adx": (reading or {}).get("adx"),
+                "side": (reading or {}).get("side"),
+                "bars": (reading or {}).get("bars", 0)}
+
+    workers = max(1, min(settings.tradier_flow_workers, len(symbols)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        rows = list(pool.map(one, symbols))
+
+    if not gate:
+        return rows
+    lo_adx = settings.tradier_hot_min_adx
+    min_pdi = settings.tradier_hot_min_pdi
+    ratio = settings.tradier_hot_di_ratio
+    keep = []
+    for r in rows:
+        p, m, adx = r["plus_di"], r["minus_di"], r["adx"]
+        if p is None or m is None or adx is None or adx < lo_adx:
+            continue
+        strong, weak = (p, m) if p >= m else (m, p)
+        if strong < min_pdi or weak <= 0 or strong / weak < ratio:
+            continue
+        keep.append(r)
+    keep.sort(key=lambda r: r["adx"], reverse=True)
+    return keep
 
 
 @market_router.get("/hot", operation_id="getTradierHotScan")
 @deps.tenant_scoped
 def hot(live: bool = Query(default=False), interval: str = Query(default="5min"),
         refresh: bool = Query(default=False),
-        tenant: Tenant = Depends(deps.current_tenant)) -> dict:
-    return {**_snapshot("hot"), "interval": interval}
+        tenant: Tenant = Depends(deps.current_tenant),
+        db: DbSession = Depends(deps.get_db),
+        kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Names whose trend clears the desk's gates, on the chosen bar."""
+    from app.core.config import get_settings
+
+    settings = get_settings()
+    universe = [s.strip().upper()
+                for s in settings.tradier_hot_universe.split(",") if s.strip()]
+    try:
+        cred = _credential(db, tenant, kr, live=live)
+        rows = _scan(cred, universe, interval, sandbox=not live, gate=True)
+    except HTTPException:
+        raise
+    except Exception:                                   # noqa: BLE001
+        logger.info("hot scan unavailable for %s", tenant.slug)
+        rows = []
+    return {"kind": "hot", "rows": rows, "interval": interval,
+            "scanned": len(universe), "source": "tradier",
+            "venue": "live" if live else "sandbox"}
 
 
 @market_router.get("/flow", operation_id="getTradierOptionsFlow")
 @deps.tenant_scoped
 def flow(live: bool = Query(default=False), refresh: bool = Query(default=False),
-         tenant: Tenant = Depends(deps.current_tenant)) -> dict:
-    return _snapshot("flow")
+         tenant: Tenant = Depends(deps.current_tenant),
+         db: DbSession = Depends(deps.get_db),
+         kr: Keyring = Depends(deps.keyring)) -> dict:
+    """The day's heaviest option contracts, with open-interest change.
+
+    I had this returning an empty list with available:false on the grounds
+    that a chain sweep is too slow for a request. The sweep IS too slow for a
+    request -- so it runs behind one. The board answers from the last good
+    snapshot and refreshes in the background, which is what the old app did
+    and what makes the panel usable at all.
+    """
+    from app.domains.trading.market import flow as flow_mod
+
+    cred = _credential(db, tenant, kr, live=live)
+    try:
+        got = flow_mod.snapshot(tenant.id, cred, sandbox=not live,
+                                force=refresh)
+    except Exception:                                   # noqa: BLE001
+        logger.info("options flow unavailable for %s", tenant.slug)
+        return {"kind": "flow", "rows": [],
+                "meta": {"stale": True, "refreshing": False},
+                "detail": "the venue could not be reached"}
+    return {"kind": "flow", **got}
 
 
 @market_router.get("/commodities", operation_id="getTradierCommodities")
 @deps.tenant_scoped
 def commodities(live: bool = Query(default=False),
+                interval: str = Query(default="5min"),
                 refresh: bool = Query(default=False),
-                tenant: Tenant = Depends(deps.current_tenant)) -> dict:
-    return _snapshot("commodities")
+                tenant: Tenant = Depends(deps.current_tenant),
+                db: DbSession = Depends(deps.get_db),
+                kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Gold, silver and oil, through the same board the bots read."""
+    from app.domains.trading.market import commodities as commod
+
+    cred = None
+    try:
+        cred = tenants.load_credential(
+            db, tenant.id, "tradier" if live else "tradier_sandbox", kr)
+    except Exception:                                   # noqa: BLE001
+        pass
+    try:
+        snap = commod.snapshot(cred, interval=interval, sandbox=not live,
+                               force=refresh)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+    return {"kind": "commodities", **snap}
+
+
+# The ticker strip, in render order.
+#
+# Tradier quotes SPX and VIX as indices directly, but has no symbol for the Dow
+# itself (DJI is unmatched) -- DIA, the SPDR Dow ETF, is the tradable proxy,
+# labelled DOW so the strip reads the way an operator expects.
+#
+# BTC is not a Tradier instrument at all: the market socket carries equities
+# and indices, so nothing here can make it tick. It rides along as a POLLED
+# entry instead, flagged so the browser refreshes it itself rather than
+# waiting for a tick that will never come. Marking it rather than dropping it
+# is the difference between "bitcoin updates differently" and "bitcoin is
+# frozen".
+STREAM_SYMBOLS = [
+    {"label": "QQQ", "symbol": "QQQ"},
+    {"label": "SPY", "symbol": "SPY"},
+    {"label": "SPX", "symbol": "SPX"},
+    {"label": "VIX", "symbol": "VIX"},
+    {"label": "DOW", "symbol": "DIA"},
+    {"label": "BTC", "symbol": "BTC", "stream": False},
+]
+STREAMED = [s for s in STREAM_SYMBOLS if s.get("stream", True)]
+POLLED = [s for s in STREAM_SYMBOLS if not s.get("stream", True)]
 
 
 @market_router.post("/stream/session", operation_id="createTradierStreamSession")
@@ -352,8 +529,42 @@ def stream_session(tenant: Tenant = Depends(deps.current_tenant),
     The account token stays on the server. What the browser receives cannot
     place an order.
     """
-    _credential(db, tenant, kr, live=True)
-    return {"session_id": None, "detail": "streaming is not enabled on this server"}
+    cred = _credential(db, tenant, kr, live=True)
+    try:
+        data = venue_mod.market_session(cred=cred)
+    except Exception:                                   # noqa: BLE001
+        logger.info("stream session unavailable for %s", tenant.slug)
+        raise HTTPException(
+            status_code=502,
+            detail="the venue would not open a market session") from None
+
+    # Seeded in STREAM_SYMBOLS order. The strip renders in the order it is
+    # handed, so this list is the single place that order is decided.
+    seed = []
+    try:
+        rows = venue_mod.quotes([s["symbol"] for s in STREAMED], cred=cred,
+                                sandbox=False)
+        by_symbol = {str(q.get("symbol", "")).upper(): q for q in rows}
+    except Exception:                                   # noqa: BLE001
+        # A missing seed costs the first paint, not the stream: the socket
+        # fills the strip within a second of connecting.
+        by_symbol = {}
+    for entry in STREAM_SYMBOLS:
+        quote = by_symbol.get(entry["symbol"])
+        seed.append({**entry,
+                     "last": (quote or {}).get("last"),
+                     "change": (quote or {}).get("change"),
+                     "change_percentage": (quote or {}).get("change_percentage")})
+
+    return {
+        "sessionid": data.get("sessionid"),
+        "url": data.get("url"),
+        "ws_url": "wss://ws.tradier.com/v1/markets/events",
+        "symbols": STREAMED,
+        "polled": [s["symbol"] for s in POLLED],
+        "seed": seed,
+        "venue": "live",
+    }
 
 
 # ---- auto-trade -----------------------------------------------------------
@@ -365,17 +576,18 @@ class AutoTradeStart(BaseModel):
     buy_pct: float = 50.0
     tp_pct: float = 15.0
     sl_pct: float = 30.0
+    tolerance_pct: float = 25.0
     min_contracts: int = 1
-
-
-_WATCHERS: dict[str, dict] = {}
+    delta_min: float = 0.35
+    delta_max: float = 0.65
 
 
 @market_router.get("/autotrade/status", operation_id="getTradierAutoTradeStatus")
 @deps.tenant_scoped
 def autotrade_status(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
-    state = _WATCHERS.get(tenant.id)
-    return {"running": state is not None, **(state or {})}
+    from app.domains.trading.execution import autotrade
+
+    return autotrade.status(tenant.id)
 
 
 @market_router.post("/autotrade/start", operation_id="startTradierAutoTrade")
@@ -384,23 +596,33 @@ def autotrade_start(payload: AutoTradeStart,
                     idempotency_key: str | None = Header(default=None,
                                                          alias="Idempotency-Key"),
                     tenant: Tenant = Depends(deps.current_tenant)) -> dict:
-    from app.core.config import get_settings
+    """Arm the auto-trader.
 
-    if payload.live and get_settings().paper_only:
-        raise HTTPException(
-            status_code=409,
-            detail="this server is paper-only; a live watcher cannot be armed")
-    _WATCHERS[tenant.id] = {"strategy": payload.strategy,
-                            "tickers": payload.tickers,
-                            "live": payload.live,
-                            "armed_at": utcnow()}
-    return {"running": True, **_WATCHERS[tenant.id]}
+    It was an in-memory dict that recorded "running: true" and watched
+    nothing -- the worst possible shape for this particular feature, because
+    the operator reasonably believes an armed trader is working. It now runs
+    a real loop, and every entry it makes goes through the SAME guarded path
+    as the manual button rather than a second copy of the entry logic.
+    """
+    from app.domains.trading.execution import autotrade
+
+    try:
+        return autotrade.start(
+            tenant.id, tickers=payload.tickers, strategy=payload.strategy,
+            live=payload.live, buy_pct=payload.buy_pct, tp_pct=payload.tp_pct,
+            sl_pct=payload.sl_pct, tolerance_pct=payload.tolerance_pct,
+            min_contracts=payload.min_contracts, delta_min=payload.delta_min,
+            delta_max=payload.delta_max)
+    except autotrade.AutoTradeRefused as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
 
 
 @market_router.post("/autotrade/stop", operation_id="stopTradierAutoTrade")
 @deps.tenant_scoped
 def autotrade_stop(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
-    return {"running": False, "was_running": _WATCHERS.pop(tenant.id, None) is not None}
+    from app.domains.trading.execution import autotrade
+
+    return autotrade.stop(tenant.id)
 
 
 # ---- the DMI board --------------------------------------------------------
@@ -436,10 +658,18 @@ def dmi(symbols: str = Query(...), live: bool = Query(default=False),
             status_code=422,
             detail=f"too many symbols ({len(wanted)}); the board caps at "
                    f"{MAX_DMI_SYMBOLS}")
-    _credential(db, tenant, kr, live=live)
-    return {"rows": [{"symbol": s, "plus_di": None, "minus_di": None,
-                      "adx": None, "side": None, "bars": 0} for s in wanted],
-            "meta": {"requested": len(wanted),
+    cred = _credential(db, tenant, kr, live=live)
+    from app.core.config import get_settings
+
+    iv = interval or get_settings().tradier_hot_interval
+    try:
+        rows = _scan(cred, wanted, iv, sandbox=not live, gate=False)
+    except Exception:                                   # noqa: BLE001
+        logger.info("dmi board unavailable for %s", tenant.slug)
+        rows = [{"symbol": s, "plus_di": None, "minus_di": None, "adx": None,
+                 "side": None, "bars": 0} for s in wanted]
+    return {"rows": rows,
+            "meta": {"requested": len(wanted), "interval": iv,
                      "venue": "live" if live else "sandbox"}}
 
 
@@ -451,31 +681,42 @@ def dmi(symbols: str = Query(...), live: bool = Query(default=False),
 
 levels_router = APIRouter(prefix="/levels", tags=["levels"])
 
-_WATCHER: dict[str, dict] = {}
-
-
 @levels_router.get("/status", operation_id="getLevelsStatus")
 @deps.tenant_scoped
 def levels_status(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
-    """Is the SPY/QQQ/SPX level watcher armed for this operator.
+    """The SPY/QQQ/SPX level watcher: is it running, and what does it see.
 
-    Degrades to "not running" rather than erroring when the vendored watcher
-    is absent: the desk shows a panel either way, and an error here would
-    blank it.
+    One watcher for the whole desk rather than one per operator: it computes
+    opening ranges from public prices, which are the same numbers for
+    everybody. Per-operator state here would be N processes deriving one fact.
+
+    Degrades to "not running" rather than erroring when the watcher has never
+    been started -- the desk shows this panel either way, and an error here
+    blanks it.
     """
-    state = _WATCHER.get(tenant.id)
-    return {"running": state is not None, "levels": [], **(state or {})}
+    from app.services import levels as levels_svc
+
+    try:
+        return levels_svc.status()
+    except Exception:                                   # noqa: BLE001
+        logger.info("levels watcher status unavailable")
+        return {"running": False, "pid": None, "status": None}
 
 
 @levels_router.post("/start", operation_id="startLevelsWatcher")
 @deps.tenant_scoped
 def levels_start(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
-    _WATCHER[tenant.id] = {"armed_at": utcnow()}
-    return {"running": True, **_WATCHER[tenant.id]}
+    from app.services import levels as levels_svc
+
+    try:
+        return levels_svc.start()
+    except levels_svc.LevelsError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from None
 
 
 @levels_router.post("/stop", operation_id="stopLevelsWatcher")
 @deps.tenant_scoped
 def levels_stop(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
-    return {"running": False,
-            "was_running": _WATCHER.pop(tenant.id, None) is not None}
+    from app.services import levels as levels_svc
+
+    return levels_svc.stop()

@@ -60,3 +60,10 @@ var/tok.txt
 var/v2.out
 var/v2.err
 frontend/dist-v2/
+
+# Cloudflare tunnel credentials. The JSON is not a config file -- it is a
+# bearer secret: anyone holding it can run this tunnel and answer as
+# vidura36.app. The .pem rule above does not cover it, because the credential
+# is a .json.
+runtime/tunnel/*.json
+runtime/tunnel/cert.pem

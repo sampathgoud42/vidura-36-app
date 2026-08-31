@@ -4,47 +4,48 @@ The app keeps running on your machine; a Cloudflare tunnel gives it a public
 HTTPS address. Nothing is hosted elsewhere, no credentials leave the folder,
 and the moment your PC sleeps the link goes dead.
 
-Double-click **`launch.bat`** (or run it). It brings the desk up, publishes
-it, prints the address in a banner, copies it to your clipboard, and holds
-the window open so it stays on screen:
-
-```bash
-launch.bat
-```
+The desk has a permanent address:
 
 ```
-  =================================================================
-     https://barely-describing-corn-festival.trycloudflare.com
-  =================================================================
+https://vidura36.app
 ```
 
-Closing that window does not stop anything - the desk and the tunnel are
-started detached. From a terminal you are already sitting in, the same thing
-without the window-hold:
+`www.vidura36.app` reaches the same place. Both are CNAMEs onto the named
+tunnel, so the address does not change between restarts -- unlike the random
+`trycloudflare.com` hostname the quick tunnel used to hand out.
+
+## Starting it
 
 ```bash
 start.bat --tunnel
 ```
 
+The tunnel config lives in the project, not in your home directory:
+
 ```
-API      pid 11004  http://127.0.0.1:8791   [LIVE TRADING]
-Desk     http://127.0.0.1:8791/   (served by the API)
-Tunnel   pid 12336  https://automobiles-hoped-emperor-rouge.trycloudflare.com
-Docs     http://127.0.0.1:8791/docs
+runtime/tunnel/config.yml     the hostname -> service mapping (committed)
+runtime/tunnel/*.json         the tunnel credential      (NEVER committed)
+runtime/tunnel/cert.pem       the account cert           (NEVER committed)
+```
+
+It was moved there from `%USERPROFILE%\.cloudflared` deliberately. A config
+in a home directory is a reference outside this folder: it is invisible to
+anyone reading the repo, it survives deleting the project, and copying the
+project to another machine silently leaves it behind.
+
+The credential JSON is a bearer secret, not a settings file -- anything
+holding it can answer as vidura36.app -- so it is gitignored alongside the
+cert. `config.yml` contains no secrets and is committed, which is what makes
+the setup reproducible.
+
+To run it by hand:
+
+```bash
+cloudflared tunnel --config runtime/tunnel/config.yml run tradier-bot
 ```
 
 `stop.bat` takes the tunnel down first, then the desk, so the link is never
 live pointing at a server that is shutting down.
-
-Because a quick-tunnel hostname is random and changes on every restart, the
-current one has its own command — output is the bare URL, nothing else, so
-it pipes and copies cleanly:
-
-```bash
-url.bat
-```
-
-`status.bat` shows it too, alongside everything else.
 
 ---
 
@@ -162,15 +163,18 @@ On Linux/macOS the same command prints a systemd user unit to install; add
 
 ## Notes
 
-**Quick tunnels are best-effort.** Cloudflare offers no uptime guarantee on
-`trycloudflare.com` and rate-limits abuse. A named tunnel on your own domain
-is the supported path.
+**This is a named tunnel, which is the supported path.** The desk used to
+publish on a random `trycloudflare.com` hostname -- best-effort, no uptime
+guarantee, rate-limited, and a different address after every restart.
+vidura36.app is a stable hostname on a zone you control.
 
 **Your machine is the whole deployment.** Sleep, hibernate, or a dropped
-network takes the desk down — and with it the 10-second stop-loss monitor.
-Open positions keep their take-profit (that order rests on Tradier) but
-nothing is watching the stop. If you rely on the desk while away, set the
-machine never to sleep.
+network takes the desk down — and with it the stop-loss monitor. This is less
+dangerous than it was: exits are now armed as a PAIR, so an armed position
+has both a take-profit and a stop resting at the venue and both survive this
+machine going away. What does not survive is the monitored fallback, which
+covers positions the venue would not accept a stop for. If you rely on the
+desk while away, set the machine never to sleep.
 
 **Sessions end at restart.** They are in-memory, so a reboot signs you out
 everywhere — including whatever phone you left logged in.

@@ -22,11 +22,16 @@ from __future__ import annotations
 
 import logging
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from app.api_v2.routers import (auth, bots, desk, positions, tenants,
+from app.api_v2.routers import (auth, bots, desk, positions, research,
+                                tenants,
                                 wellness)
 from app.core.config import get_settings
 from app.platform.security.envelope import MasterKeyMissing
@@ -45,10 +50,37 @@ OPEN_PATHS = {
 def create_app() -> FastAPI:
     settings = get_settings()
 
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        """Start the loops that must run whether or not anyone is looking.
+
+        The risk monitor was written, tested, and never started -- nothing in
+        the application called sweep_all_tenants, so the heartbeat table was
+        empty and no monitored stop could fire. Starting it here means it is
+        alive for exactly as long as the server is, which is the only window
+        in which it is any use.
+
+        Disable with TBOT_NO_BACKGROUND=1 for a process that should serve
+        requests without also managing positions (a one-off script, a test).
+        """
+        import os
+
+        from app.api_v2 import background
+
+        enabled = os.environ.get("TBOT_NO_BACKGROUND", "").strip() not in ("1", "true")
+        if enabled:
+            background.start_all()
+        try:
+            yield
+        finally:
+            if enabled:
+                background.stop_all()
+
     app = FastAPI(
         title="Vidura 36",
         version=settings.app_version,
         description="Trading desk and bot station.",
+        lifespan=lifespan,
     )
 
     # Auth is header-based and there are no cookies, so a permissive origin
@@ -93,6 +125,52 @@ def create_app() -> FastAPI:
     from app.domains.botstation import registry as bot_registry
     bot_registry.load_builtin_bots()
 
+    @app.exception_handler(RequestValidationError)
+    async def _unprocessable(request: Request, exc: RequestValidationError):
+        """A 422 that says which field, and what was sent.
+
+        FastAPI rejects a malformed body before any handler runs, so the
+        server log recorded only "422 Unprocessable Content" with no
+        indication of what the client got wrong -- and the desk showed a
+        launch that simply did not happen. The field and its value are the
+        whole diagnosis.
+        """
+        logger.warning("422 on %s %s: %s", request.method, request.url.path,
+                       exc.errors())
+        return JSONResponse(
+            status_code=422,
+            content={"detail": exc.errors(), "body": exc.body})
+
+    @app.exception_handler(StarletteHTTPException)
+    async def _unauthorised(request: Request, exc: StarletteHTTPException):
+        """Every 401 says login_required, wherever it was raised.
+
+        The desk routes to the sign-in form on that marker, not on the status
+        code -- a wrong password is also a 401, and /auth must be free to
+        report its own failures without tearing the desk down.
+
+        The middleware set the marker and the dependencies did not, so a
+        session that died under a running desk produced 401s the client could
+        not recognise: every polling panel painted "Sign in to use this desk"
+        in place of its data and the login form was never shown. Adding it
+        here rather than at each raise means a 401 introduced later cannot
+        forget it.
+        """
+        body = (exc.detail if isinstance(exc.detail, dict)
+                else {"detail": exc.detail})
+        # NOT on /auth. A 401 there means "those credentials are wrong",
+        # which is the endpoint reporting its own result -- a different fact
+        # from "you have no session", and the only one the desk must not
+        # react to by throwing the operator back to a form they are already
+        # looking at. The marker means exactly "you need to sign in", and it
+        # is what both the desk and the contract test key on.
+        gated = not request.url.path.startswith(
+            f"{get_settings().api_v1_prefix}/auth/")
+        if exc.status_code == 401 and gated:
+            body = {**body, "login_required": True}
+        return JSONResponse(status_code=exc.status_code, content=body,
+                            headers=getattr(exc, "headers", None))
+
     @app.exception_handler(MasterKeyMissing)
     async def _no_master_key(request: Request, exc: MasterKeyMissing):
         """A missing master key is a DEPLOYMENT fault, not a bug.
@@ -119,6 +197,7 @@ def create_app() -> FastAPI:
     app.include_router(desk.market_router, prefix=prefix)
     app.include_router(desk.desk36_router, prefix=prefix)
     app.include_router(desk.levels_router, prefix=prefix)
+    app.include_router(research.router, prefix=prefix)
 
     @app.get("/health", operation_id="healthCheck")
     def health() -> dict:
@@ -159,6 +238,12 @@ def create_app() -> FastAPI:
             # stop is being watched when nothing is watching it.
             body["risk_monitor"] = {"available": False,
                                     "detail": "risk monitor not running"}
+        try:
+            from app.api_v2 import background
+
+            body["background"] = background.status()
+        except Exception:                               # noqa: BLE001
+            body["background"] = {}
             body["status"] = "degraded"
 
         return body
@@ -214,6 +299,14 @@ def _serve_desk(app: FastAPI) -> None:
         candidate = dist / full_path
         if full_path and candidate.is_file():
             return FileResponse(candidate)
-        return FileResponse(index)
+        # index.html is never cached. Its asset filenames carry a content hash
+        # -- those are safe to cache forever -- but the HTML that NAMES them
+        # is the one file that must never be stale, or a browser keeps loading
+        # yesterday's bundle from a page it thinks is fresh and the desk
+        # silently runs old code against a new API.
+        return FileResponse(index, headers={
+            "Cache-Control": "no-store, must-revalidate",
+            "Pragma": "no-cache",
+        })
 
     logger.info("serving desk from %s", dist)

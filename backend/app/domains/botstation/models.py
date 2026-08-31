@@ -72,10 +72,35 @@ class BotTrade(Base, TenantOwned, Timestamped):
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     opened_at: Mapped[datetime | None] = mapped_column(DateTime)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime)
-    contracts: Mapped[int | None] = mapped_column(Integer)
+    # Float, not Integer: Kalshi sizes in 0.01-contract increments and a
+    # dollar-budgeted parlay is fractional by construction (7.98, 40.20).
+    # An integer column silently truncates that on any database stricter
+    # than SQLite, and truncating a size is a wrong number, not a
+    # rounding.
+    contracts: Mapped[float | None] = mapped_column(Float)
     entry_price: Mapped[float | None] = mapped_column(Float)
     exit_price: Mapped[float | None] = mapped_column(Float)
     realized_pnl: Mapped[float | None] = mapped_column(Float)
+
+    # What the desk shows, in the terms an operator thinks in. The columns
+    # above are per-CONTRACT cents and a count; nobody reads a ledger that
+    # way. These are the question, the side taken, and the CASH.
+    #
+    #   market_title  "NAD vs FED Winner?"
+    #   outcome       "FED"
+    #   entry_usd     what leaving the account cost, FEES INCLUDED
+    #   exit_usd      what came back, fees deducted; null while open
+    #   fees_usd      what the exchange took, kept separately so a P&L can
+    #                 be explained rather than merely stated
+    #
+    # Stored rather than derived because fees are not a function of price and
+    # count -- Kalshi charges its own way, and reconstructing them later from
+    # a rounded price is how a ledger drifts from the statement.
+    market_title: Mapped[str | None] = mapped_column(String(256))
+    outcome: Mapped[str | None] = mapped_column(String(128))
+    entry_usd: Mapped[float | None] = mapped_column(Float)
+    exit_usd: Mapped[float | None] = mapped_column(Float)
+    fees_usd: Mapped[float | None] = mapped_column(Float)
 
     # NULLABLE ON PURPOSE. 93 of sampath's v2 rows genuinely predate the
     # dry-run column and their mode is unknowable from the file. Unknown
@@ -87,6 +112,14 @@ class BotTrade(Base, TenantOwned, Timestamped):
     # a row reconciliation has corrected, or the next auto-sync reverts it.
     reconciled_at: Mapped[datetime | None] = mapped_column(DateTime)
     fee_checked_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    # How many sweeps have looked for this trade and found nothing -- no
+    # position, no settlement, no fill. Counted rather than assumed, because
+    # "the exchange has not caught up yet" and "this trade never existed" look
+    # identical on any single pass and are only told apart by asking again.
+    resolve_attempts: Mapped[int] = mapped_column(Integer, nullable=False,
+                                                  server_default="0",
+                                                  default=0)
 
     # The source record, preserved verbatim.
     raw: Mapped[str | None] = mapped_column(Text)
@@ -102,7 +135,13 @@ class BotTrade(Base, TenantOwned, Timestamped):
         # open/closed/cancelled and the import failed against it, which is the
         # constraint doing its job.
         CheckConstraint(
-            "status in ('open','closed','cancelled','won','lost','settled')",
+            # not_found is a real outcome, not a missing one: the exchange
+            # has been asked three times over eighteen hours and has no
+            # position, settlement or fill for this ticker. Recording that is
+            # honest; leaving the row open forever pretends somebody is still
+            # waiting on an answer that is not coming.
+            "status in ('open','closed','cancelled','won','lost','settled',"
+            "'not_found')",
             name="status_known"),
         Index("ix_bot_trade_tenant_bot_opened", "tenant_id", "bot_key", "opened_at"),
     )

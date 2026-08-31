@@ -1801,14 +1801,18 @@ export function CommoditiesPanel({ user, live, onPick, onError, onBuy, blocked }
                 {' '}{r.m5_adx != null ? Math.round(r.m5_adx) : '—'}
                 {r.m5_slope != null && <span style={{ fontSize: '0.9em' }}>{r.m5_slope > 0 ? '↑' : '↓'}</span>}
               </span>
+              {/* The signal is 1m+2m agreement — the same rule the commodity
+                  bots trade on, so the board and the bot never disagree. This
+                  read "1m/2m/5m agree", which was never what it meant. 5m is
+                  reported separately as confirmation. */}
               {r.signal ? (
                 <span style={{ color: sideColor(r.signal), fontWeight: 700, fontSize: '0.75em' }}
-                  title={`1m/2m/5m agree: ${sideLabel(r.signal)}`}>
-                  {sideLabel(r.signal)}
+                  title={`1m and 2m agree: ${sideLabel(r.signal)}${r.m5_confirms ? ' · 5m confirms' : ' · 5m does not confirm'}`}>
+                  {sideLabel(r.signal)}{r.m5_confirms ? '✓' : ''}
                 </span>
               ) : (
                 <span style={{ color: '#888', fontWeight: 700, fontSize: '0.75em' }}
-                  title="timeframes disagree — no clear signal">M</span>
+                  title="1m and 2m disagree — no clear signal">M</span>
               )}
             </div>
           );

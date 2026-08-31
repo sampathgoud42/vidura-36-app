@@ -144,14 +144,48 @@ def resting_sells(occ_symbol: str, *, cred: VenueCredential,
 
 def bid_for(occ_symbol: str, *, cred: VenueCredential,
             sandbox: bool = True) -> float | None:
-    """The current bid. What the monitored stop compares against."""
+    """The current bid. What the monitored stop compares against.
+
+    This called client.option_quote, which does not exist -- the method is
+    client.quote -- and the AttributeError went straight into a bare
+    ``except Exception: return None``. So this returned None for EVERY
+    position, on every pass, and the stop monitor read that as "no bid
+    available yet" rather than "this code is broken". A stop that can never
+    read a price can never fire.
+
+    Two changes, and the second matters more than the first. The name is
+    fixed; and the except no longer covers programmer error. A network
+    failure is an ordinary, expected outcome that deserves None and a retry
+    next pass. A missing attribute is a bug, and on the stop path a bug must
+    be loud rather than indistinguishable from a quiet market.
+    """
+    from app.services.tradier_client import TradierError
+
     client = _client(cred, sandbox=sandbox)
     try:
-        quote = client.option_quote(occ_symbol)
+        quote = client.quote(occ_symbol)
         bid = float(quote.get("bid") or 0)
         return bid if bid > 0 else None
-    except Exception:                                   # noqa: BLE001
+    except (TradierError, OSError, ValueError, TypeError):
+        # The venue was unreachable, or answered without a usable bid. The
+        # monitor treats this as "no reading this pass" and its heartbeat
+        # goes stale if it keeps happening, which is what stops new entries.
         return None
+    finally:
+        client.close()
+
+
+def quotes(symbols: list[str], *, cred: VenueCredential,
+           sandbox: bool = True) -> list[dict]:
+    """Batch quotes -- one request however many symbols.
+
+    Symbols the venue does not recognise are simply ABSENT from the response
+    rather than returned empty, so callers that lay out one row per requested
+    symbol have to fill the gaps themselves.
+    """
+    client = _client(cred, sandbox=sandbox)
+    try:
+        return list(client.quotes(symbols))
     finally:
         client.close()
 
@@ -175,7 +209,31 @@ def option_chain(symbol: str, expiration: str, *, cred: VenueCredential,
                  sandbox: bool = True) -> list[dict]:
     client = _client(cred, sandbox=sandbox)
     try:
-        return list(client.option_chain(symbol, expiration))
+        # client.chain, not client.option_chain. The seam is named for the
+        # domain concept and the client for the vendor endpoint; getting that
+        # mapping wrong raised AttributeError inside callers that caught
+        # Exception, so the chain board and the contract picker both reported
+        # "no contracts" rather than "this code calls a method that does not
+        # exist". Verified against TradierClient by test_venue_seam.
+        return list(client.chain(symbol, expiration))
+    finally:
+        client.close()
+
+
+def market_session(*, cred: VenueCredential) -> dict:
+    """A short-lived market-data streaming session: ``{sessionid, url}``.
+
+    PRODUCTION ONLY, and deliberately so rather than by oversight: the sandbox
+    token is refused with "Required scope(s): scope-stream". That is safe --
+    a market session can only read quotes, never place an order -- and paper
+    trading against real prices is the entire point of the desk.
+
+    What travels to the browser is the session id, not the account token. The
+    id expires in five minutes and buys nothing but a quote feed.
+    """
+    client = _client(cred, sandbox=False)
+    try:
+        return client.market_session()
     finally:
         client.close()
 

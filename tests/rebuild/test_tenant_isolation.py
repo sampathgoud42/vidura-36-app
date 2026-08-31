@@ -18,6 +18,7 @@ from __future__ import annotations
 import uuid
 
 import pytest
+from fastapi.testclient import TestClient
 
 from tests.rebuild._routes import api_routes
 
@@ -46,6 +47,8 @@ TENANT_READ_PATHS = [
     "/api/v1/tradier/hot",
     "/api/v1/tradier/flow",
     "/api/v1/tradier/commodities",
+    "/api/v1/bots/crypto/signals",
+    "/api/v1/bots/statuses",
     "/api/v1/tradier/timesales",
     "/api/v1/desk36/dmi",
     "/api/v1/bots/commodities/signals",
@@ -360,7 +363,44 @@ COVERED_BY_NAMED_TESTS = {
     "/api/v1/tradier/autotrade/stop": "no tenant-addressable identifier",
     "/api/v1/levels/start": "no tenant-addressable identifier",
     "/api/v1/levels/stop": "no tenant-addressable identifier",
+    "/api/v1/bots/launch": "no tenant-addressable identifier",
 }
+
+# MARKET DATA. These require a session but return the SAME answer to every
+# operator, because a SPY gamma wall is a fact about the market rather than
+# about anybody's account. Sweeping them for cross-tenant leakage would assert
+# that two operators see different numbers -- the opposite of what they are
+# for -- so they are exempt from that sweep and covered by
+# test_market_data_endpoints_still_require_a_session instead.
+#
+# The exemption is a list of names, not a prefix rule, so a genuinely
+# operator-scoped endpoint that happens to live under /super still fails the
+# coverage guard rather than inheriting an excuse from its neighbours.
+MARKET_DATA_PATHS = [
+    "/api/v1/super/state",
+    "/api/v1/super/config",
+    "/api/v1/super/regenerate/status",
+    "/api/v1/super/gex",
+    "/api/v1/super/gex/quota",
+    "/api/v1/super/gex0dte",
+    "/api/v1/super/gex0dte/refresh",
+    "/api/v1/super/gex0dte/heartbeat",
+    "/api/v1/super/gex0dte/history",
+    "/api/v1/super/gex0dte/history/dates",
+    "/api/v1/super/econ",
+    "/api/v1/super/earnings",
+    "/api/v1/super/quote/{ticker}",
+    "/api/v1/super/engine-pct",
+    "/api/v1/super/engine-gates",
+    "/api/v1/super/tickers/{ticker_id}/status",
+    "/api/v1/super/signals",
+    "/api/v1/super/snapshots",
+    "/api/v1/super/sync/status",
+]
+
+COVERED_BY_NAMED_TESTS.update(
+    {path: "market data — same answer for every operator by design"
+     for path in MARKET_DATA_PATHS})
 
 
 def _matches(template: str, concrete: str) -> bool:
@@ -406,4 +446,25 @@ def test_every_tenant_scoped_endpoint_is_covered_by_this_file(app):
         + "\n  ".join(sorted(uncovered))
         + "\n\nAdd the path to TENANT_READ_PATHS, or write a named test and "
           "record it in COVERED_BY_NAMED_TESTS."
+    )
+
+
+@pytest.mark.parametrize("path", MARKET_DATA_PATHS)
+def test_market_data_endpoints_still_require_a_session(app, path):
+    """Given a market-data endpoint exempted from the leakage sweep,
+    when it is called with no session,
+    then it refuses.
+
+    The exemption above says these return the same answer to everybody. That
+    is a statement about WHAT they return, not about who may ask -- and the
+    two are easy to conflate into "market data is public", which would put
+    the desk's whole research surface on the open internet the first time
+    this server is exposed. This test holds the second half of the claim.
+    """
+    with TestClient(app) as client:
+        response = client.get(path.replace("{ticker}", "SPY")
+                                  .replace("{ticker_id}", "spy"))
+    assert response.status_code == 401, (
+        f"{path} answered {response.status_code} with no session; market data "
+        "is shared between operators, not open to anonymous callers"
     )

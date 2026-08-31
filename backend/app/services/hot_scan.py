@@ -480,6 +480,11 @@ def _is_tradier_hours() -> bool:
     return "08:30" <= hhmm < "15:00"
 
 
+# Why the last poll produced nothing. Read by the commodity board so an empty
+# row can say WHICH thing went wrong.
+NINJA_STATUS: dict[str, str | None] = {"state": "never polled", "detail": None}
+
+
 def _fetch_ninja_price(names: list[str]) -> tuple[float | None, str | None]:
     """Try each name until one returns 200. Returns (price, matched_name)."""
     import httpx
@@ -487,6 +492,7 @@ def _fetch_ninja_price(names: list[str]) -> tuple[float | None, str | None]:
     s = get_settings()
     key = s.apininjas_api_key
     if not key:
+        NINJA_STATUS.update(state="no_api_key", detail=None)
         return None, None
     for name in names:
         try:
@@ -497,6 +503,18 @@ def _fetch_ninja_price(names: list[str]) -> tuple[float | None, str | None]:
                 timeout=10,
             )
             if resp.status_code == 400:
+                # A 400 means EITHER "no such commodity name" -- ordinary,
+                # try the next alias -- OR "monthly quota exceeded", which
+                # every remaining alias will also hit. Treating both as
+                # "try the next name" made an exhausted account look exactly
+                # like a board with no commodities configured: silent, with
+                # nothing anywhere saying the vendor had cut us off.
+                body = (resp.text or "").lower()
+                if "quota" in body or "subscription" in body:
+                    NINJA_STATUS.update(state="quota_exceeded",
+                                        detail=resp.text.strip()[:160])
+                    logger.warning("api-ninjas: %s", resp.text.strip()[:160])
+                    return None, None
                 continue
             resp.raise_for_status()
             data = resp.json()
@@ -558,6 +576,37 @@ def _ninja_poll_loop() -> None:
                 if price is not None:
                     _ninja_accumulate(sym, price)
         _NINJA_STOP.wait(60)
+
+
+# When the spot feed was last successfully read. The board reports the age of
+# THIS rather than of its own cache: with an on-demand source those are very
+# different numbers, and the one the operator needs is how old the prices are.
+NINJA_LAST_OK: dict[str, float] = {"at": 0.0}
+
+
+def poll_once() -> dict:
+    """Read every commodity spot price once, synchronously.
+
+    On demand rather than on a timer. The background poller called this every
+    60 seconds forever, which spends a metered vendor budget continuously on
+    a board nobody may be looking at -- and it kept spending it after the
+    monthly quota was exhausted, when every call was guaranteed to fail.
+
+    Returns what it managed to read, so the caller can tell "the vendor said
+    no" from "nothing has been asked yet".
+    """
+    import time as _time
+
+    got: dict[str, float] = {}
+    for symbol, names in _NINJA_NAMES.items():
+        price, _matched = _fetch_ninja_price(names)
+        if price is not None:
+            _ninja_accumulate(symbol, price)
+            got[symbol] = price
+    if got:
+        NINJA_LAST_OK["at"] = _time.time()
+        NINJA_STATUS.update(state="ok", detail=None)
+    return got
 
 
 def _ensure_ninja_thread() -> None:

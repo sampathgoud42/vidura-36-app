@@ -13,5 +13,9 @@ export default defineConfig({
   plugins: [react()],
   server: { port: 5199, strictPort: false },
   preview: { port: 5199, strictPort: false },
-  build: { outDir: 'dist', sourcemap: false },
+  // dist-v2, not vite's default dist: api_v2 serves frontend/dist-v2, and
+  // dist is the retired app's output directory. With the default, a plain
+  // `npm run build` reported success while updating a folder nothing serves,
+  // so the desk kept showing the previous bundle.
+  build: { outDir: 'dist-v2', sourcemap: false },
 });

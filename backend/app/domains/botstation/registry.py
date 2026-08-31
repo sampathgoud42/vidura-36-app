@@ -173,6 +173,62 @@ def effective_defaults(config: BotConfig, version: BotVersion | None) -> dict:
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
 
 
+# Fields the desk sends that identify the OPERATOR rather than configure the
+# bot. They are dropped before validation, never honoured: the session decides
+# whose bot this is, and accepting a user_id from the body would be exactly
+# the cross-tenant selector the isolation suite exists to forbid.
+#
+# Dropped rather than rejected because the desk sends user_id on every call it
+# makes. Erroring on it broke every launch from the individual bot form, for a
+# field whose only correct handling is to ignore it.
+IDENTITY_FIELDS = {"user_id", "customer", "tenant_id", "operator"}
+
+# What the desk has always called these, mapped to what the schema calls them.
+# The names diverged when the schema was written and nothing translated
+# between them, so the form posted `bank` at a bot that only knew `bankroll`
+# and the launch was refused with a list of field names the operator never
+# typed.
+LEGACY_ALIASES = {
+    "bank": "bankroll",
+    "target_pct": "bank_tp_pct",
+}
+
+# Options a bot USED to take and no longer does, dropped rather than refused.
+# A saved config, a stale browser tab and the stored options of an earlier run
+# all still carry the old field, and relaunching from any of them is the
+# normal way a bot gets restarted. Failing that launch over a value we would
+# ignore anyway strands the operator with an error naming a field they never
+# typed -- which is the same failure LEGACY_ALIASES exists to prevent, for the
+# case where the field has no successor rather than a renamed one.
+RETIRED_OPTIONS = {
+    # Sizing moved from a contract COUNT to a dollar budget. There is no
+    # honest translation between them: 5 contracts is $4.55 at 91c and $2.00
+    # at 40c, so an alias would silently change what a saved config spends.
+    "parley": {"contracts"},
+}
+
+
+def normalise_options(config: BotConfig, options: dict) -> dict:
+    """Strip identity fields and translate the desk's older field names.
+
+    Applied before validation so a stale browser tab, a saved config in
+    localStorage, or an older client keeps working. An alias only applies when
+    the schema does NOT already declare the incoming name, so a bot that
+    genuinely has its own `bank` field is left alone.
+    """
+    out: dict[str, Any] = {}
+    for name, value in options.items():
+        if name in IDENTITY_FIELDS:
+            continue
+        if name in RETIRED_OPTIONS.get(config.key, ()):
+            logger.info("%s no longer takes %r; ignoring it", config.key, name)
+            continue
+        if name not in config.options_schema and name in LEGACY_ALIASES:
+            name = LEGACY_ALIASES[name]
+        out[name] = value
+    return out
+
+
 def validate_options(config: BotConfig, options: dict,
                      version: BotVersion | None = None) -> dict:
     """Check launch options against the bot's OWN declared schema.
@@ -181,6 +237,7 @@ def validate_options(config: BotConfig, options: dict,
     family, which is how four families ended up with four slightly different
     ideas of what a bankroll is.
     """
+    options = normalise_options(config, options)
     cleaned: dict[str, Any] = dict(effective_defaults(config, version))
     for name, spec in config.options_schema.items():
         if name not in options or options[name] is None:
@@ -194,6 +251,16 @@ def validate_options(config: BotConfig, options: dict,
                 value = int(value)
             elif kind == "boolean":
                 value = bool(value)
+            elif kind == "json":
+                # A structured option: a list of sports, a per-sport settings
+                # object. Declared as its own kind rather than smuggled
+                # through as a string, because the launcher has to know to
+                # serialise it -- str(dict) produces Python repr with single
+                # quotes, which no engine on the other side can parse.
+                if not isinstance(value, (dict, list)):
+                    raise ValueError(
+                        f"{name} must be a list or object, got "
+                        f"{type(value).__name__}")
             else:
                 value = str(value)
         except (TypeError, ValueError):
@@ -231,7 +298,8 @@ def validate_options(config: BotConfig, options: dict,
     unknown = set(options) - set(config.options_schema)
     if unknown:
         raise ValueError(
-            f"{config.key} does not accept: {', '.join(sorted(unknown))}")
+            f"{config.key} does not accept: {', '.join(sorted(unknown))}. "
+            f"It takes: {', '.join(sorted(config.options_schema))}")
     return cleaned
 
 

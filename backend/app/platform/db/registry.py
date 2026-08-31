@@ -17,6 +17,7 @@ def _import_all_models() -> None:
     in the models and missing from a migration.
     """
     from app.domains.botstation import models as _bot      # noqa: F401
+    from app.domains.research import models as _research   # noqa: F401
     from app.domains.trading import models as _trading     # noqa: F401
     from app.tenancy import models as _tenancy             # noqa: F401
 

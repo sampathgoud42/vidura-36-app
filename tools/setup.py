@@ -13,7 +13,7 @@ Idempotent — safe to re-run after pulling changes. Steps:
 
 Node is optional. Without it the API still runs and is fully usable through
 /docs; you just have no web desk until a build exists. A build produced on
-another machine ships fine in frontend/dist — it is plain static files.
+another machine ships fine in frontend/dist-v2 — it is plain static files.
 """
 
 from __future__ import annotations
@@ -92,13 +92,16 @@ def main() -> int:
     # ---- 3. the desk ---------------------------------------------------
     step(3, "Web desk")
     npm = shutil.which("npm.cmd" if IS_WINDOWS else "npm") or shutil.which("npm")
-    built = ROOT / "frontend" / "dist" / "index.html"
+    # dist-v2, which is where api_v2 serves the desk from. This built
+    # into frontend/dist -- the retired app's output -- so a fresh setup
+    # finished "successfully" and left the API with no UI to serve.
+    built = ROOT / "frontend" / "dist-v2" / "index.html"
     if args.skip_frontend:
         print("    skipped (--skip-frontend)")
     elif npm is None:
         print("    npm not found - skipping.")
         if built.is_file():
-            print("    frontend/dist is already built, so the desk still works.")
+            print("    frontend/dist-v2 is already built, so the desk still works.")
         else:
             print("    The API will run without a UI. Install Node 18+ and re-run")
             print("    this script to build the desk.")
@@ -106,10 +109,13 @@ def main() -> int:
         if run([npm, "install", "--prefix", "frontend"]) != 0:
             print("    FAILED: npm install")
             return 1
-        if run([npm, "run", "build", "--prefix", "frontend"]) != 0:
+        # --outDir dist-v2: vite's own default is dist, and that is the
+        # retired app's output directory. api_v2 serves dist-v2.
+        if run([npm, "run", "build", "--prefix", "frontend",
+                "--", "--outDir", "dist-v2"]) != 0:
             print("    FAILED: npm run build")
             return 1
-        print("    desk built into frontend/dist (the API serves it)")
+        print("    desk built into frontend/dist-v2 (the API serves it)")
 
     # ---- 4. audit -------------------------------------------------------
     step(4, "Self-containment audit")

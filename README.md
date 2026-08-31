@@ -41,6 +41,22 @@ Open <http://127.0.0.1:8791/>.
 The desk and the API are the same origin, so nothing has to be configured to
 point one at the other.
 
+### From anywhere
+
+```bash
+start.bat --tunnel
+```
+
+Publishes the same desk at <https://vidura36.app> over a Cloudflare tunnel.
+The address is permanent -- it is a named tunnel on your own zone rather than
+the random `trycloudflare.com` hostname the quick tunnel used to hand out.
+
+Nothing moves to a server: the tunnel is an inbound path to the process on
+this machine, so when the machine sleeps the address stops answering. Every
+`/api` route refuses without a session, so an unauthenticated visitor reaches
+the sign-in screen and nothing else. Details, and the things worth reading
+before sharing the link, are in [TUNNEL.md](TUNNEL.md).
+
 ### First run on a fresh machine
 
 The database starts empty and **nobody can sign in until an operator exists**.

@@ -458,56 +458,35 @@ def _tour_from_ticker(ticker: str) -> str:
 
 def _kalshi_tennis_matchscore(det: dict, name_map: dict, title: str,
                               tour: str, round_label: str) -> "dict | None":
-    """Build a MatchScore-shaped dict from /live_data/milestone tennis details."""
-    c1, c2 = det.get("competitor1_id"), det.get("competitor2_id")
-    tparts = [t.strip() for t in title.split(" vs ")] if " vs " in title else []
-    n1 = name_map.get(c1) or (tparts[0] if tparts else "Player 1")
-    n2 = name_map.get(c2) or (tparts[1] if len(tparts) > 1 else "Player 2")
+    """Build a MatchScore-shaped dict from /live_data/milestone tennis details.
 
-    rs1 = det.get("competitor1_round_scores") or []
-    rs2 = det.get("competitor2_round_scores") or []
-    g1 = [int(r.get("score", 0) or 0) for r in rs1]
-    g2 = [int(r.get("score", 0) or 0) for r in rs2]
-    s1 = det.get("competitor1_overall_score")
-    s2 = det.get("competitor2_overall_score")
-    if s1 is None:
-        s1 = sum(1 for r in rs1 if r.get("outcome") == "winner")
-    if s2 is None:
-        s2 = sum(1 for r in rs2 if r.get("outcome") == "winner")
+    MOVED. The implementation now lives in
+    ``app.domains.botstation.parley.tennis``, which is importable on its own
+    -- this module is not, because it reaches for ``bot_kalshi_btc15``, which
+    was never vendored into this project. Parley v2 needed the same reader,
+    and two copies of it would have drifted the first time either was fixed.
 
-    winner_id = det.get("winner") or ""
-    completed = bool(winner_id)
-    live = ((det.get("widget_status") == "live"
-             or det.get("status") in ("started", "live", "inprogress"))
-            and not completed)
-    server_id = det.get("server")
-    adv = det.get("advantage") or ""
+    This shim keeps the local signature so the rest of this file is unchanged,
+    and adds back the two fields the shared version does not carry because
+    only this bot uses them: ``league`` and ``round``.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
 
-    def _pts(score, cid, idx) -> "str | None":
-        if score is None:
-            return None
-        s = str(score)
-        if adv and adv in (cid, f"competitor{idx}", "home" if idx == 1 else "away"):
-            s += "A"                                    # advantage marker
-        return s
+    _root = _Path(__file__).resolve().parents[4]
+    if str(_root / "backend") not in _sys.path:
+        _sys.path.insert(0, str(_root / "backend"))
+    from app.domains.botstation.parley.tennis import _match_score
 
-    players = [
-        {"name": n1, "sets_won": int(s1 or 0), "games": g1, "tiebreaks": [],
-         "current_game": _pts(det.get("competitor1_current_round_score"), c1, 1) if live else None,
-         "serving": server_id == c1, "winner": winner_id == c1},
-        {"name": n2, "sets_won": int(s2 or 0), "games": g2, "tiebreaks": [],
-         "current_game": _pts(det.get("competitor2_current_round_score"), c2, 2) if live else None,
-         "serving": server_id == c2, "winner": winner_id == c2},
-    ]
-    server = n1 if server_id == c1 else n2 if server_id == c2 else None
-    leader = (n1 if players[0]["sets_won"] > players[1]["sets_won"]
-              else n2 if players[1]["sets_won"] > players[0]["sets_won"] else None)
-    return {
-        "tournament": title, "league": tour, "round": round_label,
-        "status": "post" if completed else "in" if live else "pre",
-        "status_detail": round_label, "completed": completed, "live": live,
-        "players": players, "server": server, "leader": leader, "summary": "",
-    }
+    score = _match_score(det, name_map, title)
+    if score is None:
+        return None
+    score.update({"league": tour, "round": round_label,
+                  "status_detail": round_label, "summary": ""})
+    # tiebreaks was always empty here; kept so callers indexing it still work.
+    for player in score.get("players", []):
+        player.setdefault("tiebreaks", [])
+    return score
 
 
 # Kalshi has no surface field, so derive it from the tournament name. Good

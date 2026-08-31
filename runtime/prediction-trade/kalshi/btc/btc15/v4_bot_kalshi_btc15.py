@@ -1319,7 +1319,23 @@ def _mk_order(
         "side": v2_side,                    # bid = buy YES, ask = sell YES
         "count": f"{int(count):.2f}",       # fixed-point string per V2 schema
         "price": f"{yes_cents / 100.0:.4f}",  # YES price in dollars
-        "time_in_force": "good_till_canceled",
+        # A RESTING order by default, an immediate one when asked.
+        #
+        # A good-till-canceled limit rests, and a resting order has to reserve
+        # its cash on the shard the market settles on -- which is why Kalshi
+        # publishes a "total resting order value" at all. With automatic
+        # rebalancing off, that shard holds cents, the reservation cannot be
+        # made, and the order comes back insufficient_balance while the
+        # account is plainly funded elsewhere.
+        #
+        # Kalshi's own web app does not rest: it sends order_type "market"
+        # with immediate_or_cancel, which matches against what is already
+        # there and reserves nothing. That is the difference between an order
+        # that fills on this account and one that does not.
+        #
+        # Env-driven so the change is a launch option rather than a rewrite,
+        # and so the older btc engines keep the behaviour they were tuned on.
+        "time_in_force": os.getenv("KALSHI_TIF", "good_till_canceled"),
         "self_trade_prevention_type": "taker_at_cross",
         "client_order_id": str(uuid.uuid4()),
     }

@@ -101,6 +101,29 @@ def commodity_signals(interval: str = Query(default="5min"),
         raise HTTPException(status_code=422, detail=str(exc)) from None
 
 
+@router.get("/crypto/signals", operation_id="getCryptoDmiSignals")
+@deps.tenant_scoped
+def crypto_signals(force: bool = Query(default=False),
+                   tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """BTC, ETH, SOL, DOGE and XRP on 1m/2m/5m DMI, from Coinbase.
+
+    No credential: Coinbase's candle feed is public, so this spends nothing
+    and needs nothing from the operator. It still requires a session, because
+    who may read the desk is a separate question from what the data costs.
+
+    Declared BEFORE /{bot_key}/config so the literal path matches first and is
+    never swallowed by the parameterised one.
+    """
+    from app.domains.trading.market import crypto
+
+    try:
+        return crypto.snapshot(force=force)
+    except Exception:                                   # noqa: BLE001
+        logger.info("crypto board unavailable")
+        return {"rows": [], "meta": {"source": "unavailable", "scanned": 0},
+                "age_s": None}
+
+
 @router.get("/{bot_key}/config", operation_id="getBotConfig")
 def bot_config(bot_key: str,
                _: Tenant = Depends(deps.current_tenant)) -> dict:
@@ -130,6 +153,25 @@ def bot_config(bot_key: str,
 
 
 # ---- state ----------------------------------------------------------------
+
+@router.get("/statuses", operation_id="getAllBotStatuses")
+@deps.tenant_scoped
+def all_statuses(tenant: Tenant = Depends(deps.current_tenant),
+                 db: DbSession = Depends(deps.get_db)) -> dict:
+    """Every bot's status in ONE request, keyed by bot.
+
+    The station shows seven bots and polls every ten seconds. Asked one at a
+    time that is seven concurrent requests and seven database sessions every
+    tick, which is most of the desk's steady-state load -- and it was a real
+    part of what exhausted the connection pool.
+
+    Declared BEFORE /{bot_key}/status so the literal path matches first and is
+    never read as a bot named "statuses".
+    """
+    return {config.key: lifecycle.status(db, tenant_id=tenant.id,
+                                         bot_key=config.key)
+            for config in registry.all_bots()}
+
 
 @router.get("/{bot_key}/status", operation_id="getBotStatus")
 @deps.tenant_scoped
@@ -394,6 +436,12 @@ def stop_bot(bot_key: str, payload: StopRequest | None = None,
         run = lifecycle.stop(db, tenant_id=tenant.id, bot_key=bot_key)
     except lifecycle.BotNotRunning as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
+    except lifecycle.BotNotStopped as exc:
+        # 409, and the row is left saying "running", because it is. Reporting
+        # success here would tell the operator a live bot is off while it
+        # keeps placing orders.
+        db.rollback()
+        raise HTTPException(status_code=409, detail=str(exc)) from None
     db.commit()
     return {"bot_key": bot_key, "run_id": run.id, "stopped_at": run.stopped_at}
 
@@ -434,23 +482,292 @@ def sync_bot(bot_key: str, tenant: Tenant = Depends(deps.current_tenant),
 
 @router.post("/reconcile", operation_id="reconcileBotTrades")
 @deps.tenant_scoped
-def reconcile(hours: int = Query(default=1, ge=0),
-              apply: bool = Query(default=False),
+def reconcile(apply: bool = Query(default=True),
               tenant: Tenant = Depends(deps.current_tenant),
               db: DbSession = Depends(deps.get_db)) -> dict:
-    """Settle stale open rows against the exchange.
+    """Close open ledger rows against what actually happened at Kalshi.
 
-    Cross-family, so it is not keyed by bot. A preview by default: the bots
-    own P&L estimates were found overstated by roughly $8k, and correcting
-    them is not something to do without being asked.
+    A bot records a trade when it ENTERS and cannot record the outcome, so an
+    open row means "nobody has looked since" rather than "still running".
+    This asks the exchange: positions first (a non-zero holding means the
+    trade really is live and is left alone), then settlements, then fills.
+
+    Applies by default. Preview with ``apply=false``. It used to be the other
+    way round -- on the grounds that rewriting P&L the operator has been
+    reading deserves a confirmation -- but a reconciler nobody presses leaves
+    the ledger permanently wrong, which is the failure it exists to prevent.
     """
-    stale = list(db.scalars(select(BotTrade).where(
-        BotTrade.tenant_id == tenant.id,
-        BotTrade.status == "open",
-    )).all())
+    from app.domains.botstation import reconcile as reconciler
+    from app.tenancy import repository as tenants
+
+    try:
+        cred = tenants.load_credential(db, tenant.id, "kalshi", deps.keyring())
+    except Exception:                                   # noqa: BLE001
+        raise HTTPException(
+            status_code=424,
+            detail="no Kalshi credential for this operator") from None
+    try:
+        return reconciler.resolve_open_trades(db, tenant.id, cred, apply=apply)
+    except Exception:                                   # noqa: BLE001
+        logger.info("reconcile: venue unreachable for %s", tenant.slug)
+        raise HTTPException(
+            status_code=424,
+            detail="Kalshi could not be reached; nothing was changed") from None
+
+
+class LuckPreviewRequest(BaseModel):
+    min_legs: int = Field(default=5, ge=2, le=24)
+    max_legs: int = Field(default=24, ge=2, le=24)
+    min_leg_c: int = Field(default=60, ge=5, le=98)
+    min_volume_usd: float = Field(default=0, ge=0)
+
+
+class LuckPlaceRequest(BaseModel):
+    token: str
+    # The legs the operator kept. Omitted means "all of them"; anything not
+    # in the preview is refused rather than bought.
+    tickers: list[str] | None = None
+    min_usd: float = Field(default=5, gt=0, le=5000)
+    max_usd: float = Field(default=7.5, gt=0, le=5000)
+    min_legs: int = Field(default=5, ge=2, le=24)
+
+
+def _kalshi_cred(db: DbSession, tenant: Tenant):
+    try:
+        return tenants.load_credential(db, tenant.id, "kalshi", deps.keyring())
+    except Exception:                                   # noqa: BLE001
+        raise HTTPException(
+            status_code=424,
+            detail="no Kalshi credential for this operator") from None
+
+
+@router.post("/luck/preview", operation_id="previewLuckTicket")
+def luck_preview(payload: LuckPreviewRequest,
+                 tenant: Tenant = Depends(deps.current_tenant),
+                 db: DbSession = Depends(deps.get_db)) -> dict:
+    """Choose the legs and show them. Spends nothing.
+
+    Deliberately separate from placing. This scans the whole live board, which
+    takes a minute, and an operator asked to confirm a 20-leg parlay should be
+    looking at the actual legs rather than at a promise about them.
+    """
+    from app.domains.botstation import luck
+
+    if payload.max_legs < payload.min_legs:
+        raise HTTPException(status_code=422,
+                            detail="max legs is below min legs")
+    cred = _kalshi_cred(db, tenant)
+    # Started, not awaited. The scan runs past the tunnel's ~100s ceiling, so
+    # a request that waits for it is killed by the proxy no matter what the
+    # browser's timeout says.
+    return {"job_id": luck.start(luck.preview, cred,
+                                 min_legs=payload.min_legs,
+                                 max_legs=payload.max_legs,
+                                 min_leg_c=payload.min_leg_c,
+                                 min_volume_usd=payload.min_volume_usd),
+            "status": "running"}
+
+
+@router.post("/luck/place", operation_id="placeLuckTicket")
+def luck_place(payload: LuckPlaceRequest,
+               tenant: Tenant = Depends(deps.current_tenant),
+               db: DbSession = Depends(deps.get_db)) -> dict:
+    """Buy the previewed ticket. REAL MONEY.
+
+    Takes a preview token rather than a set of legs: the operator confirms the
+    thing they were shown, and a request that names its own legs would be a
+    different order wearing the preview's approval.
+    """
+    from app.domains.botstation import luck
+
+    if payload.max_usd < payload.min_usd:
+        raise HTTPException(status_code=422,
+                            detail="max $ is below min $")
+    cred = _kalshi_cred(db, tenant)
+    # Also a job: placing re-scans the board and may sit through a stake
+    # escalation, which is longer than the preview, not shorter.
+    return {"job_id": luck.start(luck.place, cred, payload.token,
+                                 tenant_slug=tenant.slug,
+                                 tickers=payload.tickers,
+                                 min_usd=payload.min_usd,
+                                 max_usd=payload.max_usd,
+                                 min_legs=payload.min_legs),
+            "status": "running"}
+
+
+@router.get("/luck/job/{job_id}", operation_id="getLuckJob")
+def luck_job(job_id: str,
+             _: Tenant = Depends(deps.current_tenant)) -> dict:
+    """How a preview or a placement is getting on."""
+    from app.domains.botstation import luck
+
+    out = luck.job(job_id)
+    if out is None:
+        raise HTTPException(status_code=404,
+                            detail="no such job — it may have expired")
+    return out
+
+
+# The windows the desk reports P&L over. Hours, because a trading day is not
+# a calendar one and "today" means different things either side of midnight.
+PNL_WINDOWS = (("3h", 3), ("6h", 6), ("24h", 24),
+               ("7d", 24 * 7), ("30d", 24 * 30), ("60d", 24 * 60))
+
+
+@router.get("/event-log", operation_id="getTradeEventLog")
+def trade_event_log(limit: int = Query(default=200, ge=1, le=2000),
+                    bot_key: str | None = Query(default=None),
+                    tenant: Tenant = Depends(deps.current_tenant),
+                    db: DbSession = Depends(deps.get_db)) -> dict:
+    """Every trade this operator's bots placed, and what it made.
+
+    One row per trade in the terms an operator reads: which bot, which
+    market, which side, what it cost, what came back, how it ended. Entry is
+    cash out INCLUDING fees and exit is cash back with fees already taken, so
+    exit minus entry is the money -- no separate fee column to reconcile in
+    your head.
+
+    P&L is banded by how long ago a trade CLOSED, not when it opened: a
+    30-day-old position that resolved an hour ago belongs to the last hour's
+    result, which is the question "how am I doing today" actually asks.
+    """
+    from datetime import timedelta
+
+    from app.platform.db.base import utcnow
+
+    rows = db.scalars(
+        select(BotTrade)
+        .where(BotTrade.tenant_id == tenant.id,
+               *( [BotTrade.bot_key == bot_key] if bot_key else [] ))
+        .order_by(BotTrade.opened_at.desc().nullslast(), BotTrade.id.desc())
+        .limit(limit)).all()
+
+    def money(value) -> float | None:
+        return None if value is None else round(float(value), 2)
+
+    OPEN = {"open"}
+    WON = {"won"}
+    LOST = {"lost"}
+
+    def label(row: BotTrade) -> str:
+        if row.status in OPEN:
+            return "OPEN"
+        if row.status in WON:
+            return "WON"
+        if row.status in LOST:
+            return "LOST"
+        return (row.status or "").upper()
+
+    entries = [{
+        "id": row.id,
+        "bot": (row.bot_key or "").upper(),
+        "version": row.bot_version,
+        "market": row.market_title or row.ticker,
+        "outcome": row.outcome or "",
+        "ticker": row.ticker,
+        "entry": money(row.entry_usd),
+        "exit": money(row.exit_usd),
+        "status": label(row),
+        "pnl": money(row.realized_pnl),
+        "contracts": row.contracts,
+        "is_live": row.is_live,
+        "opened_at": row.opened_at,
+        "closed_at": row.closed_at,
+    } for row in rows]
+
+    # The windows are computed over the WHOLE ledger, not over the page the
+    # desk happens to be showing -- a 30-day figure taken from the newest 200
+    # rows is not a 30-day figure.
+    now = utcnow()
+    windows = {}
+    for name, hours in PNL_WINDOWS:
+        since = now - timedelta(hours=hours)
+        closed = db.execute(
+            select(func.count(BotTrade.id),
+                   func.sum(BotTrade.realized_pnl),
+                   func.sum(BotTrade.entry_usd))
+            .where(BotTrade.tenant_id == tenant.id,
+                   BotTrade.closed_at.is_not(None),
+                   BotTrade.closed_at >= since,
+                   *( [BotTrade.bot_key == bot_key] if bot_key else [] ))
+        ).one()
+        won = db.scalar(
+            select(func.count(BotTrade.id))
+            .where(BotTrade.tenant_id == tenant.id,
+                   BotTrade.closed_at >= since,
+                   BotTrade.status == "won",
+                   *( [BotTrade.bot_key == bot_key] if bot_key else [] ))) or 0
+        settled, pnl, staked = closed[0] or 0, closed[1], closed[2]
+        windows[name] = {
+            "settled": settled,
+            "won": won,
+            "lost": max(0, settled - won),
+            "pnl": money(pnl) if pnl is not None else 0.0,
+            "staked": money(staked) if staked is not None else 0.0,
+            "roi_pct": (round(float(pnl) / float(staked) * 100, 2)
+                        if pnl is not None and staked else None),
+        }
+
+    open_rows = [e for e in entries if e["status"] == "OPEN"]
     return {
-        "candidates": len(stale),
-        "applied": 0,
-        "preview": not apply,
-        "detail": "exchange reconciliation is not yet wired to a venue client",
+        "trades": entries,
+        "windows": windows,
+        "open_count": len(open_rows),
+        "open_staked": money(sum(e["entry"] or 0 for e in open_rows)),
     }
+
+
+@router.get("/runs", operation_id="getBotRuns")
+def bot_runs(limit: int = Query(default=40, ge=1, le=400),
+             tenant: Tenant = Depends(deps.current_tenant),
+             db: DbSession = Depends(deps.get_db)) -> dict:
+    """Every launch and stop, from the run table.
+
+    The desk kept this list in the BROWSER -- appended whenever a tab happened
+    to notice a status change -- so it was empty on a new machine, wrong after
+    a reload, and silent about anything that happened while nobody was
+    watching. A bot exiting on its own at 3am is precisely the event that log
+    exists for, and precisely the one a client-side list could never record.
+
+    P&L per run is summed from the trades that bot opened during it, the same
+    window the session tile uses.
+    """
+    from app.domains.botstation.models import BotRun
+
+    runs = db.scalars(
+        select(BotRun)
+        .where(BotRun.tenant_id == tenant.id)
+        .order_by(BotRun.id.desc())
+        .limit(limit)).all()
+
+    out = []
+    for run in runs:
+        scope = [BotTrade.tenant_id == tenant.id,
+                 BotTrade.bot_key == run.bot_key]
+        if run.started_at is not None:
+            scope.append(BotTrade.opened_at >= run.started_at)
+        if run.stopped_at is not None:
+            scope.append(BotTrade.opened_at <= run.stopped_at)
+        trades, pnl = db.execute(
+            select(func.count(BotTrade.id),
+                   func.coalesce(func.sum(BotTrade.realized_pnl), 0.0))
+            .where(*scope)).one()
+        out.append({
+            "run_id": run.id,
+            "bot": (run.bot_key or "").upper(),
+            "bot_key": run.bot_key,
+            "version": run.bot_version,
+            "mode": run.mode,
+            "status": run.status,
+            "started_at": run.started_at,
+            "stopped_at": run.stopped_at,
+            # The distinction that matters at a glance: a bot the operator
+            # stopped is not the same news as one that exited by itself.
+            "exited_on_its_own": bool(run.stopped_at and run.exit_code is None
+                                      and run.status != "stopped"),
+            "exit_code": run.exit_code,
+            "bankroll": run.bankroll,
+            "trades": int(trades or 0),
+            "pnl": round(float(pnl or 0.0), 2),
+        })
+    return {"runs": out}

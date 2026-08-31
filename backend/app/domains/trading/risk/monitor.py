@@ -44,6 +44,52 @@ ARM_DELAY_S = 30
 ACTIVE = ("pending", "open")
 
 
+# The same failure, logged once and then only occasionally. A position whose
+# operator has no credential fails on EVERY pass, so at a 10s cadence one
+# broken position wrote ~8,600 identical lines a day -- enough to bury the
+# first occurrence of anything else and to keep the disk busy saying nothing
+# new. The first is logged in full; repeats are summarised every few minutes.
+_REPEAT_AFTER_S = 300
+_last_said: dict[str, float] = {}
+
+
+def _say_once(key: str, message: str, *args) -> None:
+    import time
+
+    now = time.time()
+    seen = _last_said.get(key)
+    if seen is None:
+        _last_said[key] = now
+        logger.warning(message, *args)
+        return
+    if now - seen >= _REPEAT_AFTER_S:
+        _last_said[key] = now
+        logger.warning("(still) " + message, *args)
+
+
+def clear_repeat_suppression(key: str | None = None) -> None:
+    """Forget what has been said, so a recurrence is reported in full.
+
+    Called when a pass SUCCEEDS: the next failure after a good pass is new
+    information, not a repeat, and suppressing it would hide a fault that had
+    genuinely gone away and come back.
+    """
+    if key is None:
+        _last_said.clear()
+    else:
+        _last_said.pop(key, None)
+
+
+class MonitorPassIncomplete(RuntimeError):
+    """At least one position could not be checked.
+
+    Raised AFTER every other position in the pass has been swept, so the
+    failure is loud without being contagious. Carries which positions failed,
+    because "the monitor pass failed" is not actionable and "#41 could not be
+    quoted" is.
+    """
+
+
 def _credential(tenant_id: str, sandbox: bool):
     from app.api_v2 import deps
     from app.platform.db.session import session_scope
@@ -68,16 +114,21 @@ def run_pass(*, tenant_id: str) -> dict:
             heartbeat.record_pass(tenant_id)
             return {"checked": 0, "events": events}
 
+        # Every position is checked even when an earlier one fails. The
+        # comment here used to say exactly that while the code did the
+        # opposite: it re-raised on the first failure, so one contract the
+        # venue would not quote aborted the sweep and left every OTHER stop
+        # on that account unwatched for the rest of the pass. A single bad
+        # contract must not disarm the account.
+        failures: list[str] = []
         for pos in rows:
             try:
                 _check_one(db, tenant_id, pos, events)
             except Exception as exc:                    # noqa: BLE001
-                # One position's venue hiccup must not leave the others
-                # unswept — that would turn a single bad contract into every
-                # stop on the account going unwatched.
-                logger.warning("monitor: position %s: %s", pos.id, exc)
+                _say_once(f"pos:{pos.id}", "monitor: position %s: %s",
+                          pos.id, exc)
                 events.append(f"#{pos.id} check failed: {exc}")
-                raise
+                failures.append(f"#{pos.id}: {exc}")
         db.commit()
     except Exception as exc:                            # noqa: BLE001
         db.rollback()
@@ -86,6 +137,20 @@ def run_pass(*, tenant_id: str) -> dict:
     finally:
         db.close()
 
+    if failures:
+        # Loud AFTER the sweep, not instead of it. The heartbeat is what stops
+        # new entries when stops are unreliable, so a pass that could not
+        # check everything must never be recorded as healthy -- but it still
+        # had to check everything it could first.
+        reason = "; ".join(failures)
+        heartbeat.record_failure(tenant_id, reason)
+        raise MonitorPassIncomplete(
+            f"{len(failures)} of {len(rows)} positions could not be checked: "
+            f"{reason}")
+
+    # A clean pass resets the suppression, so if this breaks again it is
+    # reported in full rather than swallowed as a repeat.
+    clear_repeat_suppression(f"tenant:{tenant_id}")
     heartbeat.record_pass(tenant_id)
     return {"checked": len(rows), "events": events}
 
@@ -117,7 +182,8 @@ def sweep_all_tenants() -> list[dict]:
         try:
             out.append(run_pass(tenant_id=tenant_id))
         except Exception as exc:                        # noqa: BLE001
-            logger.warning("monitor: tenant %s failed: %s", tenant_id, exc)
+            _say_once(f"tenant:{tenant_id}",
+                      "monitor: tenant %s failed: %s", tenant_id, exc)
             out.append({"tenant_id": tenant_id, "error": str(exc)})
     return out
 

@@ -424,13 +424,15 @@ def check_line_endings() -> None:
 
 def check_desk() -> None:
     header("DESK")
-    index = ROOT / "frontend" / "dist" / "index.html"
+    # dist-v2 is what api_v2 serves; checking dist reported a healthy
+    # desk while the API had nothing to serve.
+    index = ROOT / "frontend" / "dist-v2" / "index.html"
     if index.is_file():
-        assets = ROOT / "frontend" / "dist" / "assets"
+        assets = ROOT / "frontend" / "dist-v2" / "assets"
         n = len(list(assets.glob("*"))) if assets.is_dir() else 0
         ok("DESK", f"built UI present ({n} asset file(s)) - the API serves it at /")
     else:
-        warn("DESK", "frontend/dist is not built - the API runs with no UI",
+        warn("DESK", "frontend/dist-v2 is not built - the API runs with no UI",
              "npm install --prefix frontend && npm run build --prefix frontend")
 
 

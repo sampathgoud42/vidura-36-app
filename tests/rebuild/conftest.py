@@ -77,6 +77,17 @@ def fresh_schema():
     # pytest happened to import first.
     get_settings.cache_clear()
 
+    # Background workers first, THEN the file. A sweep or watcher thread from
+    # the previous test may still hold a connection, and on Windows unlinking
+    # an open SQLite file raises rather than deferring -- which surfaced as
+    # every later test erroring in setup with a PermissionError that named the
+    # fixture instead of the thread.
+    from app.domains.trading.execution import autotrade
+    from app.domains.trading.market import flow
+
+    autotrade.quiesce()
+    flow.quiesce()
+
     url = os.environ["TBOT_DATABASE_URL_OVERRIDE"]
     db_file = Path(url.replace("sqlite:///", ""))
     if db_file.exists():
@@ -91,6 +102,8 @@ def fresh_schema():
     deps.reset_keyring_for_tests()
     migrations.upgrade_to_head(url=url)
     yield
+    autotrade.quiesce()
+    flow.quiesce()
     session.reset_for_tests()
     session_store.revoke_all()
 

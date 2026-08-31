@@ -70,7 +70,11 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
-API_PORT = int(os.environ.get("TBOT_PORT", "8790"))
+# 8791 and api_v2. The control scripts pointed at the old app on 8790 long
+# after the desk had been switched over, so `start.bat` started a server the
+# tunnel was not pointing at and `status.bat` reported the running desk as
+# "stopped (port is in use by something else)".
+API_PORT = int(os.environ.get("TBOT_PORT", "8791"))
 DESK_PORT = int(os.environ.get("TBOT_DESK_PORT", "5199"))
 
 # A Windows console defaults to cp1252, and a redirected stdout raises there
@@ -92,6 +96,11 @@ def venv_python() -> Path:
 # Where the public URL is remembered between commands, so `status` can print
 # it without re-reading a log that rotates.
 URL_FILE = VAR / "tunnel.url"
+
+# The tunnel definition lives with the project, not in the operator's home
+# directory. See named_tunnel() for why.
+TUNNEL_DIR = ROOT / "runtime" / "tunnel"
+TUNNEL_CONFIG = TUNNEL_DIR / "config.yml"
 
 CLOUDFLARED_CANDIDATES = [
     Path(r"C:/Program Files (x86)/cloudflared/cloudflared.exe"),
@@ -125,14 +134,41 @@ def named_tunnel() -> str | None:
     name = os.environ.get("TBOT_TUNNEL_NAME", "").strip()
     if name:
         return name
-    cfg = Path.home() / ".cloudflared" / "config.yml"
-    if cfg.is_file():
+    # The PROJECT's config first. Everything this app needs lives in one
+    # folder, and a tunnel definition in %USERPROFILE% is a reference outside
+    # it: invisible to anyone reading the repo, left behind when the project
+    # is copied, and still there after it is deleted. The home location stays
+    # as a fallback so an existing setup keeps working.
+    for cfg in (TUNNEL_CONFIG, Path.home() / ".cloudflared" / "config.yml"):
+        if not cfg.is_file():
+            continue
         try:
             for line in cfg.read_text(encoding="utf-8").splitlines():
                 if line.strip().startswith("tunnel:"):
                     return line.split(":", 1)[1].strip()
         except OSError:
             pass
+    return None
+
+
+def tunnel_hostname() -> str | None:
+    """The hostname a named tunnel publishes, from the project config.
+
+    A named tunnel never prints its hostname the way a quick tunnel does --
+    it does not need to discover one -- so scraping the log for it finds
+    nothing. The ingress rules already say what it is.
+    """
+    if not TUNNEL_CONFIG.is_file():
+        return None
+    try:
+        for line in TUNNEL_CONFIG.read_text(encoding="utf-8").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("- hostname:"):
+                host = stripped.split(":", 1)[1].strip()
+                if host:
+                    return f"https://{host}"
+    except OSError:
+        pass
     return None
 
 
@@ -144,6 +180,12 @@ def tunnel_url(wait_s: float = 0) -> str | None:
     hostname, so that is recorded at start instead of parsed.
     """
     import re
+
+    # A named tunnel knows its hostname up front; only a quick tunnel has to
+    # be told what it was given.
+    host = tunnel_hostname()
+    if host:
+        return host
 
     deadline = time.time() + wait_s
     pattern = re.compile(r"https://[a-z0-9][a-z0-9.-]*\.trycloudflare\.com")
@@ -265,6 +307,41 @@ def port_busy(port: int) -> bool:
         return s.connect_ex(("127.0.0.1", port)) == 0
 
 
+def pids_listening_on(port: int) -> list[int]:
+    """Whoever is actually holding the port.
+
+    The API launcher is not the process that listens -- it starts a child
+    which does, so the pid in var/api.pid is one step removed from the socket.
+    Stopping the launcher alone therefore leaves the port held, which is why
+    `stop` began reporting "port is still in use" and the next `start` came up
+    beside a server nobody was tracking.
+
+    Found by port rather than by walking the process tree, because the tree
+    also contains the BOTS, and those must survive a server restart. The
+    holder of the API port is the API by definition; a bot never listens on
+    it.
+    """
+    if not IS_WINDOWS:
+        out = subprocess.run(["lsof", "-ti", f"tcp:{port}", "-sTCP:LISTEN"],
+                             capture_output=True, text=True).stdout
+        return [int(x) for x in out.split() if x.strip().isdigit()]
+    out = subprocess.run(["netstat", "-ano", "-p", "TCP"],
+                         capture_output=True, text=True).stdout
+    found: list[int] = []
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) < 5 or parts[3].upper() != "LISTENING":
+            continue
+        local = parts[1]
+        if local.rsplit(":", 1)[-1] != str(port):
+            continue
+        if parts[4].isdigit():
+            pid = int(parts[4])
+            if pid > 0 and pid not in found:
+                found.append(pid)
+    return found
+
+
 # --------------------------------------------------------------------------
 # spawning
 # --------------------------------------------------------------------------
@@ -288,29 +365,58 @@ def _spawn(service: str, cmd: list[str], env: dict[str, str],
     with open(log_file(service), "a", encoding="utf-8", errors="replace") as out:
         out.write(f"\n=== {service} started {time.strftime('%Y-%m-%d %H:%M:%S')} ===\n")
         out.flush()
-        proc = subprocess.Popen(
-            cmd, cwd=str(ROOT), env=env, stdout=out, stderr=subprocess.STDOUT,
-            stdin=subprocess.DEVNULL, close_fds=True, **kwargs,
-        )
+
+        def _go(extra: int = 0):
+            flags = dict(kwargs)
+            if extra:
+                flags["creationflags"] = flags["creationflags"] | extra
+            return subprocess.Popen(
+                cmd, cwd=str(ROOT), env=env, stdout=out,
+                stderr=subprocess.STDOUT, stdin=subprocess.DEVNULL,
+                close_fds=True, **flags,
+            )
+
+        # The console flags above are only half of "outlives the shell". A
+        # process also inherits its creator's JOB OBJECT, and a job that kills
+        # on close takes every member with it however detached they are --
+        # which is how the desk kept going down on its own when the window
+        # that started it was closed or recycled. Breakaway is the only flag
+        # that leaves the job, and a job may refuse it, so it is attempted and
+        # dropped rather than assumed. _spawn_detached in lifecycle.py does
+        # the same for bots.
+        CREATE_BREAKAWAY_FROM_JOB = 0x01000000
+        if IS_WINDOWS:
+            try:
+                proc = _go(CREATE_BREAKAWAY_FROM_JOB)
+            except OSError:
+                proc = _go()
+        else:
+            proc = _go()
     pid_file(service).write_text(str(proc.pid), encoding="utf-8")
     owner_file(service).write_text(marker or str(ROOT), encoding="utf-8")
     return proc.pid
 
 
-def _api_env() -> dict[str, str]:
+def _api_env(port: int) -> dict[str, str]:
     env = dict(os.environ)
-    # backend/ on the path so `app.main:app` resolves; cwd is the project
+    # backend/ on the path so `app.api_v2.server` resolves; cwd is the project
     # root, which is where .env and every project-relative default live.
     env["PYTHONPATH"] = str(ROOT / "backend") + os.pathsep + env.get("PYTHONPATH", "")
+    env.setdefault("TBOT_V2_PORT", str(port))
+    env.setdefault("TBOT_V2_HOST", os.environ.get("TBOT_HOST", "0.0.0.0"))
+    env.setdefault("TBOT_DATABASE_URL_OVERRIDE", "sqlite:///./var/app-v2.db")
     return env
 
 
 def _api_cmd(port: int) -> list[str]:
-    return [
-        str(venv_python()), "-m", "uvicorn", "app.main:app",
-        "--host", os.environ.get("TBOT_HOST", "0.0.0.0"), "--port", str(port),
-        "--timeout-keep-alive", "15", "--limit-concurrency", "128",
-    ]
+    """Start api_v2 through its own entry point rather than bare uvicorn.
+
+    The entry point migrates the database and then REFUSES to serve if it is
+    not at head, which is the property worth keeping: a server answering from
+    a schema nobody migrated is how a deploy half-works. `uvicorn app.main:app`
+    skipped all of that and started the retired application besides.
+    """
+    return [str(venv_python()), "-m", "app.api_v2.server"]
 
 
 def wait_healthy(port: int, timeout: float = 45.0) -> dict | None:
@@ -342,7 +448,7 @@ def cmd_start(args) -> int:
             print("The API is already running in the background. Stop it first.")
             return 1
         print(f"Tradier Bot API on http://127.0.0.1:{args.port}  (Ctrl-C to stop)")
-        return subprocess.call(_api_cmd(args.port), cwd=str(ROOT), env=_api_env())
+        return subprocess.call(_api_cmd(args.port), cwd=str(ROOT), env=_api_env(args.port))
 
     pid = running_pid("api")
     if pid:
@@ -352,10 +458,10 @@ def cmd_start(args) -> int:
         # server that fails to bind but keeps running every background loop
         # — the exact failure the app warns about at startup.
         print(f"Port {args.port} is already in use by another process.\n"
-              f"Stop it, or start on a different port:  TBOT_PORT=8791")
+              f"Stop it, or start on a different port:  TBOT_PORT=8792")
         return 1
     else:
-        pid = _spawn("api", _api_cmd(args.port), _api_env())
+        pid = _spawn("api", _api_cmd(args.port), _api_env(args.port))
         health = wait_healthy(args.port)
         if health is None:
             print(f"API did not come up within 45s - see {log_file('api')}")
@@ -363,7 +469,7 @@ def cmd_start(args) -> int:
         mode = "LIVE TRADING" if not health.get("paper_only") else "paper only"
         print(f"API      pid {pid}  http://127.0.0.1:{args.port}   [{mode}]")
 
-    desk_built = (ROOT / "frontend" / "dist" / "index.html").is_file()
+    desk_built = (ROOT / "frontend" / "dist-v2" / "index.html").is_file()
     if args.dev:
         dpid = running_pid("desk")
         if dpid:
@@ -403,8 +509,18 @@ def _start_tunnel(port: int) -> None:
         return
 
     name = named_tunnel()
+    env = dict(os.environ)
     if name:
-        cmd = [str(exe), "tunnel", "--no-autoupdate", "run", name]
+        cmd = [str(exe), "tunnel", "--no-autoupdate"]
+        if TUNNEL_CONFIG.is_file():
+            # Explicit, so cloudflared cannot silently fall back to a config
+            # in the home directory that says something different from the
+            # one committed here.
+            cmd += ["--config", str(TUNNEL_CONFIG)]
+            cert = TUNNEL_DIR / "cert.pem"
+            if cert.is_file():
+                env["TUNNEL_ORIGIN_CERT"] = str(cert)
+        cmd += ["run", name]
     else:
         # Quick tunnel: no account needed, but Cloudflare assigns a random
         # hostname that is gone the moment this process is.
@@ -418,9 +534,14 @@ def _start_tunnel(port: int) -> None:
 
     # What identifies OUR cloudflared among any others on the machine.
     marker = name if name else f"http://127.0.0.1:{port}"
-    pid = _spawn("tunnel", cmd, dict(os.environ), marker=marker)
+    pid = _spawn("tunnel", cmd, env, marker=marker)
     if name:
-        print(f"Tunnel   pid {pid}  named tunnel '{name}' (stable hostname)")
+        host = tunnel_hostname()
+        if host:
+            URL_FILE.write_text(host, encoding="utf-8")
+            print(f"Tunnel   pid {pid}  {host}  (named tunnel '{name}')")
+        else:
+            print(f"Tunnel   pid {pid}  named tunnel '{name}' (stable hostname)")
         return
 
     url = tunnel_url(wait_s=25)
@@ -434,7 +555,7 @@ def _start_tunnel(port: int) -> None:
               f"see {log_file('tunnel')}")
 
 
-def _terminate(pid: int, label: str) -> bool:
+def _terminate(pid: int, label: str, *, tree: bool = True) -> bool:
     """Ask the process to exit, then insist. True when it is gone.
 
     The graceful half only really exists on POSIX. A Windows process started
@@ -443,6 +564,19 @@ def _terminate(pid: int, label: str) -> bool:
     for a foreground start) and then taskkill finishes the job. That is the
     normal path on Windows, not a fault, so the short grace period keeps it
     from looking like one.
+
+    ``tree`` decides whether the process's descendants go with it, and the
+    API must be stopped with ``tree=False``. Bots are launched BY the API, so
+    on Windows they are its children in the process table, and `taskkill /T`
+    walks that table: stopping the app with /T reached past the API and
+    killed every live bot — silently, since the bot rows still said running
+    and the desk had already printed "stopped". Restarting the app is a
+    routine act; flattening live positions is not, and one must never be the
+    other. DETACHED_PROCESS does not prevent this. It detaches the console,
+    not the parent link, which is the thing /T actually follows.
+
+    Everything else keeps the tree. The dev desk is a node server that
+    spawns its own workers, and those are strays the moment it exits.
 
     Being terminated abruptly is safe here: SQLite runs in WAL mode and
     recovers on the next open, and no exit state lives only in memory. What
@@ -472,9 +606,13 @@ def _terminate(pid: int, label: str) -> bool:
         print(f"  {label} ignored SIGTERM, killing pid {pid}")
     try:
         if IS_WINDOWS:
-            subprocess.run(["taskkill", "/PID", str(pid), "/T", "/F"],
-                           capture_output=True)
+            cmd = ["taskkill", "/PID", str(pid), "/F"]
+            if tree:
+                cmd.insert(-1, "/T")
+            subprocess.run(cmd, capture_output=True)
         else:
+            # POSIX needs no equivalent guard: SIGKILL to a pid is just that
+            # pid, and lifecycle gives each bot its own session anyway.
             os.kill(pid, signal.SIGKILL)
     except OSError:
         pass
@@ -492,7 +630,8 @@ def cmd_stop(args) -> int:
         if pid is None:
             print(f"{label:8} not running")
             continue
-        if _terminate(pid, label):
+        # The API is stopped alone; its children are the live bots.
+        if _terminate(pid, label, tree=(service != "api")):
             pid_file(service).unlink(missing_ok=True)
             owner_file(service).unlink(missing_ok=True)
             print(f"{label:8} stopped (pid {pid})")
@@ -501,8 +640,18 @@ def cmd_stop(args) -> int:
             print(f"{label:8} FAILED to stop (pid {pid})")
             return 1
     URL_FILE.unlink(missing_ok=True)
+
+    # The launcher is gone; the process it started may still hold the socket.
+    # Clear it explicitly rather than reporting it as somebody else's app --
+    # it is ours, and leaving it running means the next start silently races
+    # a server that is already there.
     if stopped and port_busy(args.port):
-        print(f"note: port {args.port} is still in use - another app is on it")
+        for pid in pids_listening_on(args.port):
+            if _terminate(pid, f"API:{pid}", tree=False):
+                print(f"{'API':8} released port {args.port} (pid {pid})")
+        if port_busy(args.port):
+            print(f"note: port {args.port} is still in use - another app "
+                  f"is on it")
     return 0
 
 
@@ -517,7 +666,12 @@ def cmd_status(args) -> int:
         if health:
             mode = "LIVE TRADING" if not health.get("paper_only") else "paper only"
             print(f"API      running (pid {pid})  port {args.port}  [{mode}]")
-            print(f"database {health.get('database')}")
+            # /health does not report a database path, so this printed
+            # "database None" on every run. The path the server was actually
+            # told to use is the honest answer.
+            db_url = os.environ.get("TBOT_DATABASE_URL_OVERRIDE",
+                                    "sqlite:///./var/app-v2.db")
+            print(f"database {health.get('database') or db_url}")
         else:
             print(f"API      pid {pid} alive but /health is not answering "
                   f"on {args.port} - see {log_file('api')}")
@@ -536,8 +690,12 @@ def cmd_status(args) -> int:
         print(f"Tunnel   not running"
               f"{'' if cloudflared() else ' (cloudflared not installed)'}")
 
-    built = ROOT / "frontend" / "dist" / "index.html"
-    print(f"build    {'frontend/dist present - the API serves it' if built.is_file() else 'frontend/dist MISSING - no UI'}")
+    # dist-v2, which is what api_v2 actually serves. This reported on
+    # frontend/dist -- the RETIRED app's build -- so it said "the API serves
+    # it" about a directory the API does not look at, and would have said the
+    # UI was fine with dist-v2 missing entirely.
+    built = ROOT / "frontend" / "dist-v2" / "index.html"
+    print(f"build    {'frontend/dist-v2 present - the API serves it' if built.is_file() else 'frontend/dist-v2 MISSING - no UI'}")
     return 0
 
 
@@ -585,7 +743,6 @@ def cmd_launch(args) -> int:
     for, so it gets a frame of its own and lands on the clipboard. The
     wrapper keeps the window open afterwards.
     """
-    args.tunnel = True
     rc = cmd_start(args)
     if rc != 0:
         return rc
@@ -630,13 +787,25 @@ def main() -> int:
                              "launch"])
     ap.add_argument("--dev", action="store_true",
                     help="also run the Vite dev server (hot reload) on 5199")
+    # The tunnel is ON by default. This project has a NAMED tunnel on its own
+    # domain, so publishing is the normal way it runs, not an extra -- and an
+    # opt-in flag meant `start.bat` quietly brought the desk up with no public
+    # address while everything else reported success.
+    #
+    # --no-tunnel is the way to keep it local, and it is the flag that has to
+    # be typed deliberately, because that is the choice worth being explicit
+    # about on a desk that is meant to be reachable.
     ap.add_argument("--tunnel", action="store_true",
-                    help="also publish the desk through Cloudflare (PUBLIC url)")
+                    help="publish through Cloudflare (default; kept for scripts)")
+    ap.add_argument("--no-tunnel", dest="no_tunnel", action="store_true",
+                    help="keep the desk local — do NOT publish it")
     ap.add_argument("--foreground", action="store_true",
                     help="run the API in this terminal instead of detaching")
     ap.add_argument("--port", type=int, default=API_PORT,
                     help=f"API port (default {API_PORT}, or $TBOT_PORT)")
     args = ap.parse_args()
+    # Resolved once, here, so every command sees the same answer.
+    args.tunnel = not args.no_tunnel
 
     VAR.mkdir(parents=True, exist_ok=True)
     return {"start": cmd_start, "stop": cmd_stop, "restart": cmd_restart,

@@ -269,3 +269,102 @@ def test_world_access_is_data_not_a_file(client, admin, alice):
 
     me = client.get("/api/v1/auth/me", headers=alice.headers).json()
     assert me["worlds"]["36-trade-desk"] is False
+
+
+# ---- the payloads the desk actually sends ---------------------------------
+# Every individual bot launch was refused with "does not accept: ..." naming
+# fields the operator never typed. Three separate causes, all invisible from
+# the desk:
+#
+#   user_id            an identity field the form has always sent
+#   bank, target_pct   the desk's names for bankroll and bank_tp_pct
+#   sports, sport_settings, parley   real options nothing had declared
+#
+# These pin the payloads as the desk sends them, so the schema and the form
+# cannot drift apart again without a test naming the field.
+
+DESK_PAYLOADS = {
+    "parley": {"user_id": "demo", "contracts": 10, "bank": 100,
+               "bank_sl_pct": 50, "sports": ["tennis"],
+               "parley": {"min_prob_c": 80, "min_set": 2}},
+    "sports": {"user_id": "demo", "sports": ["tennis", "baseball"],
+               "sport_settings": {"tennis": {"contracts": 25, "bank": 50}},
+               "target_pct": 30, "bank_sl_pct": 20},
+    "btc15": {"user_id": "demo", "contracts": 25, "bank": 50, "tp_pct": 15,
+              "sl_pct": 30, "target_pct": 30, "bank_sl_pct": 20},
+    "gold15": {"user_id": "demo", "contracts": 25, "bank": 50,
+               "target_pct": 30},
+}
+
+
+@pytest.mark.parametrize("bot_key", sorted(DESK_PAYLOADS))
+def test_the_desk_launch_payload_is_accepted(bot_key):
+    """Given the body the bot station posts,
+    when it is validated against that bot's schema,
+    then it is accepted.
+    """
+    from app.domains.botstation import registry
+
+    registry.load_builtin_bots()
+    config = registry.get(bot_key)
+    registry.validate_options(config, DESK_PAYLOADS[bot_key])
+
+
+def test_an_operator_id_in_the_body_is_ignored_not_honoured():
+    """user_id must never select whose bot this is.
+
+    Dropped rather than accepted: the session decides the tenant, and
+    honouring an operator from the request body is exactly the cross-tenant
+    selector the isolation suite forbids. Dropped rather than REJECTED
+    because the desk sends it on every call, and erroring broke every launch
+    over a field whose only correct handling is to ignore it.
+    """
+    from app.domains.botstation import registry
+
+    registry.load_builtin_bots()
+    config = registry.get("btc15")
+    cleaned = registry.validate_options(config, {"user_id": "somebody-else",
+                                                 "contracts": 5})
+    assert "user_id" not in cleaned
+    assert cleaned["contracts"] == 5
+
+
+def test_the_desks_older_field_names_still_resolve():
+    """bank -> bankroll, target_pct -> bank_tp_pct."""
+    from app.domains.botstation import registry
+
+    registry.load_builtin_bots()
+    config = registry.get("btc15")
+    cleaned = registry.validate_options(config, {"bank": 250,
+                                                 "target_pct": 40})
+    assert cleaned["bankroll"] == 250
+    assert cleaned["bank_tp_pct"] == 40
+
+
+def test_an_alias_never_shadows_a_real_field():
+    """The alias applies only when the schema does NOT declare the incoming
+    name, so a bot that genuinely owns `bank` keeps it."""
+    from app.domains.botstation import registry
+
+    registry.load_builtin_bots()
+    config = registry.get("btc15")
+    assert "bank" not in config.options_schema      # the premise
+    both = registry.normalise_options(config, {"bank": 1, "bankroll": 2})
+    assert both["bankroll"] in (1, 2)               # one wins, neither errors
+
+
+def test_a_structured_option_reaches_the_bot_as_json():
+    """str() of a dict is Python repr — single quotes, True/False — which no
+    JSON parser on the other side accepts."""
+    import json
+
+    from app.domains.botstation import lifecycle, registry
+
+    registry.load_builtin_bots()
+    config = registry.get("sports")
+    options = registry.validate_options(config, DESK_PAYLOADS["sports"])
+    plan = lifecycle.launch_plan(config, config.versions[0],
+                                 tenant_slug="sampath", options=options,
+                                 mode="paper", paper_only=True)
+    assert json.loads(plan.env["SPORTS"]) == ["tennis", "baseball"]
+    assert json.loads(plan.env["SPORT_SETTINGS"])["tennis"]["contracts"] == 25

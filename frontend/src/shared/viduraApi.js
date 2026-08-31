@@ -198,7 +198,6 @@ export const auth = {
 
 export const vidura = {
   health: () => fetch(apiBase() + '/health').then((r) => r.json()),
-  users: () => api.get('/users'),
 
   // ---- bot station -------------------------------------------------------
   // The Kalshi bot families the station launches as subprocesses. Every one
@@ -207,12 +206,31 @@ export const vidura = {
   bots: () => api.get('/bots'),
 
   // btc bots (btc15, btc60) — one umbrella, `bot` picks the family member
+  // One bot, by key. Each per-family helper below asks about a single
+  // hard-coded bot, so btc60, silver15 and oil15 had no status at all —
+  // and they return an OBJECT where the caller iterated a list.
+  botStatus: (key) => api.get(`/bots/${key}/status`),
+  // All bots in one request. Seven per tick was most of the desk's
+  // steady-state load, and seven database sessions with it.
+  botStatuses: () => api.get('/bots/statuses'),
   btcStatus: (_userId) => api.get('/bots/btc15/status'),
+  // The luck bot has no process to start: it is previewed, then confirmed.
+  //
+  // Both calls scan the entire live board -- ~48,000 markets across ~1,000
+  // series -- which runs well past the 30s default and was aborting mid-scan.
+  // Placing scans AGAIN to re-check the legs are still live, and may then sit
+  // through a 60s stake escalation, so it gets the longer of the two.
+  luckPreview: (body) => api.post('/bots/luck/preview', body, { timeout: 300000 }),
+  luckPlace: (body) => api.post('/bots/luck/place', body, { timeout: 420000 }),
+  // Both of the above now return a job id immediately; this is the poll.
+  luckJob: (jobId) => api.get(`/bots/luck/job/${jobId}`),
+  // The one ledger every bot writes to, with P&L already banded by window.
+  tradeEventLog: (params) => api.get('/bots/event-log', { params }),
+  // Launch/stop history from the run table, not from this browser's memory.
+  botRuns: (params) => api.get('/bots/runs', { params }),
   btcStart: (bot, body) => api.post(`/bots/${bot}/start`, body),
   btcStop: (bot, body) => api.post(`/bots/${bot}/stop`, body),
   btcLogs: (params) => api.get('/bots/btc15/logs', { params }),
-  btcTrades: (params) => api.get('/bots/btc15/trades', { params }),
-  btcSync: (userId) => api.post(`/bots/btc15/sync`),
   btcProcesses: (bot) => api.get('/bots/btc15/processes', { params: { bot } }),
   btcKill: (bot) => api.post(`/bots/${bot}/kill`),
 
@@ -226,8 +244,6 @@ export const vidura = {
   sportsLogs: (params) => api.get('/bots/sports/logs', { params }),
   sportsActiveBets: (userId) => api.get('/bots/sports/active-bets', { params: {} }),
   sportsPerformance: (params) => api.get('/bots/sports/performance', { params }),
-  sportsTrades: (params) => api.get('/bots/sports/trades', { params }),
-  sportsSync: (userId) => api.post(`/bots/sports/sync`),
 
   // parlay bot — its own process, bankroll and ledger, so its own spec path
   parleyProcesses: () => api.get('/bots/parley/processes'),
@@ -237,21 +253,18 @@ export const vidura = {
   parleyStop: (body) => api.post('/bots/parley/stop', body),
   parleyLogs: (params) => api.get('/bots/parley/logs', { params }),
   parleyActiveBets: (userId) => api.get('/bots/parley/active-bets', { params: {} }),
-  parleyTrades: (params) => api.get('/bots/parley/trades', { params }),
-  parleySync: (userId) => api.post(`/bots/parley/sync`),
 
   // commodity bots (gold15, silver15, oil15) — same umbrella pattern as BTC
   commodityStatus: (_userId) => api.get('/bots/gold15/status'),
   commodityStart: (bot, body) => api.post(`/bots/${bot}/start`, body),
   commodityStop: (bot, body) => api.post(`/bots/${bot}/stop`, body),
   commodityLogs: (params) => api.get('/bots/gold15/logs', { params }),
-  commodityTrades: (params) => api.get('/bots/gold15/trades', { params }),
-  commoditySync: (userId) => api.post(`/bots/gold15/sync`),
   commodityProcesses: (bot) => api.get('/bots/gold15/processes', { params: { bot } }),
   commodityKill: (bot) => api.post(`/bots/${bot}/kill`),
   // live gold/silver/oil DMI call-put readout (the v2 engine's signal) —
   // read-only market data, no user_id needed
   commodityDmiSignals: (force) => api.get('/bots/commodities/signals', { params: { force: force || undefined } }),
+  cryptoDmiSignals: (force) => api.get('/bots/crypto/signals', { params: { force: force || undefined } }),
 
   kalshiClient: (userId) => api.post('/credentials/tradier_sandbox/verify'),
   // live portfolio value (cash + open positions), server-cached ~30s

@@ -223,7 +223,7 @@
 /* ── the stage: canvas helios core ───────────────────────────────────────── */
 .bs-stage {
   position: relative;
-  min-height: 610px;   /* +13% — the sun, orbits and charm field scale with it */
+  min-height: 470px;   /* the sun, orbits and charm field scale with it */
   overflow: hidden;
 }
 .bs-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -247,6 +247,23 @@
 }
 
 /* ── commodities strip: live gold/silver/oil DMI readout, below the stage ── */
+/* The two DMI strips share a row: commodities left, crypto right — and they
+   stack when the COLUMN is too narrow for both, which is not the same as the
+   viewport being narrow. A viewport media query was the wrong axis: this
+   column is a fraction of the page, so at 1280px it is ~590px wide and a
+   1200px-wide window still could not fit two strips.
+   A DMI row measures ~400px with four timeframes (it was ~345px with three,
+   and the 10m column added the difference). flex-basis has to track that: at
+   360px the strips would pair up in a column too narrow for their own rows,
+   which is the one arrangement worse than stacking. flex-basis does the
+   container query for us: two 400px bases fit only once the column clears
+   ~810px. */
+.bs-strips {
+  display: flex; flex-wrap: wrap; align-items: flex-start;
+  column-gap: 4px;
+}
+.bs-strips > .bs-commodities { flex: 1 1 400px; min-width: 0; }
+
 .bs-commodities { border-top: 1px solid var(--bs-hair); padding: 10px 14px 12px; }
 .bs-commodities-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .bs-commodities-hd .lbl {
@@ -547,6 +564,22 @@
 .bs-modal-hd .close { margin-left: auto; background: none; border: 0; color: var(--bs-ink-3); font-size: 15px; cursor: pointer; min-width: 40px; min-height: 40px; }
 .bs-modal-sub { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: color-mix(in srgb, var(--bot-accent, var(--bs-sun)) 75%, white); margin-bottom: 12px; }
 .bs-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+/* A checkbox set inside the auto-fit form grid. It spans the full row: six
+   sport names wrapped into a 140px column would read as one word per line. */
+.bs-field-wide { grid-column: 1 / -1; }
+.bs-checks { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 2px 0; }
+.bs-check {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--bs-mono);
+  font-size: 12px;
+  color: var(--bs-ink-2, var(--bs-ink));
+  cursor: pointer;
+  /* A comfortable target without making the row tall. */
+  min-height: 28px;
+}
+.bs-check input { accent-color: var(--bot-accent, var(--bs-sun)); cursor: pointer; }
 .bs-field .lbl { display: block; font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--bs-ink-3); margin-bottom: 4px; }
 .bs-input, .bs-select {
   width: 100%;
@@ -687,3 +720,168 @@
     padding: 6px 8px;
   }
 }
+
+/* ---- luck bot ---------------------------------------------------------- */
+/* Its own panel: it has no process to launch, so it does not belong among
+   the bot cards, and its preview needs room the launch dialog does not have. */
+.bs-luck .bs-form { margin-bottom: 10px; }
+.bs-luck-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 8px; }
+.bs-btn {
+  border: 1px solid var(--bs-hair-2);
+  background: transparent;
+  color: var(--bs-ink);
+  font-family: var(--bs-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 9px 14px;
+  cursor: pointer;
+  min-height: 38px;
+}
+.bs-btn:hover:not(:disabled) { border-color: var(--bs-sun); color: var(--bs-sun); }
+.bs-btn:disabled { opacity: 0.45; cursor: default; }
+/* The one control that spends money is the only one wearing the live colour. */
+.bs-btn.live { border-color: #2fd35b; color: #2fd35b; }
+.bs-btn.live:hover:not(:disabled) { background: rgba(47, 211, 91, 0.12); }
+.bs-luck-note { font-size: 11px; color: var(--bs-ink-3); margin: 4px 0 8px; }
+.bs-luck-err { font-size: 11px; color: #ff6b6b; margin: 4px 0 8px; }
+.bs-luck-ok { font-size: 12px; color: #2fd35b; margin: 6px 0; }
+.bs-luck-legs { max-height: 340px; overflow: auto; border: 1px solid var(--bs-hair-2); }
+.bs-luck-legs table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.bs-luck-legs th, .bs-luck-legs td { padding: 5px 8px; text-align: left; white-space: nowrap; }
+.bs-luck-legs th {
+  position: sticky; top: 0; background: #0a0d13;
+  font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--bs-ink-3);
+}
+.bs-luck-legs tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+.bs-luck-legs .num { text-align: right; font-variant-numeric: tabular-nums; }
+.bs-luck-legs .dim { color: var(--bs-ink-3); }
+/* A deselected leg stays visible but reads as excluded -- removing the row
+   would hide what the ticket could have been. */
+.bs-luck-legs tbody tr.off { opacity: 0.4; text-decoration: line-through; }
+.bs-luck-legs input[type="checkbox"] { accent-color: var(--bs-sun); cursor: pointer; }
+.bs-luck-legs td:nth-child(3) { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+.bs-luck-hd { cursor: pointer; display: flex; align-items: baseline; gap: 10px; }
+.bs-luck-toggle { margin-left: auto; color: var(--bs-ink-3); font-size: 16px; line-height: 1; }
+.bs-luck-hd:hover .bs-luck-toggle { color: var(--bs-sun); }
+
+/* ---- luck parley dock -------------------------------------------------- */
+/* Bottom right, above the fold of everything else. Collapsed it is a title
+   bar; open it is a small form. It never pushes the desk around. */
+/* In the right column under the trade log, not floating over it. Docked it
+   covered the newest rows of the very panel an operator reads before deciding
+   to buy a ticket. */
+.bs-luckdock {
+  width: 100%;
+  background: #0a0d13;
+  border: 1px solid var(--bs-hair-2);
+}
+.bs-luckdock .bs-luck-hd {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 10px 12px; cursor: pointer;
+}
+.bs-luckdock .bs-luck-hd h3 {
+  font-family: var(--bs-sans); font-size: 12px; font-weight: 700;
+  letter-spacing: 0.14em;
+}
+.bs-luckdock .bs-luck-hd .sub { font-size: 10px; color: var(--bs-ink-3); }
+.bs-luckdock-body { padding: 0 12px 12px; }
+
+/* Short viewports: the dock scrolls rather than running off the screen. */
+.bs-luckdock.open .bs-luckdock-body { max-height: 52vh; overflow-y: auto; }
+
+/* The leg sheet: its own surface, because choosing the legs IS the decision
+   and it needs the room the dock does not have. */
+.bs-luck-scrim {
+  position: fixed; inset: 0; z-index: 70;
+  background: rgba(0, 0, 0, 0.62);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.bs-luck-sheet {
+  background: #0a0d13;
+  border: 1px solid var(--bs-hair-2);
+  width: min(920px, 100%);
+  max-height: 88vh;
+  overflow: auto;
+  padding: 14px 16px 18px;
+}
+
+/* ---- trade event log --------------------------------------------------- */
+.bs-evlog-windows {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
+  gap: 8px; margin: 10px 0 12px;
+}
+.bs-evlog-win {
+  border: 1px solid var(--bs-hair-2); padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.bs-evlog-win .k {
+  font-size: 9px; letter-spacing: 0.16em; color: var(--bs-ink-3);
+}
+.bs-evlog-win .v { font-size: 15px; font-variant-numeric: tabular-nums; }
+.bs-evlog-win .v.up { color: #2fd35b; }
+.bs-evlog-win .v.down { color: #ff6b6b; }
+.bs-evlog-win .sub { font-size: 9px; color: var(--bs-ink-3); }
+.bs-evlog-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.bs-chip {
+  border: 1px solid var(--bs-hair-2); background: transparent;
+  color: var(--bs-ink-3); font-family: var(--bs-mono); font-size: 10px;
+  letter-spacing: 0.12em; padding: 5px 9px; cursor: pointer; min-height: 30px;
+}
+.bs-chip.on { border-color: var(--bs-sun); color: var(--bs-sun); }
+.bs-evlog-table { max-height: 420px; overflow: auto; border: 1px solid var(--bs-hair-2); }
+.bs-evlog-table table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.bs-evlog-table th, .bs-evlog-table td { padding: 5px 8px; text-align: left; white-space: nowrap; }
+.bs-evlog-table th {
+  position: sticky; top: 0; background: #0a0d13;
+  font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--bs-ink-3);
+}
+.bs-evlog-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.bs-evlog-table .dim { color: var(--bs-ink-3); }
+.bs-evlog-table tbody tr:nth-child(even) { background: rgba(255, 255, 255, 0.02); }
+/* Status reads at a glance: the point of the column is which trades are
+   still live and which are settled, not the word itself. */
+.bs-st { font-size: 9px; letter-spacing: 0.1em; padding: 2px 6px; border: 1px solid; }
+.bs-st.open { color: #fab219; border-color: #fab219; }
+.bs-st.won { color: #2fd35b; border-color: #2fd35b; }
+.bs-st.lost { color: #ff6b6b; border-color: #ff6b6b; }
+.bs-st.closed, .bs-st.settled, .bs-st.cancelled { color: var(--bs-ink-3); border-color: var(--bs-hair-2); }
+/* Written off after three sweeps found nothing. Dimmer than a loss:
+   it is an absence of record, not a result. */
+.bs-st.not_found { color: #8a7fa8; border-color: #8a7fa8; }
+
+/* Three range rows, label left, inputs sharing what is left. Sized for a
+   sidebar column, so the whole form fits without scrolling. */
+.bs-luckform { display: flex; flex-direction: column; gap: 6px; margin-bottom: 8px; }
+.bs-luckrow { display: flex; align-items: center; gap: 6px; }
+.bs-luckrow .lbl {
+  flex: 0 0 62px;
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--bs-ink-3);
+}
+.bs-luckrow .bs-input {
+  flex: 1 1 0; min-width: 0;
+  padding: 5px 6px; font-size: 12px; text-align: right;
+}
+.bs-luckrow i {
+  font-style: normal; font-size: 9px; color: var(--bs-ink-3);
+  flex: 0 0 auto;
+}
+.bs-luckdock .bs-luck-actions { gap: 6px; margin: 2px 0 6px; }
+.bs-luckdock .bs-btn { padding: 7px 10px; font-size: 10px; min-height: 32px; }
+
+/* Bots Log rows: who, when, how it ended, what it made. */
+.bs-runrow {
+  display: flex; gap: 8px; align-items: baseline; padding: 4px 0;
+  font-family: var(--bs-mono); font-size: 11px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.bs-runrow .who { font-weight: 700; min-width: 56px; }
+.bs-runrow .ts { color: rgba(255, 255, 255, 0.4); min-width: 84px; }
+.bs-runrow .dim { color: var(--bs-ink-3); }
+.bs-runrow b { margin-left: auto; font-variant-numeric: tabular-nums; }
+.bs-runrow b.win { color: #2fd35b; }
+.bs-runrow b.loss { color: #ff6b6b; }

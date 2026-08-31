@@ -31,6 +31,15 @@ const CFG_KEY = 'vidura.botstation.cfg';   // per-bot launch forms (mode exclude
 
 // desk-wide launch defaults; anything the user typed (and cleared) wins
 const NTT_DEFAULT = '17:00-19:30, 05:00-08:00';
+
+// The sports the parlay bot draws legs from. These are Kalshi's OWN tag names
+// on its Sports series, lowercased, so they match what the scan filters on --
+// a pretty label here would silently match nothing. Deselecting all of them
+// means every live sport rather than none, which is what the engine does with
+// an empty list: an operator should not have to name a sport for the bot to
+// notice a match happening in it.
+const PARLEY_SPORTS = ['tennis', 'baseball', 'soccer', 'football',
+  'basketball', 'esports'];
 const NTT_RE = /^$|^\s*\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}(\s*,\s*\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2})*\s*$/;
 
 const BOT_DEFAULTS = {
@@ -46,7 +55,7 @@ const BOT_DEFAULTS = {
   // the parlay bot's own knobs, in the cents and counts it actually reads —
   // its defaults, so an untouched form launches the documented engine
   parley: {
-    bank: '100', contracts: '10', bank_sl_pct: '50',
+    bank: '100', stake_usd: '12', slippage_c: '5', max_per_event: '2', escalation_pct: '30', fill_wait_s: '60', daily_enabled: false, daily_at: '17:50', daily_stake_usd: '5', daily_min_legs: '5', daily_max_legs: '24', daily_min_c: '60', bank_sl_pct: '50',
     min_prob_c: '80', min_set: '2', lead_scope: 'current',
     min_legs: '2', max_legs: '0', max_open: '1', cooldown_min: '15',
     slippage_c: '3', max_price_c: '95', tp_ceiling_c: '97', stop_loss_c: '20',
@@ -128,6 +137,9 @@ function utcTs(iso) {
 // particles, prominence arcs, granulation, rotating sunspots, limb
 // darkening — and one orbit per bot with trail, occlusion dimming behind
 // the disc, a status line drawn to the core, and canvas hit-testing.
+// The disc, relative to the layout base the orbits use.
+const SUN_SCALE = 1.15;
+
 function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
   const hostRef = useRef(null);
   const botsRef = useRef(bots);
@@ -194,7 +206,8 @@ function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
       };
     });
     // per-bot orbit state: angle + trail + user-adjustable radius offset
-    // super-slow drift: a full lap takes ~4-6 minutes (running bots ~1.6x)
+    // super-slow drift: a full lap takes ~4-6 minutes, the SAME lap for
+    // every bot, so the gaps seeded here are the gaps for ever
     const orbits = BOTS.map((b, i) => ({
       key: b.key, accent: b.accent, label: b.label,
       ang: (i * Math.PI * 2) / BOTS.length + 0.6,
@@ -244,7 +257,10 @@ function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
         return;
       }
       hover = hit(mx, my);
-      sunHover = Math.hypot(mx - W / 2, my - H * 0.5) < Math.min(W, H) * 0.145 * 1.15;
+      // Tracks the drawn disc, with the same forgiving margin as before,
+      // so the pointer target does not lag the sun it belongs to.
+      sunHover = Math.hypot(mx - W / 2, my - H * 0.5)
+        < Math.min(W, H) * 0.145 * SUN_SCALE * 1.15;
       canvas.style.cursor = hover ? 'grab' : sunHover ? 'pointer' : 'default';
     };
     const onLeave = () => { hover = null; sunHover = false; };
@@ -309,7 +325,12 @@ function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
       // swells ~9% and the operator reticle fades in with it
       pop += ((sunHover ? 1 : 0) - pop) * Math.min(1, 0.12 * dt);
       R0 = Math.min(W, H) * 0.145;   // layout base: orbits stay put
-      const R = R0 * (1 + pop * 0.09);     // popped: every sun layer swells
+      // The disc is scaled off R0 rather than R0 itself being raised, because
+      // R0 also sets the orbit radii -- growing it would push every bot
+      // outward by the same 15% and leave the composition unchanged. Only the
+      // sun moves. The innermost orbit sits at 1.5 R0, so at 1.15 there is
+      // still clear space between the limb and the first ring.
+      const R = R0 * SUN_SCALE * (1 + pop * 0.09);   // popped: layers swell
       ctx.clearRect(0, 0, W, H);
 
       // palette: NEON GREEN when the past 3H P&L is positive, solar otherwise
@@ -460,7 +481,18 @@ function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
         ctx.stroke();
         ctx.setLineDash([]);
 
-        if (o.key !== dragKey) o.ang += o.speed * dt * (running ? 1.6 : 1);
+        // ONE angular speed for every bot, running or idle.
+        //
+        // Running bots used to advance 1.6x faster, so the nodes drifted
+        // relative to each other and periodically bunched into the same arc
+        // -- BTC-15 sitting on top of BTC-60, labels unreadable. With a
+        // shared angular speed the gaps set at start-up are preserved for
+        // ever: they are seeded 360/n apart and stay 360/n apart.
+        //
+        // Angular, not linear. Matching LINEAR speed would mean the inner
+        // orbits sweep more degrees per second than the outer ones, which is
+        // physically truer and brings the overlap straight back.
+        if (o.key !== dragKey) o.ang += o.speed * dt;
         const nx = cx + Math.cos(o.ang) * orbR;
         const ny = cy + Math.sin(o.ang) * orbRy;
         nodePos[o.key] = { x: nx, y: ny };
@@ -624,20 +656,26 @@ function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
   return <div ref={hostRef} className="bs-stage" data-testid="bs-stage" />;
 }
 
-// ── commodities strip: live gold/silver/oil DMI call-put readout, the same
-// 1m/2m DI-dominance signal the v2 engine trades on. Sits below the Helios
-// canvas — read-only market data, polls independently of bot status.
-function CommoditiesStrip() {
+// ── DMI strip: one row per instrument, 1m/2m/5m/10m DI-dominance readout ──
+// Shared by the commodities and crypto panels. They ask the same question of
+// different feeds and render the identical row, so this is written once —
+// two copies of a signal readout drift the first time either is touched, and
+// nothing on screen would show the disagreement.
+//
+// `load` is what differs, plus the title and how a row is labelled. Everything
+// about how a reading is DISPLAYED is shared, which is the part that has to
+// stay consistent across the desk.
+function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2 }) {
   const [snap, setSnap] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async (force = false) => {
     try {
-      setSnap(await vidura.commodityDmiSignals(force));
+      setSnap(await loader(force));
       setErr(null);
     } catch (e) { setErr(e.message || 'failed to load'); }
-  }, []);
+  }, [loader]);
 
   useEffect(() => { load(); }, [load]);
   useEffect(() => {
@@ -653,18 +691,53 @@ function CommoditiesStrip() {
   };
 
   const rows = snap?.rows || [];
+  const ago = (secs) => (secs < 60 ? `${secs}s`
+    : secs < 3600 ? `${Math.floor(secs / 60)}m`
+    : `${Math.floor(secs / 3600)}h`);
   const sideColor = (side) => (side === 'call' ? 'var(--bs-good, #2fd35b)'
     : side === 'put' ? 'var(--bs-crit, #ff4d4d)' : 'rgba(255,255,255,0.4)');
   const sideLabel = (side) => (side === 'call' ? 'CALL' : side === 'put' ? 'PUT' : '—');
+  // Precision follows magnitude. Two decimals is right for gold at 4504 and
+  // useless for DOGE at 0.085 or XRP at 1.3918 — both move in fractions of a
+  // cent, and rounding them to 0.09 and 1.39 shows a price that never
+  // changes. The break is at 10, not 100: HYPE at 82 and SOL at 104 are the
+  // same kind of number, and showing 82.0800 beside 103.98 looked like two
+  // different rules rather than one.
+  const price = (v) => {
+    if (v == null) return '—';
+    const m = Math.abs(v);
+    return v.toFixed(m >= 10 ? decimals : m >= 1 ? 4 : 5);
+  };
+
+  const tf = (r, key, label) => (
+    <span className="tf" key={key}
+      title={`${label}: ADX ${r[`${key}_adx`]?.toFixed(1) ?? '—'} · +DI ${r[`${key}_pdi`]?.toFixed(1) ?? '—'} · -DI ${r[`${key}_mdi`]?.toFixed(1) ?? '—'}`}>
+      <b style={{ color: sideColor(r[`${key}_side`]) }}>{label}</b>{' '}
+      {r[`${key}_adx`] != null ? Math.round(r[`${key}_adx`]) : '—'}
+      {r[`${key}_slope`] != null && (
+        <span className="slope">{r[`${key}_slope`] > 0 ? '↑' : '↓'}</span>
+      )}
+    </span>
+  );
 
   return (
     <div className="bs-commodities">
       <div className="bs-commodities-hd">
-        <span className="lbl">🛢 COMMODITIES</span>
-        <span className="note">1m/2m DMI{snap?.meta?.source ? ` · ${snap.meta.source}` : ''}{err && ' · ⚠'}</span>
+        <span className="lbl">{icon} {title}</span>
+        <span className="note">1m/2m/5m/10m DMI{snap?.meta?.source ? ` · ${snap.meta.source}` : ''}{err && ' · ⚠'}</span>
         {snap?.age_s != null && (
           <span className="note" title={`took ${snap.meta?.took_s ?? '—'}s · source ${snap.meta?.source ?? '—'}`}>
-            {snap.age_s < 60 ? `${snap.age_s}s` : `${Math.floor(snap.age_s / 60)}m`}
+            {ago(snap.age_s)}
+          </span>
+        )}
+        {/* How old the SPOT prices are, which is a different number from how
+            old this response is: the board recomputes every minute from bars
+            that may have been refreshed an hour ago. Only the on-demand
+            source has one, so it appears only where it means something. */}
+        {snap?.meta?.spot_polls_on_refresh_only && (
+          <span className="note"
+            title="API Ninjas spot prices are read only when you press refresh, never on a timer — the vendor is metered monthly">
+            spot {snap.meta.spot_age_s == null ? 'not read' : ago(snap.meta.spot_age_s)}
           </span>
         )}
         <button type="button" className="bs-refresh" onClick={doRefresh} disabled={busy}
@@ -673,30 +746,34 @@ function CommoditiesStrip() {
       {err && <div className="bs-commodities-err">⚠ {err}</div>}
       <div className="bs-commodities-rows">
         {rows.map((r) => {
-          const bot = BOT_BY_KEY[r.bot];
+          const { label, accent } = labelFor(r);
           if (r.error) {
             return (
-              <div key={r.bot} className="bs-commrow err">
-                <span className="tkr" style={{ color: bot?.accent }}>{bot?.label || r.bot}</span>
+              <div key={r.bot} className="bs-commrow err"
+                title={r.error /* why, not just a dash */}>
+                <span className="tkr" style={{ color: accent }}>{label}</span>
                 <span className="note">unavailable</span>
               </div>
             );
           }
           return (
             <div key={r.bot} className="bs-commrow">
-              <span className="tkr" style={{ color: bot?.accent }}>{bot?.label || r.bot}</span>
-              <span className="last">{r.last != null ? r.last.toFixed(2) : '—'}</span>
-              <span className="tf" title={`1m: ADX ${r.m1_adx?.toFixed(1) ?? '—'} · +DI ${r.m1_pdi?.toFixed(1) ?? '—'} · -DI ${r.m1_mdi?.toFixed(1) ?? '—'}`}>
-                <b style={{ color: sideColor(r.m1_side) }}>1m</b> {r.m1_adx != null ? Math.round(r.m1_adx) : '—'}
-                {r.m1_slope != null && <span className="slope">{r.m1_slope > 0 ? '↑' : '↓'}</span>}
-              </span>
-              <span className="tf" title={`2m: ADX ${r.m2_adx?.toFixed(1) ?? '—'} · +DI ${r.m2_pdi?.toFixed(1) ?? '—'} · -DI ${r.m2_mdi?.toFixed(1) ?? '—'}`}>
-                <b style={{ color: sideColor(r.m2_side) }}>2m</b> {r.m2_adx != null ? Math.round(r.m2_adx) : '—'}
-                {r.m2_slope != null && <span className="slope">{r.m2_slope > 0 ? '↑' : '↓'}</span>}
-              </span>
+              <span className="tkr" style={{ color: accent }}>{label}</span>
+              <span className="last">{price(r.last)}</span>
+              {tf(r, 'm1', '1m')}
+              {tf(r, 'm2', '2m')}
+              {tf(r, 'm5', '5m')}
+              {tf(r, 'm10', '10m')}
+              {/* The signal is 1m+2m agreement. 5m is shown beside it and
+                  marked when it agrees, rather than folded into the rule —
+                  widening what fires a trade is a trading change, not a
+                  display one. */}
               <span className="sig" style={{ color: sideColor(r.signal) }}
-                title={r.signal ? 'both 1m and 2m agree' : '1m and 2m disagree — no clear signal'}>
+                title={r.signal
+                  ? `1m and 2m agree${r.m5_confirms ? '; 5m confirms' : '; 5m does not confirm'}`
+                  : '1m and 2m disagree — no clear signal'}>
                 {r.signal ? sideLabel(r.signal) : 'mixed'}
+                {r.signal && r.m5_confirms && <span className="slope" title="5m confirms">✓</span>}
               </span>
             </div>
           );
@@ -704,6 +781,280 @@ function CommoditiesStrip() {
         {rows.length === 0 && !err && <div className="bs-commodities-err" style={{ color: 'rgba(255,255,255,0.4)' }}>loading…</div>}
       </div>
     </div>
+  );
+}
+
+// Gold / silver / oil, from Tradier in session and Coinbase-free spot outside
+// it. Labelled from the bot registry so a row matches its core node.
+// The luck bot. Not a launchable bot -- there is no process -- so it gets its
+// own panel rather than a card with a Launch button that would mean nothing.
+//
+// Two steps on purpose. A long-shot ticket is twenty-odd legs chosen from
+// forty thousand markets, and "place it" is not a thing anyone should confirm
+// without seeing what "it" is. The preview spends nothing and creates nothing
+// on the exchange; only the second button reaches the account.
+// Luck parley. Not a launchable bot -- there is no process -- so it does not
+// belong among the bot cards, and it is docked bottom-right out of the way:
+// buying a lottery ticket is a deliberate act, not something to scan past.
+//
+// Three steps, each in its own place. The dock holds the numbers. Building
+// scans the board and opens a SEPARATE sheet listing every leg, because
+// choosing twenty legs out of forty thousand markets is the whole decision
+// and it deserves the screen. Placing then happens without a second prompt --
+// the sheet IS the confirmation, and a modal on top of a modal only teaches
+// people to click through both.
+function LuckPanel() {
+  const [open, setOpen] = useState(false);
+  const [sheet, setSheet] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [elapsed, setElapsed] = useState(0);
+  const [form, setForm] = useState({
+    min_legs: '5', max_legs: '24', min_leg_c: '60',
+    min_volume_usd: '5000', min_usd: '5', max_usd: '7.5',
+  });
+  const [preview, setPreview] = useState(null);
+  const [keep, setKeep] = useState(() => new Set());
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
+
+  const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const n = (v, d) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
+
+  // The scan runs well past the tunnel's ~100s ceiling, so the server hands
+  // back a job id and we poll rather than holding a request open.
+  const awaitJob = async (jobId) => {
+    for (let i = 0; i < 300; i += 1) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const st = await vidura.luckJob(jobId);
+      setElapsed(st.elapsed_s || 0);
+      if (st.status === 'done') return st.result;
+      if (st.status === 'failed') throw new Error(st.error || 'the job failed');
+    }
+    throw new Error('gave up waiting for the scan');
+  };
+
+  const build = async () => {
+    setBusy('preview'); setError(''); setResult(null); setPreview(null);
+    setElapsed(0);
+    try {
+      const job = await vidura.luckPreview({
+        min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
+        min_leg_c: n(form.min_leg_c, 60),
+        min_volume_usd: n(form.min_volume_usd, 0),
+      });
+      const out = await awaitJob(job.job_id);
+      if (out && out.ok) {
+        setPreview(out);
+        setKeep(new Set(out.legs.map((l) => l.ticker)));
+        setSheet(true);
+      } else setError((out && out.detail) || 'no ticket could be built');
+    } catch (e) {
+      setError(String((e && e.message) || e));
+    } finally { setBusy(''); }
+  };
+
+  const toggle = (ticker) => setKeep((prev) => {
+    const next = new Set(prev);
+    if (next.has(ticker)) next.delete(ticker); else next.add(ticker);
+    return next;
+  });
+  const allOn = () => setKeep(new Set((preview ? preview.legs : []).map((l) => l.ticker)));
+  const allOff = () => setKeep(new Set());
+
+  // The odds of what is SELECTED, not of what was proposed. Deselect a leg
+  // and this moves -- showing the preview's original number beside an edited
+  // ticket would be a lie.
+  const chosen = preview ? preview.legs.filter((l) => keep.has(l.ticker)) : [];
+  const chosenOdds = chosen.reduce((acc, l) => acc * ((l.price_c || 0) / 100), 1);
+  const enough = chosen.length >= n(form.min_legs, 5);
+
+  const place = async () => {
+    if (!preview || !enough) return;
+    setBusy('place'); setError(''); setElapsed(0);
+    try {
+      const job = await vidura.luckPlace({
+        token: preview.token,
+        tickers: chosen.map((l) => l.ticker),
+        min_usd: n(form.min_usd, 5), max_usd: n(form.max_usd, 7.5),
+        min_legs: n(form.min_legs, 5),
+      });
+      const out = await awaitJob(job.job_id);
+      setResult(out);
+      if (out && out.placed) { setPreview(null); setSheet(false); }
+      else setError((out && out.detail) || 'not placed');
+    } catch (e) {
+      setError(String((e && e.message) || e));
+    } finally { setBusy(''); }
+  };
+
+  return (
+    <>
+      <section className={`bs-luckdock ${open ? 'open' : ''}`}>
+        <header className="bs-luck-hd" onClick={() => setOpen((v) => !v)}>
+          <h3>LUCK PARLEY</h3>
+          <span className="bs-luck-toggle">{open ? '\u2212' : '+'}</span>
+        </header>
+
+        {!open ? null : (
+          <div className="bs-luckdock-body">
+            {/* Paired as ranges rather than six separate boxes: they ARE
+                three ranges, and in a sidebar column six labelled fields wrap
+                into a wall the panel cannot show without scrolling. */}
+            <div className="bs-luckform">
+              <label className="bs-luckrow">
+                <span className="lbl">Legs</span>
+                <input className="bs-input" type="number" min="2" max="24"
+                  value={form.min_legs} onChange={set('min_legs')} />
+                <i>–</i>
+                <input className="bs-input" type="number" min="2" max="24"
+                  value={form.max_legs} onChange={set('max_legs')} />
+              </label>
+              <label className="bs-luckrow">
+                <span className="lbl">Spend $</span>
+                <input className="bs-input" type="number" min="1" step="0.5"
+                  value={form.min_usd} onChange={set('min_usd')} />
+                <i>–</i>
+                <input className="bs-input" type="number" min="1" step="0.5"
+                  value={form.max_usd} onChange={set('max_usd')} />
+              </label>
+              <label className="bs-luckrow">
+                <span className="lbl">Leg min</span>
+                <input className="bs-input" type="number" min="5" max="98"
+                  value={form.min_leg_c} onChange={set('min_leg_c')}
+                  title="minimum price per leg, in cents" />
+                <i>c</i>
+                <input className="bs-input" type="number" min="0" step="500"
+                  value={form.min_volume_usd} onChange={set('min_volume_usd')}
+                  title="minimum dollar volume per leg" />
+                <i>$vol</i>
+              </label>
+            </div>
+
+            <div className="bs-luck-actions">
+              <button type="button" className="bs-btn" onClick={build}
+                disabled={!!busy}>
+                {busy === 'preview' ? 'SCANNING\u2026' : 'BUILD TICKET'}
+              </button>
+              {preview && !sheet ? (
+                <button type="button" className="bs-btn"
+                  onClick={() => setSheet(true)}>REOPEN LEGS</button>
+              ) : null}
+            </div>
+
+            {busy === 'preview' ? (
+              <p className="bs-luck-note">
+                Reading every live market and its sub-events
+                {elapsed ? ` \u00b7 ${Math.round(elapsed)}s` : ''}\u2026
+                this takes a couple of minutes.
+              </p>
+            ) : null}
+            {error && !sheet ? <p className="bs-luck-err">{error}</p> : null}
+            {result && result.placed ? (
+              <p className="bs-luck-ok">
+                PLACED \u2014 {result.legs_used} legs, {result.contracts} contracts
+                {result.filled_c != null ? ` at ${result.filled_c}c` : ''}
+                {result.cost_usd != null ? ` \u00b7 $${result.cost_usd}` : ''}
+                {result.contracts ? ` \u00b7 max payout $${Math.round(result.contracts).toLocaleString()}` : ''}
+              </p>
+            ) : null}
+          </div>
+        )}
+      </section>
+
+      {sheet && preview ? (
+        <div className="bs-luck-scrim" onClick={() => { if (!busy) setSheet(false); }}>
+          <div className="bs-luck-sheet" onClick={(e) => e.stopPropagation()}>
+            <header className="bs-modal-hd">
+              <h2>SELECT LEGS</h2>
+              <button type="button" className="close"
+                onClick={() => { if (!busy) setSheet(false); }}>\u00d7</button>
+            </header>
+            <p className="bs-luck-note">
+              {chosen.length} of {preview.legs.length} kept
+              {' \u00b7 '}chance {(chosenOdds * 100).toFixed(3)}%
+              {' \u00b7 '}{preview.scanned.toLocaleString()} markets scanned
+              {' \u00b7 '}buys at market, spending
+              ${n(form.min_usd, 5).toFixed(2)}\u2013${n(form.max_usd, 7.5).toFixed(2)}
+            </p>
+
+            <div className="bs-luck-actions">
+              <button type="button" className="bs-btn" onClick={allOn} disabled={!!busy}>ALL</button>
+              <button type="button" className="bs-btn" onClick={allOff} disabled={!!busy}>NONE</button>
+              <button type="button" className="bs-btn live" onClick={place}
+                disabled={!!busy || !enough}>
+                {busy === 'place'
+                  ? `PLACING\u2026${elapsed ? ` ${Math.round(elapsed)}s` : ''}`
+                  : `PLACE ORDER \u2014 ${chosen.length} LEGS`}
+              </button>
+            </div>
+            {!enough ? (
+              <p className="bs-luck-err">
+                keep at least {n(form.min_legs, 5)} legs
+              </p>
+            ) : null}
+            {error ? <p className="bs-luck-err">{error}</p> : null}
+
+            <div className="bs-luck-legs">
+              <table>
+                <thead>
+                  <tr><th>Keep</th><th>#</th><th>Market</th><th>Outcome</th>
+                    <th>Sport</th>
+                    <th className="num">Price</th><th className="num">Volume</th></tr>
+                </thead>
+                <tbody>
+                  {preview.legs.map((l, i) => (
+                    <tr key={l.ticker} className={keep.has(l.ticker) ? '' : 'off'}>
+                      <td>
+                        <input type="checkbox" checked={keep.has(l.ticker)}
+                          disabled={!!busy}
+                          onChange={() => toggle(l.ticker)} />
+                      </td>
+                      <td className="num">{i + 1}</td>
+                      <td title={l.event}>{l.market}</td>
+                      <td>{l.outcome}</td>
+                      <td className="dim">{l.sport}</td>
+                      <td className="num">{l.price_c}c</td>
+                      <td className="num">${Math.round(l.volume_usd).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+
+function CommoditiesStrip() {
+  return (
+    <DmiStrip
+      title="COMMODITIES" icon="🛢"
+      load={(force) => vidura.commodityDmiSignals(force)}
+      labelFor={(r) => ({ label: BOT_BY_KEY[r.bot]?.label || r.label || r.bot,
+                          accent: BOT_BY_KEY[r.bot]?.accent })}
+    />
+  );
+}
+
+// BTC / ETH / SOL / DOGE / XRP, from Coinbase. No credential and no session
+// window — crypto never closes, so unlike commodities there is nothing to
+// switch sources around.
+const CRYPTO_ACCENT = {
+  btc: '#f7931a', eth: '#8a92b2', sol: '#14f195',
+  doge: '#c2a633', xrp: '#25a768',
+};
+
+function CryptoStrip() {
+  return (
+    <DmiStrip
+      title="CRYPTO" icon="₿"
+      load={(force) => vidura.cryptoDmiSignals(force)}
+      labelFor={(r) => ({ label: r.label || r.bot.toUpperCase(),
+                          accent: CRYPTO_ACCENT[r.bot] })}
+    />
   );
 }
 
@@ -913,9 +1264,10 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
   const setSport = (sport, k) => (e) => onCfg(botKey, {
     ...f, sports: { ...(f.sports || {}), [sport]: { ...((f.sports || {})[sport] || {}), [k]: e.target.value } },
   });
-  const sportOn = (sport) => (f.sportsSel ?? ['tennis', 'baseball']).includes(sport);
+  const defaultSel = isParley ? PARLEY_SPORTS : ['tennis', 'baseball'];
+  const sportOn = (sport) => (f.sportsSel ?? defaultSel).includes(sport);
   const toggleSport = (sport) => () => {
-    const sel = f.sportsSel ?? ['tennis', 'baseball'];
+    const sel = f.sportsSel ?? defaultSel;
     onCfg(botKey, { ...f, sportsSel: sel.includes(sport) ? sel.filter((s) => s !== sport) : [...sel, sport] });
   };
   const v5NoSl = (botKey === 'btc15' && (version || defVersion) === 'v5') || isCommodity;
@@ -932,26 +1284,55 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
   }, [onClose, busy]);
 
   const buildBody = () => {
-    const body = { user_id: user.user_id, mode, version: (version || undefined) };
+    // No user_id. The session decides whose bot this is; sending an operator
+    // in the body would be a cross-tenant selector, and the server strips it.
+    const body = { mode, version: (version || undefined) };
     if (isBtc || isCommodity) {
       const contracts = parseInt(f.contracts, 10);
       if (contracts >= 1) body.contracts = contracts;
-      if (num(f.bank) > 0) body.bank = num(f.bank);
+      if (num(f.bank) > 0) body.bankroll = num(f.bank);
       if (num(f.tp_pct) > 0) body.tp_pct = num(f.tp_pct);
       if (!v5NoSl && num(f.sl_pct) > 0 && num(f.sl_pct) < 100) body.sl_pct = num(f.sl_pct);
-      if (num(f.target_pct) > 0) body.target_pct = num(f.target_pct);
+      if (num(f.target_pct) > 0) body.bank_tp_pct = num(f.target_pct);
       if (num(f.bank_sl_pct) > 0 && num(f.bank_sl_pct) < 100) body.bank_sl_pct = num(f.bank_sl_pct);
       // empty string is deliberate: it CLEARS the engine's own quiet hours
       if (typeof f.no_trade_times === 'string' && NTT_RE.test(f.no_trade_times.trim())) {
         body.no_trade_times = f.no_trade_times.trim();
       }
     } else if (isParley) {
-      // Only tennis has a leg qualifier, so the sports list is fixed rather
-      // than offered — the backend refuses anything else anyway.
-      body.sports = ['tennis'];
-      const contracts = parseInt(f.contracts, 10);
-      if (contracts >= 1) body.contracts = contracts;
-      if (num(f.bank) > 0) body.bank = num(f.bank);
+      // Every selected sport, not just tennis. Tennis is the only one with a
+      // leg qualifier (a set lead); the others are traded on price alone.
+      // Posting ['tennis'] never actually narrowed anything -- the bot read
+      // the list from argv, not from the form -- so the field described a
+      // filter that did not exist. The reader is fixed in the v2 script;
+      // this now means what it says.
+      const chosenP = (f.sportsSel ?? PARLEY_SPORTS);
+      if (chosenP.length) body.sports = chosenP;
+      // A dollar budget per parlay, not a contract count: a combo's price
+      // moves with its legs, so a fixed count spends a different amount every
+      // pass. The engine buys as many as the budget covers, and none if it
+      // cannot cover one.
+      if (num(f.stake_usd) > 0) body.stake_usd = num(f.stake_usd);
+      { const n = parseInt(f.max_per_event, 10);
+        if (Number.isFinite(n) && n >= 1) body.max_per_event = n; }
+      if (num(f.escalation_pct) >= 0 && f.escalation_pct !== '' && f.escalation_pct !== undefined) {
+        body.escalation_pct = num(f.escalation_pct);
+      }
+      { const n = parseInt(f.fill_wait_s, 10);
+        if (Number.isFinite(n) && n >= 5) body.fill_wait_s = n; }
+      // The daily long-shot ticket. Sent only when it is switched on, so an
+      // untouched form never quietly enables a second engine.
+      body.daily_enabled = f.daily_enabled === true || f.daily_enabled === 'true';
+      if (body.daily_enabled) {
+        if (/^\d{1,2}:\d{2}$/.test((f.daily_at || '').trim())) body.daily_at = f.daily_at.trim();
+        if (num(f.daily_stake_usd) > 0) body.daily_stake_usd = num(f.daily_stake_usd);
+        { const n = parseInt(f.daily_min_legs, 10); if (Number.isFinite(n) && n >= 2) body.daily_min_legs = n; }
+        { const n = parseInt(f.daily_max_legs, 10); if (Number.isFinite(n) && n >= 2) body.daily_max_legs = n; }
+        { const n = parseInt(f.daily_min_c, 10); if (Number.isFinite(n) && n >= 5) body.daily_min_c = n; }
+      }
+      { const n = parseInt(f.slippage_c, 10);
+        if (Number.isFinite(n) && n >= 0) body.slippage_c = n; }
+      if (num(f.bank) > 0) body.bankroll = num(f.bank);
       if (num(f.bank_sl_pct) > 0 && num(f.bank_sl_pct) < 100) body.bank_sl_pct = num(f.bank_sl_pct);
       // cents and counts go straight through; blanks leave the engine default
       const p = {};
@@ -978,7 +1359,7 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
         if (Object.keys(s).length) settings[sport] = s;
       }
       if (Object.keys(settings).length) body.sport_settings = settings;
-      if (num(f.target_pct) > 0) body.target_pct = num(f.target_pct);
+      if (num(f.target_pct) > 0) body.bank_tp_pct = num(f.target_pct);
       if (num(f.bank_sl_pct) > 0 && num(f.bank_sl_pct) < 100) body.bank_sl_pct = num(f.bank_sl_pct);
       // empty string deliberately CLEARS the engine's 16:00-20:00 default
       if (typeof f.no_trade_times === 'string' && NTT_RE.test(f.no_trade_times.trim())) {
@@ -1025,7 +1406,14 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
         });
         if (kill) {
           try {
-            await startWith({ ...body, kill_existing: true });
+            // Stop it, then start. kill_existing was never a field the API
+            // accepted, so this retry was refused as an unknown option and
+            // "Kill it and start fresh" could not work at all.
+            const stopIt = isCommodity ? vidura.commodityStop(botKey, {})
+              : isBtc ? vidura.btcStop(botKey, {})
+                : isParley ? vidura.parleyStop({}) : vidura.sportsStop({});
+            await stopIt.catch(() => { /* already gone is the outcome we want */ });
+            await call();
             onChanged();
             onClose();
           } catch (e2) { setErr(errText(e2)); }
@@ -1157,10 +1545,87 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
             </>
           ) : isParley ? (
             <>
+              <div className="bs-field bs-field-wide">
+                <span className="lbl">Sports</span>
+                <div className="bs-checks">
+                  {PARLEY_SPORTS.map((sport) => (
+                    <label key={sport} className="bs-check">
+                      <input type="checkbox" checked={sportOn(sport)}
+                        onChange={toggleSport(sport)} />
+                      {sport}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="bs-field bs-field-wide">
+                <label className="bs-check">
+                  <input type="checkbox"
+                    checked={f.daily_enabled === true || f.daily_enabled === 'true'}
+                    onChange={(e) => onCfg(botKey, { ...f, daily_enabled: e.target.checked })} />
+                  Daily long-shot ticket — one a day, many legs, small stake
+                </label>
+              </div>
               <div className="bs-field">
-                <span className="lbl">Contracts / parlay</span>
-                <input className="bs-input" type="number" min="1" max="1000" value={f.contracts ?? ''}
-                  placeholder="10" onChange={set('contracts')} />
+                <span className="lbl">Daily at (HH:MM)</span>
+                <input className="bs-input" value={f.daily_at ?? ''} placeholder="17:50"
+                  disabled={!(f.daily_enabled === true || f.daily_enabled === 'true')}
+                  onChange={set('daily_at')} />
+              </div>
+              <div className="bs-field">
+                <span className="lbl">Daily $</span>
+                <input className="bs-input" type="number" min="1" step="0.5"
+                  value={f.daily_stake_usd ?? ''} placeholder="5"
+                  disabled={!(f.daily_enabled === true || f.daily_enabled === 'true')}
+                  onChange={set('daily_stake_usd')} />
+              </div>
+              <div className="bs-field">
+                <span className="lbl">Daily legs (min–max)</span>
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <input className="bs-input" type="number" min="2" max="24"
+                    value={f.daily_min_legs ?? ''} placeholder="5"
+                    disabled={!(f.daily_enabled === true || f.daily_enabled === 'true')}
+                    onChange={set('daily_min_legs')} />
+                  <input className="bs-input" type="number" min="2" max="24"
+                    value={f.daily_max_legs ?? ''} placeholder="24"
+                    disabled={!(f.daily_enabled === true || f.daily_enabled === 'true')}
+                    onChange={set('daily_max_legs')} />
+                </div>
+              </div>
+              <div className="bs-field">
+                <span className="lbl">Daily min leg (c)</span>
+                <input className="bs-input" type="number" min="5" max="98"
+                  value={f.daily_min_c ?? ''} placeholder="60"
+                  disabled={!(f.daily_enabled === true || f.daily_enabled === 'true')}
+                  onChange={set('daily_min_c')} />
+              </div>
+              <div className="bs-field">
+                <span className="lbl">Raise stake if unfilled (%)</span>
+                <input className="bs-input" type="number" min="0" max="100"
+                  value={f.escalation_pct ?? ''} placeholder="30" onChange={set('escalation_pct')}
+                  title="if nobody fills the parlay, try once more at up to this much more - $12 at 30% becomes $15.60. 0 turns it off" />
+              </div>
+              <div className="bs-field">
+                <span className="lbl">Wait before raising (s)</span>
+                <input className="bs-input" type="number" min="5" max="600"
+                  value={f.fill_wait_s ?? ''} placeholder="60" onChange={set('fill_wait_s')} />
+              </div>
+              <div className="bs-field">
+                <span className="lbl">Max parlays / match</span>
+                <input className="bs-input" type="number" min="1" max="5"
+                  value={f.max_per_event ?? ''} placeholder="2" onChange={set('max_per_event')}
+                  title="how many OPEN parlays may ride on the same match - they all win or lose together, so this is the dial on correlated risk" />
+              </div>
+              <div className="bs-field">
+                <span className="lbl">Pay over fair (c)</span>
+                <input className="bs-input" type="number" min="0" max="25"
+                  value={f.slippage_c ?? ''} placeholder="5" onChange={set('slippage_c')}
+                  title="how many cents above the parlay's theoretical price to pay - makers quote a combo above the product of its legs, so a ceiling at fair value never trades" />
+              </div>
+              <div className="bs-field">
+                <span className="lbl">$ per parlay</span>
+                <input className="bs-input" type="number" min="1" max="5000" step="0.5"
+                  value={f.stake_usd ?? ''} placeholder="5" onChange={set('stake_usd')}
+                  title="what ONE parlay may spend - the engine buys as many contracts as this covers at the price it rests, and none if it cannot cover one" />
               </div>
               <div className="bs-field">
                 <span className="lbl">Bank $ (0 = unlimited)</span>
@@ -1411,7 +1876,7 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
       const isCommodity = bot.key === 'gold15' || bot.key === 'silver15' || bot.key === 'oil15';
       const isBtc = bot.key === 'btc15' || bot.key === 'btc60';
       const isParley = bot.key === 'parley';
-      const body = { user_id: user.user_id };
+      const body = {};
       try {
         await (isCommodity ? vidura.commodityStop(bot.key, body)
           : isBtc ? vidura.btcStop(bot.key, body)
@@ -1462,18 +1927,42 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
     setResult(null);
 
     const results = { ok: [], fail: [] };
+
+    // Stop what is already running before relaunching it. The confirmation
+    // says these "will be killed & restarted", and the desk has to be the one
+    // that does it: a start against a running bot is refused as BotBusy, so
+    // without this the promise in the dialog was not kept.
+    await Promise.allSettled(selRunning.map(async (bot) => {
+      const c = bot.key === 'gold15' || bot.key === 'silver15' || bot.key === 'oil15';
+      const b = bot.key === 'btc15' || bot.key === 'btc60';
+      const pl = bot.key === 'parley';
+      return (c ? vidura.commodityStop(bot.key, {})
+        : b ? vidura.btcStop(bot.key, {})
+          : pl ? vidura.parleyStop({}) : vidura.sportsStop({}));
+    }));
+
     const launches = selected.map(async (bot) => {
       const botBank = parseFloat(perBotBank[bot.key]) || 0;
       const isCommodity = bot.key === 'gold15' || bot.key === 'silver15' || bot.key === 'oil15';
       const isBtc = bot.key === 'btc15' || bot.key === 'btc60';
       const isParley = bot.key === 'parley';
+      // The numbers the operator actually typed. This sent a hardcoded 0 for
+      // the target and never sent the stop-loss at all: both went only to the
+      // station-level guard, so a form that validated "Target % must be > 0"
+      // and a dialog that confirmed "Target +50%" still launched every bot
+      // with no target of its own. It was silently accepted until the bot
+      // schema began checking, which is when it surfaced as
+      // "bank_tp_pct must be at least 1, got 0".
+      //
+      // kill_existing is gone with it: it was never a bot option, so it would
+      // have been refused as an unknown field. Restarting a running bot is
+      // something the DESK does, below, before launching.
       const body = {
-        user_id: user.user_id,
         mode,
-        bank: botBank,
-        target_pct: 0,
+        bankroll: botBank,
+        bank_tp_pct: tgtNum,
+        bank_sl_pct: slNum,
         contracts: parseInt(perBotContracts[bot.key] || '25', 10),
-        kill_existing: true,
       };
       if (isParley) {
         const pd = BOT_DEFAULTS.parley;
@@ -1681,11 +2170,14 @@ export default function BotStationSite() {
   const [launchAll, setLaunchAll] = useState(false);
   const [stationGuard, setStationGuard] = useState(null); // { bank, target_pct, sl_pct, pv_at_launch, draining } | null
   const stationHaltedRef = useRef(false);
-  const [botStopLog, setBotStopLog] = useState(() => {
-    try { const s = localStorage.getItem('vidura.botstation.stoplog'); return s ? JSON.parse(s) : []; } catch { return []; }
-  });
+  // Launch/stop history from the DB. It used to live in localStorage,
+  // appended whenever a tab happened to see a status change -- so it was
+  // empty on a new machine, wrong after a reload, and silent about anything
+  // that happened while nobody was watching. A bot exiting on its own at 3am
+  // is exactly the event this panel is for, and exactly the one a
+  // browser-side list could never record.
+  const [botStopLog, setBotStopLog] = useState([]);
   const [showAllStopLog, setShowAllStopLog] = useState(false);
-  const prevStatuses = useRef({});
   const [cfg, setCfg] = useState(loadCfg);
   const [clock, setClock] = useState(() => new Date());
 
@@ -1701,71 +2193,73 @@ export default function BotStationSite() {
     return () => { alive = false; };
   }, []);
 
+  // One request per bot, keyed by the bot it asked about.
+  //
+  // This used to make four family calls and iterate two of the responses as
+  // lists — but each returns ONE status object, so `for (const s of btcList)`
+  // threw "not iterable". The throw landed in the catch below, setStatuses was
+  // never reached, and `statuses` stayed empty: every tile rendered IDLE
+  // while the bots were running, and the swallowed error said nothing.
+  //
+  // The four calls also only ever asked about btc15, sports, parley and
+  // gold15, so btc60, silver15 and oil15 could not have had a status at all.
+  // Asking per bot means the station shows what is actually running, and a
+  // new bot appears with no change here.
   const loadStatuses = useCallback(async () => {
     if (!user) return;
     try {
-      const [btcList, sports, parley, commodityList] = await Promise.all([
-        vidura.btcStatus(user.user_id),
-        vidura.sportsStatus(user.user_id),
-        vidura.parleyStatus(user.user_id),
-        vidura.commodityStatus(user.user_id),
-      ]);
-      const map = {};
-      for (const s of btcList || []) map[s.bot_key] = s;
-      if (sports) map.sports = sports;
-      if (parley) map.parley = parley;
-      for (const s of commodityList || []) map[s.bot_key] = s;
-      setStatuses(map);
-    } catch { /* keep last */ }
+      // ONE request for all seven. This polled each bot separately every ten
+      // seconds — seven requests and seven database sessions per tick, which
+      // was most of the desk's steady-state load and part of what exhausted
+      // the server's connection pool.
+      const all = await vidura.botStatuses();
+      if (all && Object.keys(all).length) setStatuses(all);
+    } catch {
+      // Keep the last good picture rather than blanking every tile on one
+      // failed poll. A stale status reads as stale; an empty one reads as
+      // "nothing is running", which is a different and worse claim.
+    }
   }, [user]);
 
+  // ONE call, one table. This used to be eight requests against four
+  // per-family CSV endpoints, whose numbers the v2/v6 engines never wrote --
+  // which is why every P&L window read $0.00 while real money was moving.
+  // bot_trade is now written at entry by every bot, so the desk reads that
+  // and nothing else.
   const loadFeed = useCallback(async () => {
     if (!user) return;
     try {
-      const [btc, sp, pl, cm, btc30, sp30, pl30, cm30] = await Promise.all([
-        vidura.btcTrades({ user_id: user.user_id, limit: 20, mode: 'all' }),
-        vidura.sportsTrades({ user_id: user.user_id, limit: 20, mode: 'all' }),
-        vidura.parleyTrades({ user_id: user.user_id, limit: 20, mode: 'all' }),
-        vidura.commodityTrades({ user_id: user.user_id, limit: 20, mode: 'all' }),
-        // ONE true 60-day window per family — every P&L window (3H..60D) and
-        // the 7d win record derive from it (no /bots/btc/performance exists)
-        vidura.btcTrades({ user_id: user.user_id, days: 60, limit: 1000, mode: 'all' }),
-        vidura.sportsTrades({ user_id: user.user_id, days: 60, limit: 1000, mode: 'all' }),
-        vidura.parleyTrades({ user_id: user.user_id, days: 60, limit: 1000, mode: 'all' }),
-        vidura.commodityTrades({ user_id: user.user_id, days: 60, limit: 1000, mode: 'all' }),
+      const [out, runs] = await Promise.all([
+        vidura.tradeEventLog({ limit: 500 }),
+        vidura.botRuns({ limit: 60 }).catch(() => ({ runs: [] })),
       ]);
-      // keep the full merged page (60 rows) — the log's bot filter slices it
-      const items = [...(btc?.items || []), ...(sp?.items || []), ...(pl?.items || []), ...(cm?.items || [])]
-        .sort((a, b) => ((a.opened_at || '') < (b.opened_at || '') ? 1 : -1));
-      setFeed(items);
+      setFeed(out.trades || []);
+      setBotStopLog(runs.runs || []);
 
-      const month = [...(btc30?.items || []), ...(sp30?.items || []), ...(pl30?.items || []), ...(cm30?.items || [])];
-      const openedMs = (x) => {
-        const iso = x.opened_at || '';
-        return new Date(/Z$|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`).getTime();
-      };
-      const sumSince = (rows, days) => {
-        const cutoff = Date.now() - days * 86400e3;
-        return rows.filter((x) => openedMs(x) >= cutoff)
-          .reduce((s, x) => s + (x.pnl_usd || 0), 0);
-      };
+      // The windows arrive already computed, over the WHOLE ledger rather
+      // than over the page on screen, and banded on when a trade CLOSED.
+      const w = out.windows || {};
+      const at = (k) => (w[k] ? w[k].pnl : 0);
       setPnlWin({
-        h3: sumSince(month, 3 / 24), h6: sumSince(month, 6 / 24),
-        d1: sumSince(month, 1), d7: sumSince(month, 7),
-        d30: sumSince(month, 30), d60: sumSince(month, 60),
+        h3: at('3h'), h6: at('6h'), d1: at('24h'),
+        d7: at('7d'), d30: at('30d'), d60: at('60d'),
       });
 
-      // per-bot 7d win record, computed uniformly from the 30d pages
+      // Per-bot 7d record, from the same rows.
+      const closedMs = (x) => {
+        const iso = x.closed_at || x.opened_at || '';
+        return new Date(/Z$|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`).getTime();
+      };
       const cutoff7 = Date.now() - 7 * 86400e3;
       const p = {};
       for (const key of BOTS.map((b) => b.key)) {
-        const rows = month.filter((x) => x.bot_key === key && openedMs(x) >= cutoff7);
-        const settled = rows.filter((x) => x.pnl_usd !== null && x.pnl_usd !== undefined);
+        const rows = (out.trades || []).filter(
+          (x) => (x.bot || '').toLowerCase() === key && closedMs(x) >= cutoff7);
         p[key] = {
           trades: rows.length,
-          wins: settled.filter((x) => x.pnl_usd > 0).length,
-          losses: settled.filter((x) => x.pnl_usd < 0).length,
-          pnl: settled.reduce((s, x) => s + (x.pnl_usd || 0), 0),
+          wins: rows.filter((x) => x.status === 'WON').length,
+          losses: rows.filter((x) => x.status === 'LOST').length,
+          pnl: rows.reduce((sum, x) => sum + (x.pnl || 0), 0),
         };
       }
       setPerf(p);
@@ -1780,23 +2274,16 @@ export default function BotStationSite() {
     if (!user || feedSync.busy) return;
     setFeedSync({ busy: true, note: 'pulling bot ledgers…' });
     try {
-      const [b, s, p, cm] = await Promise.all([
-        vidura.btcSync(user.user_id).catch(() => []),
-        vidura.sportsSync(user.user_id).catch(() => ({})),
-        vidura.parleySync(user.user_id).catch(() => ({})),
-        vidura.commoditySync(user.user_id).catch(() => []),
-      ]);
-      const ins = (Array.isArray(b) ? b : []).reduce((n, r) => n + (r.inserted || 0), 0)
-        + (s.inserted || 0) + (p.inserted || 0)
-        + (Array.isArray(cm) ? cm : []).reduce((n, r) => n + (r.inserted || 0), 0);
-      await loadFeed();
+      // No CSV pull any more. Bots write to bot_trade the moment they enter,
+      // so there is nothing to import -- this only asks Kalshi what became of
+      // the rows that are still open.
       setFeedSync({ busy: true, note: 'settling P&L from Kalshi…' });
       const rec = await vidura.botsReconcile(user.user_id, 1, true);
       await loadFeed();
       const tu = rec.true_up || {};
       setFeedSync({
         busy: false,
-        note: `synced · ${ins} new · ${rec.updated} stale settled · `
+        note: `${rec.updated} settled · `
           + `${tu.corrected || 0} fee-trued of ${tu.checked || 0} checked`,
       });
     } catch (e) {
@@ -1923,7 +2410,7 @@ export default function BotStationSite() {
         const isCommodity = bot.key === 'gold15' || bot.key === 'silver15' || bot.key === 'oil15';
         const isBtc = bot.key === 'btc15' || bot.key === 'btc60';
         const isParley = bot.key === 'parley';
-        const body = { user_id: user.user_id };
+        const body = {};
         try {
           await (isCommodity ? vidura.commodityStop(bot.key, body)
             : isBtc ? vidura.btcStop(bot.key, body)
@@ -1948,46 +2435,11 @@ export default function BotStationSite() {
     })();
   }, [statuses, stationGuard, user, pv, loadStatuses, loadFeed, loadPv]);
 
-  useEffect(() => {
-    const prev = prevStatuses.current;
-    const entries = [];
-    for (const b of BOTS) {
-      const wasRunning = prev[b.key]?.running;
-      const isRunning = statuses[b.key]?.running;
-      if (wasRunning && !isRunning) {
-        const sess = prev[b.key]?.session;
-        const run = (prev[b.key]?.runs || []).find((r) => r.status === 'running') || prev[b.key]?.runs?.[0];
-        const bankVal = run?.extra?.config?.bank ?? null;
-        const pnl = sess?.pnl_usd ?? 0;
-        const pct = bankVal > 0 ? (pnl / bankVal) * 100 : (sess?.bankroll_pct ?? null);
-        const tgtPct = sess?.target_pct ?? run?.extra?.config?.target_pct ?? null;
-        const slPct = run?.extra?.config?.bank_sl_pct ?? null;
-        let reason = 'manual';
-        if (pct !== null && tgtPct > 0 && pct >= tgtPct) reason = 'TP hit';
-        else if (pct !== null && slPct > 0 && pct <= -slPct) reason = 'SL hit';
-        entries.push({
-          id: `${b.key}-${Date.now()}`,
-          key: b.key,
-          label: b.label,
-          accent: b.accent,
-          time: new Date().toLocaleTimeString('en-US', { timeZone: 'America/Chicago', hour: '2-digit', minute: '2-digit', hour12: false }),
-          reason,
-          bank: bankVal,
-          pnl,
-          pct: pct !== null ? Math.round(pct * 10) / 10 : null,
-          mode: run?.mode || 'paper',
-        });
-      }
-    }
-    prevStatuses.current = statuses;
-    if (entries.length > 0) {
-      setBotStopLog((prev) => {
-        const next = [...entries, ...prev].slice(0, 50);
-        try { localStorage.setItem('vidura.botstation.stoplog', JSON.stringify(next)); } catch { /* ignore */ }
-        return next;
-      });
-    }
-  }, [statuses]);
+  // The stop detector that used to live here is gone. It compared this
+  // tab's previous statuses to the current ones and appended to a
+  // localStorage list, which meant the Bots Log only ever knew about
+  // events this browser was awake for. bot_run records every launch and
+  // stop as it happens, so the panel reads that instead -- see loadFeed.
 
   const runningCount = botStates.filter((b) => b.status === 'LIVE' || b.status === 'PAPER').length;
   const anyLive = botStates.some((b) => b.status === 'LIVE');
@@ -1997,11 +2449,6 @@ export default function BotStationSite() {
 
   const versionsFor = (key) => (bots.find((b) => b.key === key)?.versions) || [];
 
-  const evtSeverity = (t) => {
-    if (t.pnl_usd > 0) return 'good';
-    if (t.pnl_usd < 0) return 'crit';
-    return 'open';
-  };
   const chipFor = (k) => BOT_BY_KEY[k]?.chip || 'sp';
 
   const stationPnl = useMemo(() => {
@@ -2141,7 +2588,10 @@ export default function BotStationSite() {
                       <span className={`r ${s ? (s.pnl_usd > 0 ? 'good' : s.pnl_usd < 0 ? 'crit' : '') : 'dim'}`}>
                         {s ? `${usd(s.pnl_usd)} ` : '— '}
                         <span className="u">
-                          {s ? `${s.trades_closed} closed` : 'no session'}
+                          {s
+                            ? `${s.trades_open ?? 0} open · ${s.won ?? 0}W ${s.lost ?? 0}L`
+                            : 'no session'}
+                          {s && s.staked_usd ? ` · ${usd(s.staked_usd)} in` : ''}
                           {contracts !== null && ` · ${contracts}`}
                         </span>
                       </span>
@@ -2196,7 +2646,10 @@ export default function BotStationSite() {
             <HeliosCanvas bots={botStates} neon={(pnlWin?.h3 ?? 0) > 0}
               operator={user?.username} onPick={setConsole} onLogs={setLogsFor}
               onSunDblClick={() => setLaunchAll(true)} />
-            <CommoditiesStrip />
+            <div className="bs-strips">
+              <CommoditiesStrip />
+              <CryptoStrip />
+            </div>
           </div>
 
           {/* right: event feed */}
@@ -2208,32 +2661,35 @@ export default function BotStationSite() {
               </div>
               <div className="bs-panel-bd" style={{ maxHeight: showAllStopLog ? 400 : 220, overflowY: 'auto' }}>
                 {botStopLog.length === 0 && (
-                  <div className="bs-feed-empty">no stop events yet</div>
+                  <div className="bs-feed-empty">no runs recorded yet</div>
                 )}
-                {botStopLog.slice(0, showAllStopLog ? 50 : 10).map((e) => (
-                  <div key={e.id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '3px 0',
-                    fontFamily: '"JetBrains Mono", monospace', fontSize: 11, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                    <span style={{ color: e.accent, fontWeight: 700, minWidth: 64 }}>{e.label}</span>
-                    <span style={{ color: 'rgba(255,255,255,0.4)', minWidth: 42 }}>{e.time}</span>
-                    <span style={{ color: e.reason === 'TP hit' ? 'var(--bs-ok, #4caf50)' : e.reason === 'SL hit' ? 'var(--bs-crit, #ff5c5c)' : 'rgba(255,255,255,0.5)' }}>
-                      {e.reason}
-                    </span>
-                    <span style={{ color: 'rgba(255,255,255,0.6)' }}>
-                      {e.bank != null ? `$${e.bank}` : ''}
-                      {e.bank != null && e.pnl != null ? '>' : ''}
-                      {e.pnl != null ? `$${(e.bank + e.pnl).toFixed(0)}` : ''}
-                    </span>
-                    <span style={{ fontWeight: 700, color: e.pnl > 0 ? 'var(--bs-ok, #4caf50)' : e.pnl < 0 ? 'var(--bs-crit, #ff5c5c)' : 'rgba(255,255,255,0.5)' }}>
-                      {e.pnl != null ? `${e.pnl >= 0 ? '+' : ''}$${e.pnl.toFixed(2)}` : ''}
-                      {e.pct != null ? ` ${e.pct >= 0 ? '+' : ''}${e.pct}%` : ''}
-                    </span>
-                  </div>
-                ))}
+                {botStopLog.slice(0, showAllStopLog ? 60 : 10).map((r) => {
+                  const meta = BOT_BY_KEY[r.bot_key];
+                  const live = r.status === 'running';
+                  return (
+                    <div key={r.run_id} className="bs-runrow">
+                      <span className="who" style={{ color: meta?.accent }}>{r.bot}</span>
+                      <span className="ts">{utcTs(r.stopped_at || r.started_at)}</span>
+                      {/* what the run WAS, and how it ended -- a bot the
+                          operator stopped is different news from one that
+                          exited by itself. */}
+                      <span className={`bs-st ${live ? 'open' : r.exited_on_its_own ? 'lost' : 'closed'}`}>
+                        {live ? (r.mode === 'live' ? 'LIVE' : 'PAPER')
+                          : r.exited_on_its_own ? 'EXITED' : 'STOPPED'}
+                      </span>
+                      <span className="dim">{r.version}</span>
+                      <span className="dim">{r.trades}t</span>
+                      <b className={r.pnl > 0 ? 'win' : r.pnl < 0 ? 'loss' : ''}>
+                        {r.pnl ? `${r.pnl > 0 ? '+' : ''}${usd(r.pnl)}` : '—'}
+                      </b>
+                    </div>
+                  );
+                })}
                 {botStopLog.length > 10 && (
                   <button type="button" onClick={() => setShowAllStopLog((v) => !v)}
                     style={{ marginTop: 6, background: 'none', border: 'none', color: 'var(--bs-cyan, #00e5ff)',
                       cursor: 'pointer', fontFamily: '"JetBrains Mono", monospace', fontSize: 11, padding: 0 }}>
-                    {showAllStopLog ? 'Show less' : `Load history (${botStopLog.length} total)`}
+                    {showAllStopLog ? 'Show less' : `Load history (${botStopLog.length} runs)`}
                   </button>
                 )}
               </div>
@@ -2253,7 +2709,7 @@ export default function BotStationSite() {
                   {BOTS.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
                 </select>
                 <span className="idx">
-                  {feed ? `${(feedFilter === 'all' ? feed : feed.filter((t) => t.bot_key === feedFilter)).length} EVT` : '…'}
+                  {feed ? `${(feedFilter === 'all' ? feed : feed.filter((t) => (t.bot || '').toLowerCase() === feedFilter)).length} EVT` : '…'}
                 </span>
               </div>
               <div className="bs-panel-bd">
@@ -2268,28 +2724,34 @@ export default function BotStationSite() {
                     <div className="bs-feed-empty">no trades recorded yet — launch a core</div>
                   )}
                   {feed && feed.length > 0
-                    && feed.every((t) => feedFilter !== 'all' && t.bot_key !== feedFilter) && (
+                    && feed.every((t) => feedFilter !== 'all' && (t.bot || '').toLowerCase() !== feedFilter) && (
                     <div className="bs-feed-empty">no recent trades from {BOT_BY_KEY[feedFilter]?.label || feedFilter}</div>
                   )}
                   {(feed || [])
-                    .filter((t) => feedFilter === 'all' || t.bot_key === feedFilter)
-                    .slice(0, 20)
+                    .filter((t) => feedFilter === 'all' || (t.bot || '').toLowerCase() === feedFilter)
+                    .slice(0, 30)
                     .map((tr) => (
-                    <div key={`${tr.bot_key}-${tr.id}`} className={`bs-evt ${evtSeverity(tr)}`}>
+                    <div key={tr.id} className={`bs-evt st-${(tr.status || '').toLowerCase()}`}>
                       <span className="rail" />
                       <div className="bd">
                         <div className="top">
-                          <span className={`chip ${chipFor(tr.bot_key)}`}>{(tr.bot_key || '?').toUpperCase()}</span>
+                          <span className={`chip ${chipFor((tr.bot || '').toLowerCase())}`}>{tr.bot}</span>
                           {tr.is_live === false && <span className="chip" style={{ color: 'var(--bs-ink-3)', background: 'rgba(255,255,255,0.06)' }}>PAPER</span>}
-                          <span className="ts">{utcTs(tr.opened_at)}</span>
+                          <span className={`bs-st ${(tr.status || '').toLowerCase()}`}>{tr.status}</span>
+                          <span className="ts">{utcTs(tr.closed_at || tr.opened_at)}</span>
+                        </div>
+                        {/* market, side, and the cash: in USD both ends, so
+                            exit minus entry IS the result. */}
+                        <div className="msg" title={tr.ticker}>
+                          {tr.market}{tr.outcome ? ` · ${tr.outcome}` : ''}
                         </div>
                         <div className="msg">
-                          {(tr.side || '').toUpperCase()} {tr.contracts}× {tr.ticker}
-                          {tr.price_cents !== null && tr.price_cents !== undefined ? ` @ ${Math.round(tr.price_cents)}c` : ''}
-                          {tr.pnl_usd !== null && tr.pnl_usd !== undefined
-                            ? <> · <b className={tr.pnl_usd >= 0 ? 'win' : 'loss'}>{usd(tr.pnl_usd)}</b></>
-                            : ' · open'}
-                          {tr.status ? ` · ${tr.status}` : ''}
+                          {tr.entry != null ? usd(tr.entry) : '—'}
+                          {' → '}
+                          {tr.status === 'OPEN' ? 'TBD' : (tr.exit != null ? usd(tr.exit) : '—')}
+                          {tr.pnl != null
+                            ? <> · <b className={tr.pnl >= 0 ? 'win' : 'loss'}>{usd(tr.pnl)}</b></>
+                            : null}
                         </div>
                       </div>
                     </div>
@@ -2297,6 +2759,8 @@ export default function BotStationSite() {
                 </div>
               </div>
             </div>
+
+            <LuckPanel />
 
           </div>
         </div>

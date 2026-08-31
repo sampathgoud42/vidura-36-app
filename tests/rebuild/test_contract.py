@@ -12,6 +12,7 @@ in review; changing a router is not.
 from __future__ import annotations
 
 import pytest
+from fastapi.testclient import TestClient
 
 from tests.rebuild._routes import api_routes, served as _served_set
 
@@ -75,6 +76,8 @@ CONTRACT: list[tuple[str, str]] = [
     # change nobody reviews.
     ("POST", f"{V1}/bots/launch"),
     ("GET", f"{V1}/bots/commodities/signals"),
+    ("GET", f"{V1}/bots/crypto/signals"),
+    ("GET", f"{V1}/bots/statuses"),
     # desk + wellness + worlds
     ("GET", f"{V1}/levels/status"),
     ("POST", f"{V1}/levels/start"),
@@ -82,6 +85,42 @@ CONTRACT: list[tuple[str, str]] = [
     ("GET", f"{V1}/desk36/dmi"),
     ("GET", f"{V1}/wellness/profile"),
     ("PUT", f"{V1}/wellness/profile"),
+    # research (/super) — GEX, econ, earnings, the signal ledger, engine
+    # control. Added after the Phase 4 freeze: the desk called all of these
+    # and api_v2 served NONE of them, so every one fell through to the SPA
+    # catch-all and the boards rendered empty with no error. Recorded here
+    # deliberately, like every other post-freeze addition, so the surface
+    # grows by an edit to this list rather than by a router change nobody
+    # reviews.
+    ("GET", f"{V1}/super/state"),
+    ("GET", f"{V1}/super/config"),
+    ("POST", f"{V1}/super/config"),
+    ("POST", f"{V1}/super/on"),
+    ("POST", f"{V1}/super/off"),
+    ("POST", f"{V1}/super/regenerate"),
+    ("GET", f"{V1}/super/regenerate/status"),
+    ("GET", f"{V1}/super/gex"),
+    ("GET", f"{V1}/super/gex/quota"),
+    ("POST", f"{V1}/super/gex/refresh"),
+    ("POST", f"{V1}/super/gex/reload"),
+    ("GET", f"{V1}/super/gex0dte"),
+    ("POST", f"{V1}/super/gex0dte/refresh"),
+    ("POST", f"{V1}/super/gex0dte/heartbeat"),
+    ("GET", f"{V1}/super/gex0dte/history"),
+    ("GET", f"{V1}/super/gex0dte/history/dates"),
+    ("GET", f"{V1}/super/econ"),
+    ("GET", f"{V1}/super/earnings"),
+    ("GET", f"{V1}/super/quote/{{ticker}}"),
+    ("GET", f"{V1}/super/engine-pct"),
+    ("POST", f"{V1}/super/engine-pct"),
+    ("GET", f"{V1}/super/engine-gates"),
+    ("POST", f"{V1}/super/engine-gates"),
+    ("POST", f"{V1}/super/tickers"),
+    ("GET", f"{V1}/super/tickers/{{ticker_id}}/status"),
+    ("GET", f"{V1}/super/signals"),
+    ("GET", f"{V1}/super/snapshots"),
+    ("POST", f"{V1}/super/sync"),
+    ("GET", f"{V1}/super/sync/status"),
     # system
     ("GET", "/health"),
     ("GET", "/readiness"),
@@ -191,3 +230,48 @@ def test_execution_endpoints_advertise_idempotency(app):
             if "idempotency-key" not in names:
                 missing.append(route.path)
     assert not missing, "money-moving endpoints without idempotency: " + ", ".join(missing)
+
+
+# ---- 401s have to be recognisable -----------------------------------------
+
+@pytest.mark.parametrize("path", [
+    f"{V1}/bots/commodities/signals",
+    f"{V1}/super/gex",
+    f"{V1}/tradier/positions",
+    f"{V1}/trades",
+])
+def test_every_401_says_login_required(app, path):
+    """Given any request without a session,
+    when the API refuses it,
+    then the body carries login_required.
+
+    The desk routes to the sign-in form on that MARKER, not on the status
+    code — a wrong password is also a 401, and /auth has to be able to report
+    its own failures without tearing the desk down.
+
+    The middleware set it and the dependencies did not, so a session that
+    died under a running desk produced 401s the client could not recognise:
+    every polling panel painted "Sign in to use this desk" in place of its
+    data, and the login form was never shown.
+    """
+    with TestClient(app) as client:
+        response = client.get(path)
+    assert response.status_code == 401
+    body = response.json()
+    assert body.get("login_required") is True, (
+        f"{path} answered 401 without login_required — the desk cannot tell "
+        "this from an ordinary error and will render the message instead of "
+        "returning to the login form"
+    )
+
+
+def test_other_errors_do_not_claim_login_is_required(app, admin):
+    """A 404 or a 422 must not send a signed-in operator back to the form."""
+    with TestClient(app) as client:
+        missing = client.get(f"{V1}/bots/nope/config", headers=admin.headers)
+        unprocessable = client.get(f"{V1}/tradier/quotes?symbols=",
+                                   headers=admin.headers)
+    assert missing.status_code == 404
+    assert "login_required" not in missing.json()
+    assert unprocessable.status_code == 422
+    assert "login_required" not in unprocessable.json()

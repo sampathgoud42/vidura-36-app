@@ -51,6 +51,13 @@ from typing import Any, Optional, TypedDict
 # ── Reuse the v1 KalshiClient (auth + signed GETs) ────────────────────────────
 _HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(_HERE))
+# And the BTC folder, where bot_kalshi_btc15 lives. This module used to insert
+# only its own directory and rely on whichever bot imported it having already
+# added that one -- so it worked inside a bot and failed on its own, which is
+# an ordering dependency nothing declared.
+_BTC15 = _HERE.parent / "btc" / "btc15"
+if str(_BTC15) not in sys.path:
+    sys.path.insert(0, str(_BTC15))
 import bot_kalshi_btc15 as v1            # noqa: E402  (auth/client infra)
 
 KalshiClient = v1.KalshiClient

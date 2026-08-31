@@ -39,6 +39,25 @@ def _open_and_fill(client, who, monkeypatch):
     return pos_id
 
 
+def _force_monitored_stop(pos_id: int) -> None:
+    """Put a position on the MONITORED stop path.
+
+    Arming rests a stop at the venue, and with one resting the monitor
+    deliberately stands aside. To test the monitored fallback -- the path that
+    matters when the venue would not accept a stop -- the position has to be
+    in the state that fallback exists for.
+    """
+    from sqlalchemy import select
+
+    from app.domains.trading.models import Position
+    from app.platform.db.session import session_scope
+
+    with session_scope() as db:
+        pos = db.scalars(select(Position).where(Position.id == pos_id)).one()
+        pos.stop_protection = "monitored_only"
+        pos.stop_order_id = None
+
+
 # --------------------------------------------------------------------------
 # Layer 1 — the stop rests on the venue
 # --------------------------------------------------------------------------
@@ -136,8 +155,14 @@ def test_a_stop_threshold_survives_a_restart(client, alice, monkeypatch):
     pos_id = _open_and_fill(client, alice, monkeypatch)
     before = client.get(f"{OPEN}/{pos_id}", headers=alice.headers).json()
 
-    from app.main import create_app
+    # app.api_v2.application, not app.main. This built the OLD application,
+    # which has a different auth model, so alice's session did not
+    # authenticate and the "after" read was an error body rather than the
+    # position -- the test was comparing two error payloads and calling it a
+    # surviving stop.
     from fastapi.testclient import TestClient
+
+    from app.api_v2.application import create_app
 
     with TestClient(create_app()) as fresh:
         after = fresh.get(f"{OPEN}/{pos_id}", headers=alice.headers).json()
@@ -151,14 +176,30 @@ def test_a_breached_stop_cancels_the_target_before_selling(client, alice, monkey
     from app.domains.trading.execution import venue
     from app.domains.trading.risk import monitor
 
-    _open_and_fill(client, alice, monkeypatch)
+    pos_id = _open_and_fill(client, alice, monkeypatch)
+
+    # Two things had to be undone before this test could exercise what it
+    # claims. _open_and_fill patches order_status to report EVERY order as
+    # filled, so the target-filled branch fired first and returned -- the
+    # observed ["cancel"] was the target being settled, never the stop. And
+    # an armed position carries a venue-resting stop, where the monitored
+    # path is deliberately skipped because the venue is faster than this
+    # loop. So: stop reporting orders as filled, and put the position on the
+    # monitored path this test is about.
+    monkeypatch.setattr(venue, "order_status",
+                        lambda *a, **k: {"status": "open"})
+    _force_monitored_stop(pos_id)
+
     order = []
     monkeypatch.setattr(venue, "cancel_order", lambda oid, **k: order.append("cancel"))
     monkeypatch.setattr(venue, "sell_to_close", lambda **k: order.append("sell") or {"id": "x"})
     monkeypatch.setattr(venue, "bid_for", lambda *a, **k: 0.50)   # below a 30% stop
 
     monitor.run_pass(tenant_id=alice.tenant_id)
-    assert order[:2] == ["cancel", "sell"]
+    assert order[:2] == ["cancel", "sell"], (
+        "the monitored stop must cancel the resting target BEFORE selling; a "
+        f"sell that races its own target double-sells the holding. Got {order}"
+    )
 
 
 # --------------------------------------------------------------------------
@@ -180,7 +221,12 @@ def test_a_failing_pass_does_not_record_a_healthy_heartbeat(
     from app.domains.trading.execution import venue
     from app.domains.trading.risk import heartbeat, monitor
 
-    monkeypatch.setattr(venue, "held_quantity",
+    # held_quantity is only called while a position is still being armed; by
+    # the time _open_and_fill returns, the armed path never reaches it, so
+    # nothing threw and the pass was recorded healthy. order_status is on the
+    # open path this position is actually on.
+    _open_and_fill(client, alice, monkeypatch)
+    monkeypatch.setattr(venue, "order_status",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("venue down")))
     with pytest.raises(Exception):
         monitor.run_pass(tenant_id=alice.tenant_id)
@@ -199,6 +245,13 @@ def test_one_tenants_failure_does_not_stop_another_tenants_stop(
     disarm everyone else's stops.
     """
     from app.domains.trading.risk import monitor
+
+    # Both operators need something AT RISK. sweep_all_tenants visits tenants
+    # holding active positions -- correctly, since a tenant with nothing open
+    # has no stop to watch -- and bob had none, so the sweep was right to skip
+    # him and the assertion was asserting the wrong thing.
+    _open_and_fill(client, alice, monkeypatch)
+    _open_and_fill(client, bob, monkeypatch)
 
     swept = []
     original = monitor.run_pass

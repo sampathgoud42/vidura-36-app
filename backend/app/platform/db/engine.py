@@ -21,6 +21,19 @@ from sqlalchemy import Engine, create_engine, event
 
 def make_engine(url: str, *, echo: bool = False) -> Engine:
     is_sqlite = url.startswith("sqlite")
+    # SQLAlchemy's default pool is QueuePool(size=5, overflow=10) -- fifteen
+    # connections, sized for Postgres where each one is a server process. On
+    # SQLite a connection is a file handle, and fifteen is far too few: the
+    # desk polls a dozen panels at once and several endpoints hold their
+    # session across a venue call, so the pool was exhausted and every later
+    # request blocked the full 30s timeout before failing. The API stayed
+    # "alive" and answered nothing.
+    #
+    # Raised rather than removed. NullPool would open a connection per request
+    # and lose the PRAGMA setup that runs on connect; a bigger QueuePool keeps
+    # that and still bounds the count.
+    pool_kwargs = ({"pool_size": 20, "max_overflow": 40, "pool_timeout": 10}
+                   if is_sqlite else {})
     engine = create_engine(
         url,
         echo=echo,
@@ -28,6 +41,7 @@ def make_engine(url: str, *, echo: bool = False) -> Engine:
         # thread, which is not the thread the connection was made on.
         connect_args={"check_same_thread": False} if is_sqlite else {},
         pool_pre_ping=True,
+        **pool_kwargs,
     )
     if is_sqlite:
         _install_sqlite_pragmas(engine)

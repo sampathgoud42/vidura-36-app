@@ -62,18 +62,37 @@ def test_every_tenant_owned_model_is_reachable_only_through_the_scoped_repositor
     )
 
 
-def test_market_data_is_the_only_documented_exception():
-    """Signals are market data, identical for every operator, and are the
-    one table allowed to be read unscoped.
+# Market data, identical for every operator, and the ONLY kind of table
+# allowed to be read without a tenant scope. Each name here is a decision
+# someone has to defend, which is why the test asserts the exact set:
+#
+#   Signal              a desk signal: an observation about the market.
+#   ResearchSignal      the super-research engines' ledger. Same category.
+#   DailySnapshot       GEX walls and the econ calendar for a date.
+#   Gex0dteHour         SPY net gamma per trading hour.
+#   PusherHeartbeat     liveness of the browser pusher that FEEDS Gex0dteHour.
+#                       Not market data itself, but telemetry ABOUT a
+#                       market-data feed, and it has no operator either -- the
+#                       pusher is one browser tab for the whole desk.
+#
+# A gamma wall is the same number for every operator. Copying it per tenant
+# would mean N identical rows and N identical vendor calls for one fact.
+_MARKET_DATA = {"Signal", "ResearchSignal", "DailySnapshot", "Gex0dteHour",
+                "PusherHeartbeat"}
 
-    The exemption is explicit and enumerated rather than implied, so adding
-    a second one is a visible decision instead of an accident.
+
+def test_market_data_is_the_only_documented_exception():
+    """Only market data may be read unscoped, and only by name.
+
+    The exemption is explicit and enumerated rather than implied, so adding a
+    sixth one is a visible decision instead of an accident. A new table that
+    simply forgets its tenant_id fails here by name.
     """
     from app.platform.db import registry
 
     exempt = {m.__name__ for m in registry.unscoped_models()}
-    assert exempt == {"Signal"}, (
-        f"unexpected unscoped models: {exempt - {'Signal'}} — every table "
+    assert exempt == _MARKET_DATA, (
+        f"unexpected unscoped models: {exempt - _MARKET_DATA} — every table "
         "except market data must be tenant-scoped"
     )
 
