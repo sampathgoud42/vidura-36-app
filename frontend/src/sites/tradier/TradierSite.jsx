@@ -26,7 +26,7 @@ function errText(e) {
   if (typeof e === 'string') return e;
   if (e instanceof ApiError) return e.detail || e.message || `HTTP ${e.status}`;
   if (e && typeof e === 'object' && e.detail) return String(e.detail);
-  return 'Backend unreachable — is the Vidura API running on :8790?';
+  return 'Backend unreachable — is the Vidura API running on :8791?';
 }
 
 // HTTP status kept alongside the text: 401 (keys), 429 (throttled) and 5xx

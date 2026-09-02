@@ -62,7 +62,8 @@ def _sweep() -> None:
 
 
 def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
-            min_leg_c: int = 60, min_volume_usd: float = 0.0,
+            min_leg_c: int = 60, max_leg_c: int = 98,
+            min_volume_usd: float = 0.0,
             sports: list[str] | None = None) -> dict:
     """Choose the legs and describe them. Buys nothing, creates nothing.
 
@@ -78,9 +79,15 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         cred, sports or [], include_sub_events=True)
 
     frac = max(1, int(min_leg_c)) / 100.0
+    # The CEILING was never offered, so it silently used the engine's 98%.
+    # It matters more here than on a regular parlay: a long shot is built from
+    # many legs, and one already-decided leg at 99c adds cost without adding
+    # any real chance -- it just shortens the payout.
+    ceiling = min(99, max(int(min_leg_c) + 1, int(max_leg_c))) / 100.0
     candidates, _rejected = filters.eligible_legs(
         markets, scores=scores, tracker=filters.PositionTracker(),
-        tennis_min=frac, other_min=frac, soccer_min=frac)
+        tennis_min=frac, other_min=frac, soccer_min=frac,
+        max_leg=ceiling)
 
     floor = max(0.0, float(min_volume_usd))
     if floor:

@@ -1,12 +1,12 @@
-// Client for the Tradier Bot API (FastAPI, port 8790).
+// Client for the Tradier Bot API (FastAPI, port 8791).
 // The desk talks to nothing else: no vite middleware, no baked JSON,
 // no local configs.
 //
 // Base URL resolution, in priority order:
-//   1. ?api=https://host:8790  (persisted; ?api=off clears — same contract
+//   1. ?api=https://host:8791  (persisted; ?api=off clears — same contract
 //      as the legacy sports client, same localStorage key)
 //   2. VITE_TRADIER_API build-time env var
-//   3. dev/preview default: http://<current hostname>:8790
+//   3. dev/preview default: http://<current hostname>:8791
 //   4. same-origin '' (reverse-proxy deployments routing /api to the API)
 
 const API_BASE_KEY = 'api38.base';
@@ -16,7 +16,14 @@ const API_KEY_KEY = 'vidura.api.key'; // session token / shared X-API-Key
 // API are different origins, so the base has to be spelled out; anywhere
 // else the page was served by the API and same-origin is correct.
 const DEV_PORTS = new Set(['5199', '4199', '5173', '4173']);
-const API_PORT = '8790';
+// 8791. The API moved off 8790 when it became api_v2 and this fallback did
+// not follow, so anything served from a dev port asked a dead address and
+// reported the backend as unreachable while it was running perfectly.
+const API_PORT = '8791';
+// The port it used to be. A base saved by an old `?api=...:8790` outlives the
+// change -- localStorage has no idea the API moved -- so the desk stays
+// broken until somebody thinks to pass ?api=off. Dropped on sight instead.
+const RETIRED_PORTS = [':8790'];
 
 // Chrome resolves "localhost" to ::1 first, and uvicorn binds 0.0.0.0 — IPv4
 // only, because Python binds v6-only on Windows so `--host ::` would trade LAN
@@ -37,7 +44,15 @@ export function apiBase() {
       else localStorage.setItem(API_BASE_KEY, q.replace(/\/+$/, ''));
     }
     const stored = localStorage.getItem(API_BASE_KEY);
-    if (stored) return preferIpv4Loopback(stored);
+    if (stored) {
+      if (RETIRED_PORTS.some((p) => stored.includes(p))) {
+        // Points at where the API used to be. Forget it and fall through to
+        // the resolution below, which is right by construction.
+        localStorage.removeItem(API_BASE_KEY);
+      } else {
+        return preferIpv4Loopback(stored);
+      }
+    }
   } catch { /* ignore */ }
   const built = import.meta.env?.VITE_TRADIER_API;
   if (built) return preferIpv4Loopback(built.replace(/\/+$/, ''));

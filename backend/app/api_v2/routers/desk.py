@@ -9,6 +9,8 @@ rather than something a request waits on.
 from __future__ import annotations
 
 import logging
+import time
+import threading
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -198,15 +200,34 @@ def venue_info(live: bool = Query(default=False),
     from app.core.config import get_settings
 
     settings = get_settings()
-    name = "tradier" if live else "tradier_sandbox"
-    has_credential = True
-    try:
-        tenants.load_credential(db, tenant.id, name, kr)
-    except Exception:                                   # noqa: BLE001
-        has_credential = False
-    return {"venue": "live" if live else "sandbox",
-            "paper_only": settings.paper_only,
-            "has_credential": has_credential}
+
+    def described(venue_name: str) -> dict:
+        """Whether this venue is usable, and which account it would trade."""
+        try:
+            cred = tenants.load_credential(db, tenant.id, venue_name, kr)
+        except Exception:                               # noqa: BLE001
+            return {"configured": False, "account_id": None}
+        # The account NUMBER only -- never the token. The desk names it in the
+        # confirmation before going live, and an operator with two accounts
+        # needs to see which one is about to be armed.
+        return {"configured": True,
+                "account_id": getattr(cred, "account_id", None)}
+
+    # BOTH venues, every time, regardless of which one is being asked about.
+    # The desk decides whether the LIVE toggle is even offerable, so answering
+    # only about the current venue told it nothing: it read v.live.configured
+    # off a payload that had no `live` key, got undefined, and forced itself
+    # back to sandbox on every load -- with no way to ever go live.
+    return {
+        "venue": "live" if live else "sandbox",
+        "paper_only_server": settings.paper_only,
+        "sandbox": described("tradier_sandbox"),
+        "live": described("tradier"),
+        # The original flat keys, kept so nothing else that reads them breaks.
+        "paper_only": settings.paper_only,
+        "has_credential": described(
+            "tradier" if live else "tradier_sandbox")["configured"],
+    }
 
 
 @market_router.get("/balance", operation_id="getTradierBalance")
@@ -352,11 +373,51 @@ def timesales(symbol: str = Query(...), interval: str = Query(default="5min"),
             symbol.upper(), cred=cred, interval=native, sandbox=not live,
             start=indicators.start_date(interval))
         bars = indicators.aggregate(bars, factor)
-    except Exception:                                   # noqa: BLE001
-        logger.info("timesales unavailable for %s/%s", tenant.slug, symbol)
+    except Exception as exc:                            # noqa: BLE001
+        logger.warning("timesales unavailable for %s/%s: %s: %s",
+                       tenant.slug, symbol, type(exc).__name__, exc)
         bars = []
+
+    # SHAPED, not passed through. The chart reads b.o/b.h/b.l/b.c/b.t, which
+    # is the contract v1 published; v2 forwarded the venue's own
+    # open/high/low/close/timestamp instead. Every bar then failed the chart's
+    # `Number.isFinite(b.o) && b.o > 0` filter, so a full response rendered as
+    # "no intraday bars yet" -- a successful call that looked like a dead
+    # market. The long names are kept alongside for anything reading those.
+    shaped = []
+    for b in bars:
+        try:
+            close = b.get("close")
+            if close in (None, ""):
+                close = b.get("price")
+            shaped.append({
+                **b,
+                "t": int(b.get("timestamp") or 0),
+                "time": b.get("time"),
+                "o": float(b.get("open") or 0),
+                "h": float(b.get("high") or 0),
+                "l": float(b.get("low") or 0),
+                "c": float(close or 0),
+                "v": float(b.get("volume") or 0),
+            })
+        except (TypeError, ValueError):
+            # One malformed bar is not a reason to blank the chart.
+            continue
+
+    # The line the day's change is measured from. v1 returned it and the chart
+    # still reads seed.prev_close; without it every header shows no change.
+    prev_close = None
+    try:
+        quote = (venue_mod.quotes([symbol.upper()], cred=cred,
+                                  sandbox=not live) or [{}])[0]
+        raw_prev = quote.get("prevclose") or quote.get("prev_close")
+        prev_close = float(raw_prev) if raw_prev not in (None, "") else None
+    except Exception:                                   # noqa: BLE001
+        prev_close = None
+
     return {"symbol": symbol.upper(), "interval": interval, "days": days,
-            "native_interval": native, "bars": bars,
+            "native_interval": native, "bars": shaped,
+            "prev_close": prev_close,
             "venue": "live" if live else "sandbox"}
 
 
@@ -379,20 +440,58 @@ def _scan(cred, symbols: list[str], interval: str, *, sandbox: bool,
     native, factor = indicators.source_interval(interval)
     start = indicators.start_date(interval)
 
+    # SUPERHOT is a second reading of the SAME bars: period 9 rather than 14,
+    # with an ADX slope and a directional-efficiency term. Computed here, in
+    # the one pass, because fetching the board twice to answer two questions
+    # about one price series is the expensive way to get the same answer --
+    # and the two tiers must agree about what the bars were.
+    from app.services import hot_scan as sh
+
     def one(symbol: str) -> dict:
+        reading = None
+        deep = None
+        last_close = None
         try:
             bars = venue_mod.timesales(symbol, cred=cred, interval=native,
                                        sandbox=sandbox, start=start)
-            reading = indicators.dmi(indicators.aggregate(bars, factor))
+            folded = indicators.aggregate(bars, factor)
+            for bar in reversed(folded):
+                if bar.get("close") not in (None, ""):
+                    last_close = float(bar["close"])
+                    break
+            reading = indicators.dmi(folded)
+            deep = sh.dmi(folded,
+                          period=settings.tradier_superhot_di_period,
+                          slope_lb=settings.tradier_superhot_slope_lb)
         except Exception:                               # noqa: BLE001
             # An unknown or illiquid ticker is an ordinary outcome on a board
             # the operator types into. One bad symbol must not empty the rest.
-            reading = None
-        return {"symbol": symbol, "plus_di": (reading or {}).get("plus_di"),
-                "minus_di": (reading or {}).get("minus_di"),
-                "adx": (reading or {}).get("adx"),
-                "side": (reading or {}).get("side"),
-                "bars": (reading or {}).get("bars", 0)}
+            reading = reading or None
+        pdi = (reading or {}).get("plus_di")
+        mdi = (reading or {}).get("minus_di")
+        row = {"symbol": symbol, "plus_di": pdi, "minus_di": mdi,
+               "adx": (reading or {}).get("adx"),
+               "side": (reading or {}).get("side"),
+               "bars": (reading or {}).get("bars", 0),
+               # The board prints these three directly. Without them a row
+               # renders as a symbol followed by dashes and NaNs -- which is
+               # what a "working" scan looked like before.
+               "last": last_close,
+               "di_ratio": (round(max(pdi, mdi) / min(pdi, mdi), 2)
+                            if pdi and mdi and min(pdi, mdi) > 0 else None)}
+        if deep:
+            # sh_-prefixed, because that is what the SUPERHOT row reads. The
+            # unprefixed names collide with the period-14 reading in the same
+            # object once the two are merged.
+            row["sh"] = {
+                "sh_side": sh.superhot_side(deep, settings),
+                "sh_adx": deep.get("adx"),
+                "sh_dxs": deep.get("dxs"),
+                "sh_slope": deep.get("adx_slope"),
+                "sh_plus_di": deep.get("plus_di"),
+                "sh_minus_di": deep.get("minus_di"),
+            }
+        return row
 
     workers = max(1, min(settings.tradier_flow_workers, len(symbols)))
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -416,6 +515,86 @@ def _scan(cred, symbols: list[str], interval: str, *, sandbox: bool,
     return keep
 
 
+# The HOT snapshot, per operator/venue/interval.
+#
+# A 100-name sweep is 100 timesales calls and takes about twenty seconds. The
+# v2 endpoint ran that INSIDE the request, so the desk's fetch aborted long
+# before it finished and the panel reported the API as unreachable while it
+# was working perfectly -- then stopped polling altogether.
+#
+# v1 never did this; its own docstring says "a request never waits for it".
+# This restores that: serve the last good snapshot immediately, refresh in the
+# background, and say which it is. The desk already polls every 3s while
+# `refreshing` is set, so it picks the result up on its own.
+_HOT: dict[tuple, dict] = {}
+_HOT_LOCK = threading.Lock()
+HOT_TTL_S = 300.0
+
+
+def _hot_meta(settings, interval: str, universe: list[str], live: bool,
+              at: float | None) -> dict:
+    return {
+        "interval": interval,
+        "scanned": len(universe),
+        "venue": "live" if live else "sandbox",
+        "at": at,
+        "age_s": None if at is None else round(time.time() - at, 1),
+        # The thresholds each tier was judged against, so the panel can say
+        # WHY a name qualified rather than only that it did.
+        "gates": {
+            "min_adx": settings.tradier_hot_min_adx,
+            "min_pdi": settings.tradier_hot_min_pdi,
+            # The panel's tooltip reads min_di; the setting is named min_pdi.
+            "min_di": settings.tradier_hot_min_pdi,
+            "di_ratio": settings.tradier_hot_di_ratio,
+        },
+        "sh_gates": {
+            "period": settings.tradier_superhot_di_period,
+            "di_period": settings.tradier_superhot_di_period,
+            "min_adx": settings.tradier_superhot_min_adx,
+            "max_adx": settings.tradier_superhot_max_adx,
+            "min_dxs": settings.tradier_superhot_min_dxs,
+            "min_pdi": settings.tradier_superhot_min_pdi,
+            "di_ratio": settings.tradier_superhot_di_ratio,
+            "slope_lb": settings.tradier_superhot_slope_lb,
+        },
+    }
+
+
+def _start_hot_refresh(key: tuple, compute, held: dict | None) -> None:
+    """Sweep in the background, leaving the previous snapshot readable."""
+    with _HOT_LOCK:
+        current = _HOT.get(key)
+        if current is not None and current["refreshing"]:
+            return                       # one sweep per key is enough
+        # A PLACEHOLDER when there is nothing cached yet. Without it the key
+        # stays absent, so every poll sees "no snapshot" and starts another
+        # sweep, and the one that finishes has no entry to write into --
+        # refreshing never clears and rows never arrive.
+        _HOT[key] = {"rows": (current or {}).get("rows", []),
+                     "at": (current or {}).get("at", 0.0),
+                     "refreshing": True}
+
+    def run() -> None:
+        try:
+            rows = compute()
+        except Exception:                               # noqa: BLE001
+            # The reason is already logged by compute(). A failed sweep must
+            # leave the last good snapshot in place rather than blanking it:
+            # stale data an operator can see the age of beats no data.
+            with _HOT_LOCK:
+                if _HOT.get(key) is not None:
+                    _HOT[key]["refreshing"] = False
+            return
+        with _HOT_LOCK:
+            _HOT[key] = {"rows": rows, "at": time.time(), "refreshing": False}
+        logger.info("hot sweep done: %s %s -> %d rows",
+                    key[2], "live" if key[1] else "sandbox", len(rows))
+
+    threading.Thread(target=run, daemon=True,
+                     name=f"hot-{key[1]}-{key[2]}").start()
+
+
 @market_router.get("/hot", operation_id="getTradierHotScan")
 @deps.tenant_scoped
 def hot(live: bool = Query(default=False), interval: str = Query(default="5min"),
@@ -429,17 +608,52 @@ def hot(live: bool = Query(default=False), interval: str = Query(default="5min")
     settings = get_settings()
     universe = [s.strip().upper()
                 for s in settings.tradier_hot_universe.split(",") if s.strip()]
-    try:
-        cred = _credential(db, tenant, kr, live=live)
-        rows = _scan(cred, universe, interval, sandbox=not live, gate=True)
-    except HTTPException:
-        raise
-    except Exception:                                   # noqa: BLE001
-        logger.info("hot scan unavailable for %s", tenant.slug)
-        rows = []
-    return {"kind": "hot", "rows": rows, "interval": interval,
-            "scanned": len(universe), "source": "tradier",
-            "venue": "live" if live else "sandbox"}
+    cred = _credential(db, tenant, kr, live=live)
+    key = (tenant.id, bool(live), interval)
+    held = _HOT.get(key)
+
+    def compute() -> list[dict]:
+        try:
+            return _scan(cred, universe, interval, sandbox=not live, gate=True)
+        except Exception as exc:                        # noqa: BLE001
+            # WITH THE REASON. This swallowed an "unsupported interval" for
+            # every 30m and 1H scan and reported it as an empty panel --
+            # indistinguishable from a market where nothing is trending, which
+            # is the one thing the panel exists to tell apart.
+            logger.warning("hot scan failed for %s on %s: %s: %s",
+                           tenant.slug, interval, type(exc).__name__, exc)
+            raise
+
+    stale = held is None or (time.time() - held["at"]) > HOT_TTL_S
+    if (stale or refresh) and not (held and held["refreshing"]):
+        _start_hot_refresh(key, compute, held)
+        held = _HOT.get(key)
+
+    if held is None or (not held["rows"] and held["at"] == 0.0):
+        # Nothing cached yet and a sweep just started. Answer NOW with an
+        # honest empty rather than holding the request for twenty seconds --
+        # the desk polls every 3s while `refreshing` is set and will pick the
+        # result up. Blocking here is what made the panel report the API as
+        # unreachable while it was working perfectly.
+        return {"kind": "hot", "rows": [], "superhot": [], "refreshing": True,
+                "interval": interval, "scanned": len(universe),
+                "source": "tradier", "venue": "live" if live else "sandbox",
+                "meta": _hot_meta(settings, interval, universe, live, None)}
+    rows = held["rows"]
+    # The desk reads snap.rows, snap.superhot and snap.meta.{gates,sh_gates}.
+    # The v2 rewrite served only `rows`, so the SUPERHOT panel had nothing to
+    # render and the gate labels had no numbers -- the section simply was not
+    # there, with no error to explain it.
+    superhot = [{**r, **r["sh"]} for r in rows
+                if r.get("sh") and r["sh"].get("sh_side")]
+    superhot.sort(key=lambda r: (r.get("adx") or 0), reverse=True)
+    plain = [{k: v for k, v in r.items() if k != "sh"} for r in rows]
+
+    return {"kind": "hot", "rows": plain, "superhot": superhot,
+            "refreshing": held["refreshing"],
+            "interval": interval, "scanned": len(universe),
+            "source": "tradier", "venue": "live" if live else "sandbox",
+            "meta": _hot_meta(settings, interval, universe, live, held["at"])}
 
 
 @market_router.get("/flow", operation_id="getTradierOptionsFlow")

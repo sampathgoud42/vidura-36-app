@@ -55,7 +55,7 @@ const BOT_DEFAULTS = {
   // the parlay bot's own knobs, in the cents and counts it actually reads —
   // its defaults, so an untouched form launches the documented engine
   parley: {
-    bank: '100', stake_usd: '12', slippage_c: '5', max_per_event: '2', escalation_pct: '30', fill_wait_s: '60', daily_enabled: false, daily_at: '17:50', daily_stake_usd: '5', daily_min_legs: '5', daily_max_legs: '24', daily_min_c: '60', bank_sl_pct: '50',
+    bank: '100', stake_usd: '12', max_usd: '15.6', slippage_c: '5', max_per_event: '2', escalation_pct: '30', fill_wait_s: '60', daily_enabled: false, daily_at: '17:50', daily_stake_usd: '5', daily_min_legs: '5', daily_max_legs: '24', daily_min_c: '60', bank_sl_pct: '50',
     min_prob_c: '80', min_set: '2', lead_scope: 'current',
     min_legs: '2', max_legs: '0', max_open: '1', cooldown_min: '15',
     slippage_c: '3', max_price_c: '95', tp_ceiling_c: '97', stop_loss_c: '20',
@@ -103,7 +103,7 @@ function errText(e) {
     if (d && typeof d === 'object') return JSON.stringify(d);
     return e.message || `HTTP ${e.status}`;
   }
-  return 'Backend unreachable — is the Vidura API running on :8790?';
+  return 'Backend unreachable — is the Vidura API running on :8791?';
 }
 
 function usd(v) {
@@ -809,7 +809,7 @@ function LuckPanel() {
   const [busy, setBusy] = useState('');
   const [elapsed, setElapsed] = useState(0);
   const [form, setForm] = useState({
-    min_legs: '5', max_legs: '24', min_leg_c: '60',
+    min_legs: '5', max_legs: '24', min_leg_c: '60', max_leg_c: '98',
     min_volume_usd: '5000', min_usd: '5', max_usd: '7.5',
   });
   const [preview, setPreview] = useState(null);
@@ -840,6 +840,7 @@ function LuckPanel() {
       const job = await vidura.luckPreview({
         min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
         min_leg_c: n(form.min_leg_c, 60),
+        max_leg_c: n(form.max_leg_c, 98),
         min_volume_usd: n(form.min_volume_usd, 0),
       });
       const out = await awaitJob(job.job_id);
@@ -917,16 +918,26 @@ function LuckPanel() {
                 <input className="bs-input" type="number" min="1" step="0.5"
                   value={form.max_usd} onChange={set('max_usd')} />
               </label>
+              {/* The leg price BAND, as a range like the two above it. The
+                  ceiling was fixed at 98c and unstated: on a long shot built
+                  from many legs, an already-decided one adds cost without
+                  adding chance -- it only shortens the payout. */}
               <label className="bs-luckrow">
-                <span className="lbl">Leg min</span>
+                <span className="lbl">Leg c</span>
                 <input className="bs-input" type="number" min="5" max="98"
                   value={form.min_leg_c} onChange={set('min_leg_c')}
-                  title="minimum price per leg, in cents" />
-                <i>c</i>
+                  title="cheapest leg to accept, in cents" />
+                <i>–</i>
+                <input className="bs-input" type="number" min="6" max="99"
+                  value={form.max_leg_c} onChange={set('max_leg_c')}
+                  title="dearest leg to accept, in cents — above this the outcome is already decided" />
+              </label>
+              <label className="bs-luckrow">
+                <span className="lbl">Min vol</span>
                 <input className="bs-input" type="number" min="0" step="500"
                   value={form.min_volume_usd} onChange={set('min_volume_usd')}
                   title="minimum dollar volume per leg" />
-                <i>$vol</i>
+                <i>$</i>
               </label>
             </div>
 
@@ -1313,11 +1324,12 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
       // pass. The engine buys as many as the budget covers, and none if it
       // cannot cover one.
       if (num(f.stake_usd) > 0) body.stake_usd = num(f.stake_usd);
+      // The ceiling in dollars. The engine still escalates by a
+      // percentage; it derives that from these two so the operator
+      // never has to.
+      if (num(f.max_usd) > 0) body.max_usd = num(f.max_usd);
       { const n = parseInt(f.max_per_event, 10);
         if (Number.isFinite(n) && n >= 1) body.max_per_event = n; }
-      if (num(f.escalation_pct) >= 0 && f.escalation_pct !== '' && f.escalation_pct !== undefined) {
-        body.escalation_pct = num(f.escalation_pct);
-      }
       { const n = parseInt(f.fill_wait_s, 10);
         if (Number.isFinite(n) && n >= 5) body.fill_wait_s = n; }
       // The daily long-shot ticket. Sent only when it is switched on, so an
@@ -1599,12 +1611,6 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
                   onChange={set('daily_min_c')} />
               </div>
               <div className="bs-field">
-                <span className="lbl">Raise stake if unfilled (%)</span>
-                <input className="bs-input" type="number" min="0" max="100"
-                  value={f.escalation_pct ?? ''} placeholder="30" onChange={set('escalation_pct')}
-                  title="if nobody fills the parlay, try once more at up to this much more - $12 at 30% becomes $15.60. 0 turns it off" />
-              </div>
-              <div className="bs-field">
                 <span className="lbl">Wait before raising (s)</span>
                 <input className="bs-input" type="number" min="5" max="600"
                   value={f.fill_wait_s ?? ''} placeholder="60" onChange={set('fill_wait_s')} />
@@ -1622,7 +1628,13 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
                   title="how many cents above the parlay's theoretical price to pay - makers quote a combo above the product of its legs, so a ceiling at fair value never trades" />
               </div>
               <div className="bs-field">
-                <span className="lbl">$ per parlay</span>
+                <span className="lbl">Spend at most ($)</span>
+                <input className="bs-input" type="number" min="1" max="5000" step="0.5"
+                  value={f.max_usd ?? ''} placeholder="15.6" onChange={set('max_usd')}
+                  title="the most one parlay may cost — it starts at the figure below and is raised once, up to this, if nobody fills it" />
+              </div>
+              <div className="bs-field">
+                <span className="lbl">Spend at least ($)</span>
                 <input className="bs-input" type="number" min="1" max="5000" step="0.5"
                   value={f.stake_usd ?? ''} placeholder="5" onChange={set('stake_usd')}
                   title="what ONE parlay may spend - the engine buys as many contracts as this covers at the price it rests, and none if it cannot cover one" />
@@ -2840,7 +2852,7 @@ export default function BotStationSite() {
             <div className="bs-modal">
               <div className="bs-modal-hd"><h2>NO OPERATOR</h2>
                 <button type="button" className="close" onClick={() => setConsole(null)}>✕</button></div>
-              <p className="bs-note">No user found (status NA) — the API on :8790 must be
+              <p className="bs-note">No user found (status NA) — the API on :8791 must be
                 reachable and the default operator "sampath" must exist. The station retries
                 automatically.</p>
             </div>

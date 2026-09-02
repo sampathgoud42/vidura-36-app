@@ -519,6 +519,7 @@ class LuckPreviewRequest(BaseModel):
     min_legs: int = Field(default=5, ge=2, le=24)
     max_legs: int = Field(default=24, ge=2, le=24)
     min_leg_c: int = Field(default=60, ge=5, le=98)
+    max_leg_c: int = Field(default=98, ge=6, le=99)
     min_volume_usd: float = Field(default=0, ge=0)
 
 
@@ -564,6 +565,7 @@ def luck_preview(payload: LuckPreviewRequest,
                                  min_legs=payload.min_legs,
                                  max_legs=payload.max_legs,
                                  min_leg_c=payload.min_leg_c,
+                                 max_leg_c=payload.max_leg_c,
                                  min_volume_usd=payload.min_volume_usd),
             "status": "running"}
 
