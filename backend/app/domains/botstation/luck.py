@@ -111,7 +111,13 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         # from it: scores are only ever fetched for legs above 90%, so a
         # tennis leg at the operator's own 60c bar was refused for lacking a
         # score nobody had gone to look for.
-        tennis_needs_score=False)
+        tennis_needs_score=False,
+        # And no price waiver here. The regular engine waives its gates for a
+        # tennis leg above 93c because at that price the quote has settled the
+        # question; this ticket is built from long odds, and a waiver that
+        # also waived the CEILING would put 99c legs in a combo bought for
+        # its payout.
+        tennis_lock_c=None)
 
     # Counted at every stage, by sport. Nothing here filters ON sport -- the
     # scan takes whatever Kalshi has open -- so "why is there never a cricket
@@ -275,7 +281,7 @@ def place(cred, token: str, *, tenant_slug: str = "",
         # the re-check must not apply a rule the selection did not.
         max_spread_c=int(held.get("max_spread_c", filters.MAX_SPREAD_C)),
         max_hours=int(held.get("max_hours", filters.MAX_HOURS_TO_EXPIRY)),
-        tennis_needs_score=False)
+        tennis_needs_score=False, tennis_lock_c=None)
 
     if len(candidates) < int(min_legs):
         return {"placed": False,
