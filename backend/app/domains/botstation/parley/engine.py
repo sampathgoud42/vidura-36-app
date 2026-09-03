@@ -301,6 +301,36 @@ def place_combo(cred, combo: ComboOrder, collection: str, *,
         return {"placed": False, "tickers": combo.tickers,
                 "detail": "the exchange did not return a combined market"}
 
+    # ALREADY HOLDING THIS EXACT PARLAY? Then stop here.
+    #
+    # A combined market's ticker is derived from its legs, so the same four
+    # legs re-create the same instrument rather than a new one -- and the
+    # per-event allowance upstream cannot see that, because however many
+    # times we buy this combo the exchange still reports ONE position row and
+    # the tracker counts it once. That is how the same parlay was bought
+    # three passes running: 14:27, 14:39 and 14:51, $18.47 into one ticket
+    # that was meant to cost $12 once.
+    #
+    # The ticker is the exact identity of the bet, so it is what the check
+    # uses. Adding to a parlay we already hold is never this engine's
+    # intent -- the stake is per parlay, not per pass.
+    try:
+        already = kalshi.position_for(cred, ticker) or {}
+        held_n = abs(float(already.get("position_fp") or 0))
+    except Exception:                                   # noqa: BLE001
+        # Unknown is not zero. Buying on a failed read is how the duplicate
+        # happens, so decline the pass instead.
+        return {"placed": False, "combo_ticker": ticker,
+                "tickers": combo.tickers, "theoretical_c": fair_c,
+                "detail": "could not read the position in this combo — "
+                          "not buying it again"}
+    if held_n > 0:
+        return {"placed": False, "combo_ticker": ticker,
+                "tickers": combo.tickers, "theoretical_c": fair_c,
+                "limit_c": limit_c, "stake_usd": stake_usd, "contracts": 0,
+                "detail": f"already holding {held_n:g} of this exact parlay "
+                          f"— one stake per parlay, not one per pass"}
+
     # What the book actually looks like, rather than what the quote fields
     # imply. A newly created combo has no book at all, and its ask reads 0.
     book = {}
@@ -371,6 +401,28 @@ def place_combo(cred, combo: ComboOrder, collection: str, *,
                        if not has_asks else "no quote; resting a limit")}
 
 
+def _position_totals(cred, ticker: str) -> tuple[float, float, float]:
+    """(contracts, dollars traded, fees paid) on one ticker, right now.
+
+    Zeros when nothing is held. These are RUNNING totals for the life of the
+    position, which is why every caller here reads them twice and uses the
+    difference: on a ticker bought before, the absolute figures describe
+    every buy that ever happened, not the one just made.
+    """
+    from app.domains.botstation import venue as kalshi
+
+    held = kalshi.position_for(cred, ticker) or {}
+
+    def _num(key: str) -> float:
+        try:
+            return float(held.get(key) or 0)
+        except (TypeError, ValueError):
+            return 0.0
+
+    return (_num("position_fp"), _num("total_traded_dollars"),
+            _num("fees_paid_dollars"))
+
+
 def _take_quote(cred, ticker: str, stake_usd: float, limit_c: int,
                 base: dict) -> dict | None:
     """Ask makers for a price and take it if it beats the limit.
@@ -428,6 +480,12 @@ def _take_quote(cred, ticker: str, stake_usd: float, limit_c: int,
 
         logger.info("accepting a quote on %s: %dc (limit %dc), $%.2f",
                     ticker, cost_c, limit_c, stake_usd)
+        # What was there BEFORE. The read-back below is a position, not a
+        # fill, so on a ticker we already hold it answers with the running
+        # total -- and reporting that as this trade books a $3.50 buy as the
+        # $11.66 one that came before it. Subtracting a baseline is what
+        # makes the number this fill's own.
+        before_n, before_cost, before_fees = _position_totals(cred, ticker)
         kalshi.accept_quote(cred, rfq_id, q.get("id"), kalshi.BUY_YES_ACCEPTS)
 
         # What the fill ACTUALLY was, read back from the exchange. The size
@@ -436,19 +494,24 @@ def _take_quote(cred, ticker: str, stake_usd: float, limit_c: int,
         # wrong number to report and the wrong number to book.
         filled_n, filled_cost, filled_fees = None, None, None
         # Retried, because the position does not appear the instant the quote
-        # is accepted -- the first read comes back empty and the ledger then
-        # records the size we ASKED for, which is the number this read-back
-        # exists to replace.
+        # is accepted -- the first read comes back unchanged and the ledger
+        # then records the size we ASKED for, which is the number this
+        # read-back exists to replace.
+        #
+        # The wait is for the position to MOVE, not merely to exist. On a
+        # ticker with a prior position the old total is there from the first
+        # read, and treating that as "the fill landed" is what put a
+        # duplicate $11.97 in the ledger.
         for _ in range(4):
             try:
-                held = kalshi.position_for(cred, ticker) or {}
-                filled_n = float(held.get("position_fp") or 0) or None
-                filled_cost = float(held.get("total_traded_dollars") or 0) or None
-                filled_fees = float(held.get("fees_paid_dollars") or 0) or None
+                now_n, now_cost, now_fees = _position_totals(cred, ticker)
             except Exception:                           # noqa: BLE001
                 logger.info("filled, but the position could not be read back")
                 break
-            if filled_n:
+            if now_n > before_n:
+                filled_n = round(now_n - before_n, 2)
+                filled_cost = round(now_cost - before_cost, 4) or None
+                filled_fees = round(now_fees - before_fees, 5) or None
                 break
             time.sleep(1.0)
 
