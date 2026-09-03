@@ -815,6 +815,11 @@ function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2 }) {
 function TradeHistoryPanel({ data, busy, error, onRefresh, disabled,
                             ledgerSync, onLedgerSync }) {
   const [showAll, setShowAll] = useState(false);
+  // SETTLE LEDGER asks first. ⟳ beside it only reads, so it fires on the
+  // click; this one rewrites the P&L on every stale-open ledger row from the
+  // exchange, and a write that runs on a mis-tap is the kind of button people
+  // learn to be afraid of.
+  const [confirmSettle, setConfirmSettle] = useState(false);
   const pnl = (data && data.pnl) || {};
   const open = (data && data.open) || [];
   const settled = (data && data.history) || [];
@@ -822,8 +827,10 @@ function TradeHistoryPanel({ data, busy, error, onRefresh, disabled,
   const rows = open.concat(settled);
   const shown = showAll ? rows.slice(0, 400) : rows.slice(0, 40);
   const sign = (v) => (v == null ? '' : v > 0 ? 'win' : v < 0 ? 'loss' : '');
+  const busySettling = !!(ledgerSync && ledgerSync.busy);
 
   return (
+    <>
     <div className="bs-panel">
       <div className="bs-panel-hd">
         <h3>Trade History</h3>
@@ -839,9 +846,9 @@ function TradeHistoryPanel({ data, busy, error, onRefresh, disabled,
             filling in. Kept separate from ⟳ above because that one only
             reads, and this one writes. */}
         <button type="button" className="bs-ledgerbtn"
-          onClick={onLedgerSync} disabled={(ledgerSync && ledgerSync.busy) || disabled}
+          onClick={() => setConfirmSettle(true)} disabled={busySettling || disabled}
           title="settle every stale-open LEDGER row's P&L from Kalshi fills + settlements">
-          {ledgerSync && ledgerSync.busy ? '⟳ SETTLING' : 'SETTLE LEDGER'}
+          {busySettling ? '⟳ SETTLING' : 'SETTLE LEDGER'}
         </button>
         <span className="idx">
           {data ? `${rows.length} MKT` : busy ? '…' : '—'}
@@ -937,6 +944,49 @@ function TradeHistoryPanel({ data, busy, error, onRefresh, disabled,
         </div>
       </div>
     </div>
+
+    {/* Says what it will change and what it will not touch. "Are you sure?"
+        with no object is a question nobody can answer -- the reason to stop
+        and read is that this rewrites rows, and the reason to go ahead is
+        that it cannot reach the account. */}
+    {confirmSettle && (
+      <div className="bs-modal-backdrop"
+        onMouseDown={(e) => { if (e.target === e.currentTarget) setConfirmSettle(false); }}>
+        <div className="bs-modal" style={{ maxWidth: 440 }}>
+          <div className="bs-modal-hd">
+            <h2>SETTLE LEDGER</h2>
+            <button type="button" className="close"
+              onClick={() => setConfirmSettle(false)}>x</button>
+          </div>
+          <div className="bs-modal-bd" style={{ padding: '16px 20px' }}>
+            <p className="bs-note" style={{ marginBottom: 10 }}>
+              Reads every stale-open row in the bots' ledger, asks Kalshi what
+              became of it, and REWRITES that row's P&amp;L with the
+              exchange's own fills and settlements.
+            </p>
+            <p className="bs-note" style={{ marginBottom: 10, color: 'var(--bs-ink-3)' }}>
+              It changes bookkeeping only — no order is placed, cancelled or
+              modified, and nothing on the account moves. The trade history
+              above is read straight from Kalshi and is unaffected; what this
+              corrects is the 7-day per-bot record and the P&amp;L graph, both
+              of which are computed from closed ledger rows.
+            </p>
+            <p className="bs-note" style={{ marginBottom: 16, color: 'var(--bs-ink-4)' }}>
+              One Kalshi lookup per stale row, so it can take a minute.
+            </p>
+            <div className="bs-luck-actions">
+              <button type="button" className="bs-btn"
+                onClick={() => setConfirmSettle(false)}>CANCEL</button>
+              <button type="button" className="bs-btn live"
+                onClick={() => { setConfirmSettle(false); onLedgerSync(); }}>
+                SETTLE LEDGER
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
