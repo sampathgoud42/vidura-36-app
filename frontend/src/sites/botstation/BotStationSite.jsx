@@ -2969,8 +2969,17 @@ export default function BotStationSite() {
             </div>
           </div>
 
-          {/* right: event feed */}
+          {/* right: what the account did, then what the bots did */}
           <div className="bs-col">
+            {/* FIRST on this column. The ACCOUNT's record, not the bots' --
+                the ledger feed still loads (the per-bot 7d record is computed
+                from it), but a row a bot wrote at entry cannot know how the
+                market resolved, and where the two disagree this is the one
+                that is right. It leads because it is the money. */}
+            <TradeHistoryPanel data={hist} busy={histBusy} error={histErr}
+              onRefresh={loadHist} disabled={!user}
+              ledgerSync={feedSync} onLedgerSync={syncFeed} />
+
             <div className="bs-panel">
               <div className="bs-panel-hd">
                 <h3>Bots Log</h3>
@@ -3011,14 +3020,6 @@ export default function BotStationSite() {
                 )}
               </div>
             </div>
-
-            {/* The ACCOUNT's record, not the bots'. The ledger feed still
-                loads (the per-bot 7d record is computed from it), but a row
-                a bot wrote at entry cannot know how the market resolved --
-                and where the two disagree, this is the one that is right. */}
-            <TradeHistoryPanel data={hist} busy={histBusy} error={histErr}
-              onRefresh={loadHist} disabled={!user}
-              ledgerSync={feedSync} onLedgerSync={syncFeed} />
 
             <LuckPanel />
 
