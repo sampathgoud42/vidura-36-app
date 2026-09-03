@@ -521,6 +521,11 @@ class LuckPreviewRequest(BaseModel):
     min_leg_c: int = Field(default=60, ge=5, le=98)
     max_leg_c: int = Field(default=98, ge=6, le=99)
     min_volume_usd: float = Field(default=0, ge=0)
+    # The two gates the long shot used to inherit from the regular parlay
+    # engine. Omitted means the engine's own numbers -- 3c and 72h -- so the
+    # default lives in one place rather than being restated here.
+    max_spread_c: int | None = Field(default=None, ge=0, le=99)
+    max_hours: int | None = Field(default=None, ge=1, le=720)
 
 
 class LuckPlaceRequest(BaseModel):
@@ -566,7 +571,9 @@ def luck_preview(payload: LuckPreviewRequest,
                                  max_legs=payload.max_legs,
                                  min_leg_c=payload.min_leg_c,
                                  max_leg_c=payload.max_leg_c,
-                                 min_volume_usd=payload.min_volume_usd),
+                                 min_volume_usd=payload.min_volume_usd,
+                                 max_spread_c=payload.max_spread_c,
+                                 max_hours=payload.max_hours),
             "status": "running"}
 
 

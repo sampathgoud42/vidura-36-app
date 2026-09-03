@@ -286,6 +286,11 @@ export const vidura = {
   portfolio: (userId) => api.get('/portfolio'),
   // daily PV snapshots (one per CST day, written by fresh /portfolio fetches)
   portfolioHistory: (userId) => api.get('/portfolio/history'),
+  // what the ACCOUNT did: open positions and settled markets straight from
+  // Kalshi, with the P&L of both. Not the ledger -- the ledger is what the
+  // bots believed at entry, this is what the exchange has. Reaches back over
+  // a thousand settlements, so it is slower than the panel it feeds.
+  tradeHistory: () => api.get('/trade-history', { timeout: 60000 }),
   // settle stale-open ledger rows from Kalshi fills+settlements (all bot
   // families). hours = staleness floor, NOT a lookback window; apply=false
   // previews. Kalshi lookups per row -> generous timeout.

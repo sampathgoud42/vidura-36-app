@@ -803,6 +803,144 @@ function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2 }) {
 // and it deserves the screen. Placing then happens without a second prompt --
 // the sheet IS the confirmation, and a modal on top of a modal only teaches
 // people to click through both.
+// Trade history, straight from Kalshi: every open position and every settled
+// market, with the P&L of both.
+//
+// The totals sit at the TOP rather than under the list, because "what is this
+// account actually doing" is the question the panel exists to answer and a
+// number you have to scroll to is a number nobody reads. Realized comes from
+// settlements, unrealized from Kalshi's own mark on the open book -- so the
+// headline covers positions still running and positions long finished, which
+// neither figure does on its own.
+function TradeHistoryPanel({ data, busy, error, onRefresh, disabled,
+                            ledgerSync, onLedgerSync }) {
+  const [showAll, setShowAll] = useState(false);
+  const pnl = (data && data.pnl) || {};
+  const open = (data && data.open) || [];
+  const settled = (data && data.history) || [];
+  // Open first: they are the ones that can still be acted on.
+  const rows = open.concat(settled);
+  const shown = showAll ? rows.slice(0, 400) : rows.slice(0, 40);
+  const sign = (v) => (v == null ? '' : v > 0 ? 'win' : v < 0 ? 'loss' : '');
+
+  return (
+    <div className="bs-panel">
+      <div className="bs-panel-hd">
+        <h3>Trade History</h3>
+        <button type="button" className={`bs-syncbtn ${busy ? 'busy' : ''}`}
+          onClick={onRefresh} disabled={busy || disabled}
+          title="re-read positions and settlements from Kalshi">
+          ⟳
+        </button>
+        {/* The ledger reconciler. It has no other trigger anywhere -- it used
+            to hang off the event log's refresh -- and the per-bot 7d record
+            and the PV graph are both computed from closed ledger rows, so
+            dropping the button with the log would have quietly stopped them
+            filling in. Kept separate from ⟳ above because that one only
+            reads, and this one writes. */}
+        <button type="button" className="bs-ledgerbtn"
+          onClick={onLedgerSync} disabled={(ledgerSync && ledgerSync.busy) || disabled}
+          title="settle every stale-open LEDGER row's P&L from Kalshi fills + settlements">
+          {ledgerSync && ledgerSync.busy ? '⟳ SETTLING' : 'SETTLE LEDGER'}
+        </button>
+        <span className="idx">
+          {data ? `${rows.length} MKT` : busy ? '…' : '—'}
+        </span>
+      </div>
+      <div className="bs-panel-bd">
+        {error ? (
+          <p className="bs-note" style={{ marginBottom: 6, color: 'var(--bs-crit)' }}>
+            {error}
+          </p>
+        ) : null}
+        {ledgerSync && ledgerSync.note ? (
+          <p className="bs-note" style={{ marginBottom: 6,
+            color: /failed/.test(ledgerSync.note) ? 'var(--bs-crit)' : undefined }}>
+            {ledgerSync.busy ? '⟳ ' : ''}{ledgerSync.note}
+          </p>
+        ) : null}
+
+        {/* P&L across everything: settled and still open. */}
+        <div className="bs-pl">
+          <div className="bs-pl-cell">
+            <span className="k">Total P/L</span>
+            <b className={sign(pnl.total_usd)}>{usd(pnl.total_usd)}</b>
+            <span className="sub">realized + open</span>
+          </div>
+          <div className="bs-pl-cell">
+            <span className="k">Realized</span>
+            <b className={sign(pnl.realized_usd)}>{usd(pnl.realized_usd)}</b>
+            <span className="sub">
+              {pnl.settled_count != null
+                ? `${pnl.settled_count} settled · ${pnl.wins || 0}W ${pnl.losses || 0}L`
+                : '—'}
+            </span>
+          </div>
+          <div className="bs-pl-cell">
+            <span className="k">Unrealized</span>
+            {/* Kalshi's mark on the open book minus what it cost. Blank
+                rather than zero when the exchange gave us no mark: an
+                unknown shown as $0.00 is a number an operator acts on. */}
+            <b className={sign(pnl.unrealized_usd)}>{usd(pnl.unrealized_usd)}</b>
+            <span className="sub">
+              {pnl.open_count ? `${pnl.open_count} open · ${usd(pnl.open_cost_usd)} in` : 'nothing open'}
+            </span>
+          </div>
+          <div className="bs-pl-cell">
+            <span className="k">Fees</span>
+            <b>{usd(pnl.fees_usd)}</b>
+            <span className="sub">
+              {pnl.open_mark_usd != null ? `mark ${usd(pnl.open_mark_usd)}` : 'paid to the venue'}
+            </span>
+          </div>
+        </div>
+
+        <div className="bs-feed">
+          {data && rows.length === 0 && (
+            <div className="bs-feed-empty">
+              {busy ? 'reading the account…' : 'nothing on this account yet'}
+            </div>
+          )}
+          {!data && !error && (
+            <div className="bs-feed-empty">reading positions and settlements…</div>
+          )}
+          {shown.map((r) => (
+            <div key={`${r.status}-${r.ticker}-${r.at}`}
+              className={`bs-evt ${r.status === 'OPEN' ? 'open'
+                : r.pnl_usd > 0 ? 'good' : r.pnl_usd < 0 ? 'crit' : ''}`}>
+              <span className="rail" />
+              <div className="bd">
+                <div className="top">
+                  <span className="chip pl">{r.title}</span>
+                  <span className={`bs-st ${r.status.toLowerCase()}`}>{r.status}</span>
+                  <span className="ts">{utcTs(r.at)}</span>
+                </div>
+                <div className="msg" title={r.ticker}>{r.ticker}</div>
+                <div className="msg">
+                  {r.contracts}× · {usd(r.cost_usd)}
+                  {' → '}
+                  {r.status === 'OPEN' ? 'TBD' : usd(r.revenue_usd)}
+                  {r.pnl_usd != null
+                    ? <> · <b className={sign(r.pnl_usd)}>{usd(r.pnl_usd)}</b></>
+                    : null}
+                  {r.fees_usd ? <span className="dim"> · fee {usd(r.fees_usd)}</span> : null}
+                </div>
+              </div>
+            </div>
+          ))}
+          {rows.length > 40 && (
+            <button type="button" className="bs-morebtn"
+              onClick={() => setShowAll((v) => !v)}>
+              {showAll ? 'Show less' : `Load history (${rows.length} markets)`}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function LuckPanel() {
   const [open, setOpen] = useState(false);
   const [sheet, setSheet] = useState(false);
@@ -811,6 +949,9 @@ function LuckPanel() {
   const [form, setForm] = useState({
     min_legs: '5', max_legs: '24', min_leg_c: '60', max_leg_c: '98',
     min_volume_usd: '5000', min_usd: '5', max_usd: '7.5',
+    // The engine's own gates, now the operator's. Seeded with what the
+    // long shot used to inherit silently: 3c wide, closing within 72h.
+    max_spread_c: '3', max_hours: '72',
   });
   const [preview, setPreview] = useState(null);
   const [keep, setKeep] = useState(() => new Set());
@@ -842,13 +983,25 @@ function LuckPanel() {
         min_leg_c: n(form.min_leg_c, 60),
         max_leg_c: n(form.max_leg_c, 98),
         min_volume_usd: n(form.min_volume_usd, 0),
+        max_spread_c: n(form.max_spread_c, 3),
+        max_hours: n(form.max_hours, 72),
       });
       const out = await awaitJob(job.job_id);
       if (out && out.ok) {
         setPreview(out);
         setKeep(new Set(out.legs.map((l) => l.ticker)));
         setSheet(true);
-      } else setError((out && out.detail) || 'no ticket could be built');
+      } else {
+        // A failed build is exactly when the funnel is worth reading, and
+        // the sheet that shows it never opens. So the sports that HAD legs
+        // and lost them come back with the error rather than being thrown
+        // away with it.
+        const lost = ((out && out.funnel) || [])
+          .filter((f) => f.eligible > 0 && f.picked === 0)
+          .map((f) => `${f.sport} ${f.eligible} eligible, ${f.hosted} in the collection`);
+        setError([(out && out.detail) || 'no ticket could be built']
+          .concat(lost.length ? [`— ${lost.join('; ')}`] : []).join(' '));
+      }
     } catch (e) {
       setError(String((e && e.message) || e));
     } finally { setBusy(''); }
@@ -939,6 +1092,24 @@ function LuckPanel() {
                   title="minimum dollar volume per leg" />
                 <i>$</i>
               </label>
+              {/* The two gates the long shot used to inherit from the
+                  regular parlay engine. They are the ones that decide how
+                  MUCH of the board is eligible at all, so on a ticket built
+                  from twenty legs they matter more than any price bar. */}
+              <label className="bs-luckrow">
+                <span className="lbl">Max spread</span>
+                <input className="bs-input" type="number" min="0" max="99"
+                  value={form.max_spread_c} onChange={set('max_spread_c')}
+                  title="widest bid/ask a leg may have, in cents" />
+                <i>c</i>
+              </label>
+              <label className="bs-luckrow">
+                <span className="lbl">Closes in</span>
+                <input className="bs-input" type="number" min="1" max="720"
+                  value={form.max_hours} onChange={set('max_hours')}
+                  title="how far ahead a leg may close — the parlay pays nothing until its last leg resolves" />
+                <i>h</i>
+              </label>
             </div>
 
             <div className="bs-luck-actions">
@@ -984,6 +1155,10 @@ function LuckPanel() {
               {chosen.length} of {preview.legs.length} kept
               {' \u00b7 '}chance {(chosenOdds * 100).toFixed(3)}%
               {' \u00b7 '}{preview.scanned.toLocaleString()} markets scanned
+              {preview.max_spread_c == null ? null
+                : ` \u00b7 \u2264${preview.max_spread_c}c wide`}
+              {preview.max_hours == null ? null
+                : `, closing within ${preview.max_hours}h`}
               {' \u00b7 '}buys at market, spending
               ${n(form.min_usd, 5).toFixed(2)}\u2013${n(form.max_usd, 7.5).toFixed(2)}
             </p>
@@ -1010,7 +1185,9 @@ function LuckPanel() {
                 <thead>
                   <tr><th>Keep</th><th>#</th><th>Market</th><th>Outcome</th>
                     <th>Sport</th>
-                    <th className="num">Price</th><th className="num">Volume</th></tr>
+                    <th className="num">Price</th>
+                    <th className="num">Spread</th>
+                    <th className="num">Volume</th></tr>
                 </thead>
                 <tbody>
                   {preview.legs.map((l, i) => (
@@ -1025,12 +1202,64 @@ function LuckPanel() {
                       <td>{l.outcome}</td>
                       <td className="dim">{l.sport}</td>
                       <td className="num">{l.price_c}c</td>
+                      {/* Both sides, as the book shows them: a leg at 89 is
+                          a different bet quoted 89/91 than quoted 89/97,
+                          and the width is the part a wider gate lets in. */}
+                      <td className="num" title={l.spread_c == null ? '' : `${l.spread_c}c wide`}>
+                        {l.bid_c == null || l.ask_c == null
+                          ? '—'
+                          : `${l.bid_c}–${l.ask_c}`}
+                      </td>
                       <td className="num">${Math.round(l.volume_usd).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
+
+            {/* Every sport on the board, not only the ones that made it.
+                Nothing in the scan filters BY sport, so a ticket of twenty
+                soccer legs looks like a sport list unless the rows that
+                contributed nothing are shown too -- and the column a sport
+                stops at is the gate that stopped it. */}
+            {!preview.funnel ? null : (
+              <details className="bs-luck-funnel">
+                <summary>
+                  every sport scanned ({preview.funnel.length}) — where each one stopped
+                </summary>
+                <div className="bs-luck-legs">
+                  <table>
+                    <thead>
+                      <tr><th>Sport</th>
+                        <th className="num">Live</th>
+                        <th className="num">Eligible</th>
+                        <th className="num">On volume</th>
+                        <th className="num">In collection</th>
+                        <th className="num">Kept</th></tr>
+                    </thead>
+                    <tbody>
+                      {preview.funnel.map((f) => (
+                        <tr key={f.sport} className={f.picked ? '' : 'off'}>
+                          <td>{f.sport}</td>
+                          <td className="num">{f.live.toLocaleString()}</td>
+                          <td className="num">{f.eligible}</td>
+                          <td className="num">{f.on_volume}</td>
+                          <td className="num">{f.hosted}</td>
+                          <td className="num">{f.picked}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="bs-luck-note">
+                  Live → Eligible is your leg price, spread and horizon.
+                  Eligible → On volume is the min-volume floor.
+                  On volume → In collection is Kalshi's: a parlay can only be
+                  built from events one collection carries, and the one
+                  hosting the most legs is the one used.
+                </p>
+              </details>
+            )}
           </div>
         </div>
       ) : null}
@@ -2166,6 +2395,13 @@ export default function BotStationSite() {
   const [bots, setBots] = useState([]);           // /bots registry (versions)
   const [feed, setFeed] = useState(null);         // merged recent trades
   const [feedFilter, setFeedFilter] = useState('all');   // all | btc15 | btc60 | sports
+  // The account's own record, from Kalshi. The ledger feed above still runs
+  // -- the per-bot 7d record is computed from it -- but what the panel SHOWS
+  // is this: positions and settlements as the exchange has them, which is the
+  // only version of a trade that cannot be a bot's guess.
+  const [hist, setHist] = useState(null);
+  const [histBusy, setHistBusy] = useState(false);
+  const [histErr, setHistErr] = useState('');
   const [perf, setPerf] = useState({});           // key -> {trades,wins,losses,pnl}
   const [pnlWin, setPnlWin] = useState(null);     // {d1, d7, d30} rolling P&L
   const [pvHist, setPvHist] = useState(null);     // daily PV snapshots (graph)
@@ -2303,6 +2539,18 @@ export default function BotStationSite() {
     }
   }, [user, feedSync.busy, loadFeed]);
 
+  const loadHist = useCallback(async () => {
+    if (!user) return;
+    setHistBusy(true);
+    try {
+      const out = await vidura.tradeHistory();
+      setHist(out);
+      setHistErr(out && out.available === false ? (out.detail || 'unavailable') : '');
+    } catch (e) {
+      setHistErr(errText(e));
+    } finally { setHistBusy(false); }
+  }, [user]);
+
   const loadPv = useCallback(async () => {
     if (!user) return;
     try { setPv(await vidura.portfolio(user.user_id)); } catch { /* creds missing */ }
@@ -2318,12 +2566,19 @@ export default function BotStationSite() {
     loadStatuses();
     loadFeed();
     loadPv();
+    loadHist();
     const t1 = setInterval(() => { if (!document.hidden) loadStatuses(); }, 10_000);
     const t2 = setInterval(() => { if (!document.hidden) loadFeed(); }, 60_000);
     // async PV refresh: cheap (server caches ~30s/user), keeps the cell live
     const t3 = setInterval(() => { if (!document.hidden) loadPv(); }, 60_000);
-    return () => { clearInterval(t1); clearInterval(t2); clearInterval(t3); };
-  }, [user, loadStatuses, loadFeed, loadPv]);
+    // Slower than the rest on purpose: it reads every settlement the account
+    // has, which is a second or two of Kalshi paging, and settlements arrive
+    // hours apart rather than by the minute.
+    const t4 = setInterval(() => { if (!document.hidden) loadHist(); }, 180_000);
+    return () => {
+      clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4);
+    };
+  }, [user, loadStatuses, loadFeed, loadPv, loadHist]);
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
@@ -2707,70 +2962,13 @@ export default function BotStationSite() {
               </div>
             </div>
 
-            <div className="bs-panel">
-              <div className="bs-panel-hd">
-                <h3>Trade Event Log</h3>
-                <button type="button" className={`bs-syncbtn ${feedSync.busy ? 'busy' : ''}`}
-                  onClick={syncFeed} disabled={feedSync.busy || !user}
-                  title="pull the bots' ledgers, then settle every stale-open row's P&L from Kalshi fills + settlements">
-                  ⟳
-                </button>
-                <select className="bs-fsel" value={feedFilter} aria-label="filter by bot"                  style={{ color: BOT_BY_KEY[feedFilter]?.accent }}
-                  onChange={(e) => setFeedFilter(e.target.value)}>
-                  <option value="all">ALL BOTS</option>
-                  {BOTS.map((b) => <option key={b.key} value={b.key}>{b.label}</option>)}
-                </select>
-                <span className="idx">
-                  {feed ? `${(feedFilter === 'all' ? feed : feed.filter((t) => (t.bot || '').toLowerCase() === feedFilter)).length} EVT` : '…'}
-                </span>
-              </div>
-              <div className="bs-panel-bd">
-                {feedSync.note && (
-                  <p className={`bs-note ${/failed/.test(feedSync.note) ? '' : ''}`}
-                    style={{ marginBottom: 6, color: /failed/.test(feedSync.note) ? 'var(--bs-crit)' : undefined }}>
-                    {feedSync.busy ? '⟳ ' : ''}{feedSync.note}
-                  </p>
-                )}
-                <div className="bs-feed">
-                  {feed && feed.length === 0 && (
-                    <div className="bs-feed-empty">no trades recorded yet — launch a core</div>
-                  )}
-                  {feed && feed.length > 0
-                    && feed.every((t) => feedFilter !== 'all' && (t.bot || '').toLowerCase() !== feedFilter) && (
-                    <div className="bs-feed-empty">no recent trades from {BOT_BY_KEY[feedFilter]?.label || feedFilter}</div>
-                  )}
-                  {(feed || [])
-                    .filter((t) => feedFilter === 'all' || (t.bot || '').toLowerCase() === feedFilter)
-                    .slice(0, 30)
-                    .map((tr) => (
-                    <div key={tr.id} className={`bs-evt st-${(tr.status || '').toLowerCase()}`}>
-                      <span className="rail" />
-                      <div className="bd">
-                        <div className="top">
-                          <span className={`chip ${chipFor((tr.bot || '').toLowerCase())}`}>{tr.bot}</span>
-                          {tr.is_live === false && <span className="chip" style={{ color: 'var(--bs-ink-3)', background: 'rgba(255,255,255,0.06)' }}>PAPER</span>}
-                          <span className={`bs-st ${(tr.status || '').toLowerCase()}`}>{tr.status}</span>
-                          <span className="ts">{utcTs(tr.closed_at || tr.opened_at)}</span>
-                        </div>
-                        {/* market, side, and the cash: in USD both ends, so
-                            exit minus entry IS the result. */}
-                        <div className="msg" title={tr.ticker}>
-                          {tr.market}{tr.outcome ? ` · ${tr.outcome}` : ''}
-                        </div>
-                        <div className="msg">
-                          {tr.entry != null ? usd(tr.entry) : '—'}
-                          {' → '}
-                          {tr.status === 'OPEN' ? 'TBD' : (tr.exit != null ? usd(tr.exit) : '—')}
-                          {tr.pnl != null
-                            ? <> · <b className={tr.pnl >= 0 ? 'win' : 'loss'}>{usd(tr.pnl)}</b></>
-                            : null}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
+            {/* The ACCOUNT's record, not the bots'. The ledger feed still
+                loads (the per-bot 7d record is computed from it), but a row
+                a bot wrote at entry cannot know how the market resolved --
+                and where the two disagree, this is the one that is right. */}
+            <TradeHistoryPanel data={hist} busy={histBusy} error={histErr}
+              onRefresh={loadHist} disabled={!user}
+              ledgerSync={feedSync} onLedgerSync={syncFeed} />
 
             <LuckPanel />
 

@@ -344,6 +344,7 @@ def eligible_legs(markets: list[MarketState],
                   max_leg: float = MAX_LEG_PROBABILITY,
                   max_hours: int = MAX_HOURS_TO_EXPIRY,
                   max_spread_c: int = MAX_SPREAD_C,
+                  tennis_needs_score: bool = True,
                   now=None
                   ) -> tuple[list[ComboCandidate], list[dict]]:
     """Every market that may become a leg, and why the rest were refused.
@@ -352,6 +353,14 @@ def eligible_legs(markets: list[MarketState],
     logged away because "nothing qualified tonight" and "everything was one
     cent short" look identical from the outside, and the operator needs to be
     able to tell.
+
+    ``tennis_needs_score`` is the one sport-specific rule in here, and it is
+    optional because it does not mean the same thing to every caller. A
+    regular parlay buys a 90c tennis leg as a near-certainty, so the price
+    alone is not enough and the live score has to agree. The long-shot ticket
+    buys a 65c leg AS a gamble at a bar it set itself -- there the rule
+    silently removes tennis from the board, since scores are only ever read
+    for legs that already clear the 90% bar.
     """
     scores = scores or {}
     tracker = tracker or PositionTracker()
@@ -398,16 +407,22 @@ def eligible_legs(markets: list[MarketState],
         if is_tennis(market.sport):
             score_state = scores.get(market.ticker)
             if score_state is None:
-                rejected.append({
-                    "ticker": market.ticker,
-                    "reason": "tennis leg with no live score — the price alone "
-                              "is not enough at the 90% bar"})
-                continue
-            ok, why = verify_tennis_conditions(score_state, min_lead=min_lead)
-            if not ok:
-                rejected.append({"ticker": market.ticker, "reason": why})
-                continue
-            reason = f"implied {market.implied_probability:.0%}; {why}"
+                if tennis_needs_score:
+                    rejected.append({
+                        "ticker": market.ticker,
+                        "reason": "tennis leg with no live score — the price "
+                                  "alone is not enough at the 90% bar"})
+                    continue
+            else:
+                ok, why = verify_tennis_conditions(score_state,
+                                                   min_lead=min_lead)
+                # A score that CONTRADICTS the price still refuses the leg,
+                # whoever is asking. The option is about needing a score, not
+                # about ignoring one we have.
+                if not ok:
+                    rejected.append({"ticker": market.ticker, "reason": why})
+                    continue
+                reason = f"implied {market.implied_probability:.0%}; {why}"
 
         seen_events.add(event)
         candidates.append(ComboCandidate(market=market, reason=reason,

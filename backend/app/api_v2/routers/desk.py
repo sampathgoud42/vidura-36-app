@@ -185,6 +185,32 @@ def portfolio_history(days: int = Query(default=30, le=3650),
             "basis": "closed ledger rows, not shared account value"}
 
 
+@trades_router.get("/trade-history", operation_id="getKalshiTradeHistory")
+@deps.tenant_scoped
+def trade_history(limit: int = Query(default=500, ge=1, le=1000),
+                  tenant: Tenant = Depends(deps.current_tenant),
+                  db: DbSession = Depends(deps.get_db),
+                  kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Open positions and settled markets, as the EXCHANGE has them.
+
+    Deliberately NOT the ledger. The ledger is what the bots believed at the
+    moment they entered; this is what the account did, fees and settlements
+    included, and where the two disagree it is the ledger that is wrong.
+
+    Best-effort like the portfolio panel above: no credential or no venue
+    reports as unavailable rather than failing the request.
+    """
+    from app.domains.botstation import history
+
+    try:
+        cred = tenants.load_credential(db, tenant.id, "kalshi", kr)
+    except Exception:                                   # noqa: BLE001
+        return {"available": False, "venue": "kalshi",
+                "detail": "no Kalshi credential for this operator",
+                "open": [], "history": [], "pnl": {}}
+    return history.trade_history(cred, limit=limit)
+
+
 # ---- venue + market data --------------------------------------------------
 
 @market_router.get("/venue", operation_id="getTradierVenue")
