@@ -273,6 +273,17 @@ class Settings(BaseSettings):
     # unlock per machine via TBOT_PAPER_ONLY=false in its .env.
     paper_only: bool = True
 
+    # Guard 7: refuse a new entry while the risk monitor has not completed a
+    # recent sweep. ON in the CODE default, because opening a position whose
+    # stop nobody is watching keeps its upside and silently loses its floor.
+    #
+    # Turned off per machine with TBOT_ENFORCE_STOP_WATCHDOG=false, which is
+    # an operator saying "I will watch this one myself". The refusal becomes
+    # a warning: the entry goes through, the desk still says the stop is
+    # unwatched, and the position carries that sentence in its note so it is
+    # visible later, when the reason it was disabled has been forgotten.
+    enforce_stop_watchdog: bool = True
+
     # Optional shared API key. When set, a request may authenticate with it
     # in the X-API-Key header INSTEAD of logging in — for scripts and cron,
     # which have no way to type a password. Empty (default) = only login
