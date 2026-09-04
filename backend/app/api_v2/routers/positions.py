@@ -401,15 +401,42 @@ def _expiration_from(occ_symbol: str) -> str:
 
 @router.post("/positions/sweep", operation_id="sweepTradierPositions")
 @deps.tenant_scoped
-def sweep(idempotency_key: str | None = Header(default=None,
-                                               alias="Idempotency-Key"),
-          tenant: Tenant = Depends(deps.current_tenant),
-          db: DbSession = Depends(deps.get_db),
-          kr: Keyring = Depends(deps.keyring)) -> dict:
-    """Flatten everything.
+def sweep(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """Run one monitor pass now -- the same pass the background loop runs.
+
+    THIS ROUTE USED TO FLATTEN THE ACCOUNT, and that was not a difference of
+    opinion about a name, it was live money. v1's /positions/sweep ran a
+    monitor pass; the rebuild gave the same path, and the same operation_id,
+    the opposite meaning. Both desks kept calling it as a refresh -- on a 30s
+    poll and on every re-render -- so every order placed was closed within
+    seconds of being opened, under the note "closed by the operator". The
+    operator it named had not touched anything.
+
+    A refresh is what every caller believed this was, so a refresh is what it
+    is. Flattening moved to /positions/flatten, which nothing polls.
+    """
+    from app.domains.trading.risk import monitor
+
+    try:
+        return monitor.run_pass(tenant_id=tenant.id)
+    except monitor.MonitorPassIncomplete as exc:
+        # Some position could not be checked. That is the operator's business
+        # -- it is what the desk shows in its event feed -- and it is not a
+        # server error, so it comes back as an outcome rather than a 500.
+        return {"checked": 0, "events": [str(exc)], "incomplete": True}
+
+
+@router.post("/positions/flatten", operation_id="flattenTradierPositions")
+@deps.tenant_scoped
+def flatten(idempotency_key: str | None = Header(default=None,
+                                                 alias="Idempotency-Key"),
+            tenant: Tenant = Depends(deps.current_tenant),
+            db: DbSession = Depends(deps.get_db),
+            kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Close every open and pending position. Deliberate, never polled.
 
     Each position is closed independently and a failure on one does not
-    abandon the rest -- a sweep that stops halfway leaves the operator worse
+    abandon the rest -- a flatten that stops halfway leaves the operator worse
     off than one that never started, because they now believe they are flat.
     """
     rows = list(db.scalars(select(Position).where(
@@ -424,7 +451,7 @@ def sweep(idempotency_key: str | None = Header(default=None,
             orders.close_position(db, tenant_id=tenant.id, cred=cred, pos=pos)
             closed.append(pos.id)
         except Exception as exc:                        # noqa: BLE001
-            logger.warning("sweep: position %s: %s", pos.id, exc)
+            logger.warning("flatten: position %s: %s", pos.id, exc)
             failed.append({"id": pos.id, "detail": str(exc)})
     db.commit()
     return {"closed": closed, "failed": failed, "considered": len(rows)}

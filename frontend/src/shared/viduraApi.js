@@ -334,7 +334,12 @@ export const vidura = {
     api.send('/tradier/positions/contract', body, { timeout: 60000 }),
   tradierPositions: (userId, status, venue = 'all', marks = false) =>
     api.get('/tradier/positions', { params: { status, venue, marks } }),
+  // A monitor pass. Safe to poll -- it reads the venue and updates state.
   tradierSweep: (userId) => api.send(`/tradier/positions/sweep`),
+  // Closes EVERY open and pending position. Never poll this, never put it on
+  // a refresh path: it used to live at /positions/sweep and the desk's own
+  // 30s refresh was flattening every order seconds after it was placed.
+  tradierFlatten: (userId) => api.send(`/tradier/positions/flatten`),
   tradierClose: (userId, id, force = false) =>
     api.send(`/tradier/positions/${id}/close?force=${force}`),
   // move a live position's take-profit; re-rests the sell on the venue
