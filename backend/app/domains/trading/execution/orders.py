@@ -44,22 +44,52 @@ def _resource(occ_symbol: str, sandbox: bool) -> str:
 
 # ---- guard 7 --------------------------------------------------------------
 
-def require_watched_stops(tenant_id: str) -> None:
+def stop_watch_warning(tenant_id: str) -> str | None:
+    """The sentence, or None when the stop IS being watched.
+
+    Separated from the decision to refuse so that the same words can be a
+    refusal, a log line, or a note on the position, depending on what the
+    operator has asked for.
+    """
+    age = heartbeat.seconds_since_last_pass(tenant_id)
+    if age <= heartbeat.STALE_AFTER_S:
+        return None
+    pretty = "never" if age == float("inf") else f"{int(age)}s ago"
+    return f"the risk monitor last completed a sweep {pretty}"
+
+
+def require_watched_stops(tenant_id: str) -> str | None:
     """Refuse to open a position nobody is watching the stop for.
 
     Opening a position whose stop-loss is unwatched is worse than not trading:
     the take-profit rests at the venue and would still fire, so the position
     keeps its upside and silently loses its floor. This is the guard that
     makes the Phase 3 alarm visible instead of silent.
+
+    TBOT_ENFORCE_STOP_WATCHDOG=false downgrades the refusal to a warning. That
+    is an operator saying they will watch this one themselves, and the request
+    is honoured -- but not quietly. The warning is logged, and it is RETURNED
+    so the caller can write it onto the position, because the moment that
+    matters is not now, it is later, when somebody is looking at a filled
+    contract and wondering whether anything is minding its floor.
     """
-    age = heartbeat.seconds_since_last_pass(tenant_id)
-    if age > heartbeat.STALE_AFTER_S:
-        pretty = "never" if age == float("inf") else f"{int(age)}s ago"
+    from app.core.config import get_settings
+
+    warning = stop_watch_warning(tenant_id)
+    if warning is None:
+        return None
+
+    if get_settings().enforce_stop_watchdog:
         raise ExecutionRefused(
-            f"the risk monitor last completed a sweep {pretty}; new entries "
-            f"are refused while stop-losses are not being watched",
+            f"{warning}; new entries are refused while stop-losses are not "
+            f"being watched",
             status_code=503,
         )
+
+    logger.warning("tenant %s: %s -- stop-losses are NOT being watched and "
+                   "the entry was allowed anyway because "
+                   "TBOT_ENFORCE_STOP_WATCHDOG is off", tenant_id, warning)
+    return f"{warning} — stop-loss is not being watched"
 
 
 # ---- guards 3 and 4 -------------------------------------------------------
@@ -143,8 +173,10 @@ def open_position(db: Session, *, tenant_id: str, cred, symbol: str, side: str,
                 f"{clock.now().strftime('%H:%M')}"
             )
 
-    # Guard 7 — is anyone watching the stop?
-    require_watched_stops(tenant_id)
+    # Guard 7 — is anyone watching the stop? Returns the warning instead of
+    # raising when the operator has turned the refusal off; it goes on the
+    # position below rather than disappearing into a log nobody reads.
+    unwatched = require_watched_stops(tenant_id)
 
     # Guard 2 — one request at a time per contract, across processes.
     with leases.hold(tenant_id=tenant_id, db=db,
@@ -173,6 +205,11 @@ def open_position(db: Session, *, tenant_id: str, cred, symbol: str, side: str,
             opened_at=utcnow(),
             note=f"buy_to_open {contracts} @ {limit_price:.2f} limit",
         )
+        if unwatched:
+            # Opened with the watchdog off. Flagged for review because that is
+            # the whole point: this one needs a human to keep an eye on it.
+            pos.note += f" — WARNING: {unwatched}"
+            pos.needs_review = True
         db.add(pos)
         db.flush()
 
@@ -242,4 +279,5 @@ def close_position(db: Session, *, tenant_id: str, cred, pos: Position,
 
 
 __all__ = ["ExecutionRefused", "open_position", "close_position",
-           "require_watched_stops", "idempotency", "leases"]
+           "require_watched_stops", "stop_watch_warning", "idempotency",
+           "leases"]

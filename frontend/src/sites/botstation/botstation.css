@@ -368,6 +368,48 @@
 .bs-evt .msg b.loss { color: var(--bs-crit); }
 .bs-feed-empty { padding: 14px 0; text-align: center; color: var(--bs-ink-4); font-size: 11px; }
 
+/* ── P&L strip above the trade history ───────────────────────────────────── */
+/* Four cells rather than a sentence: these are numbers an operator compares
+   at a glance, and a paragraph makes them scan one by one. Two columns so it
+   survives the narrow right-hand column without wrapping mid-figure. */
+.bs-pl {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: var(--bs-hair-2); border: 1px solid var(--bs-hair-2);
+  margin-bottom: 10px;
+}
+.bs-pl-cell {
+  display: flex; flex-direction: column; gap: 2px;
+  padding: 7px 9px; background: #0a0d13;
+}
+.bs-pl-cell .k {
+  font-size: 8.5px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--bs-ink-4);
+}
+.bs-pl-cell b {
+  font-size: 15px; font-variant-numeric: tabular-nums; color: var(--bs-ink-1);
+}
+.bs-pl-cell b.win { color: var(--bs-good); }
+.bs-pl-cell b.loss { color: var(--bs-crit); }
+.bs-pl-cell .sub { font-size: 9px; color: var(--bs-ink-4); }
+.bs-evt .msg .dim { color: var(--bs-ink-4); }
+.bs-morebtn {
+  width: 100%; margin-top: 4px; padding: 6px 0;
+  background: none; border: 0; cursor: pointer;
+  font-family: var(--bs-mono, "JetBrains Mono", monospace); font-size: 10px;
+  letter-spacing: 0.1em; text-transform: uppercase; color: var(--bs-cyan);
+}
+.bs-morebtn:hover { color: var(--bs-sun); }
+/* Secondary to the refresh beside it, and it writes -- so it reads as a
+   labelled action rather than another glyph to press by reflex. */
+.bs-ledgerbtn {
+  background: none; border: 1px solid var(--bs-hair-2); cursor: pointer;
+  padding: 2px 7px; color: var(--bs-ink-3);
+  font-family: var(--bs-mono, "JetBrains Mono", monospace);
+  font-size: 8.5px; letter-spacing: 0.12em;
+}
+.bs-ledgerbtn:hover:not(:disabled) { color: var(--bs-sun); border-color: var(--bs-sun); }
+.bs-ledgerbtn:disabled { opacity: 0.5; cursor: default; }
+
 /* ── daily PV pixel graph ────────────────────────────────────────────────── */
 .bs-pvpanel { margin-top: 12px; }
 .bs-pvpredict {
@@ -762,6 +804,25 @@
 .bs-luck-legs tbody tr.off { opacity: 0.4; text-decoration: line-through; }
 .bs-luck-legs input[type="checkbox"] { accent-color: var(--bs-sun); cursor: pointer; }
 .bs-luck-legs td:nth-child(3) { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+/* The per-sport funnel under the legs. Folded away by default: it answers a
+   question ("why is my sport never in the ticket") that is not asked on every
+   build, and open by default it would push the legs off the screen. */
+.bs-luck-funnel { margin-top: 12px; }
+.bs-luck-funnel > summary {
+  cursor: pointer; list-style: none;
+  font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--bs-ink-3); padding: 6px 0;
+}
+.bs-luck-funnel > summary::-webkit-details-marker { display: none; }
+.bs-luck-funnel > summary::before { content: '+ '; color: var(--bs-sun); }
+.bs-luck-funnel[open] > summary::before { content: '\2212 '; }
+.bs-luck-funnel > summary:hover { color: var(--bs-sun); }
+/* A sport that contributed no leg is dimmed, not struck through -- it was
+   never deselected, it simply did not get this far. */
+.bs-luck-funnel .bs-luck-legs tbody tr.off {
+  opacity: 0.45; text-decoration: none;
+}
+
 .bs-luck-hd { cursor: pointer; display: flex; align-items: baseline; gap: 10px; }
 .bs-luck-toggle { margin-left: auto; color: var(--bs-ink-3); font-size: 16px; line-height: 1; }
 .bs-luck-hd:hover .bs-luck-toggle { color: var(--bs-sun); }
@@ -849,6 +910,9 @@
 .bs-st.won { color: #2fd35b; border-color: #2fd35b; }
 .bs-st.lost { color: #ff6b6b; border-color: #ff6b6b; }
 .bs-st.closed, .bs-st.settled, .bs-st.cancelled { color: var(--bs-ink-3); border-color: var(--bs-hair-2); }
+/* A market that settled for exactly what it cost. Neither colour fits, and
+   painting it as a win or a loss would be a lie about a real outcome. */
+.bs-st.flat { color: var(--bs-ink-3); border-color: var(--bs-hair-2); }
 /* Written off after three sweeps found nothing. Dimmer than a loss:
    it is an absence of record, not a result. */
 .bs-st.not_found { color: #8a7fa8; border-color: #8a7fa8; }

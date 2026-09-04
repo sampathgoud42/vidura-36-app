@@ -15,7 +15,16 @@ from datetime import datetime, timedelta
 # finer bar, which is why NATIVE and DERIVED are separate ideas here rather
 # than one list of "supported intervals".
 NATIVE_INTERVALS = ("1min", "5min", "15min")
-DERIVED_FROM = {"2min": ("1min", 2), "3min": ("1min", 3), "10min": ("5min", 2)}
+DERIVED_FROM = {
+    "2min": ("1min", 2), "3min": ("1min", 3), "10min": ("5min", 2),
+    # The desk's HOT panel offers 5m / 15m / 30m / 1H. The first two are
+    # native; the last two were in no list at all, so choosing either raised
+    # "unsupported interval" inside the scan -- which the caller swallowed,
+    # leaving an empty panel and no reason for it. Folded from 15min because
+    # that is the coarsest bar Tradier serves directly, so a 1H bar is four
+    # requests' worth of data rather than sixty.
+    "30min": ("15min", 2), "1h": ("15min", 4), "60min": ("15min", 4),
+}
 
 
 def source_interval(interval: str) -> tuple[str, int]:

@@ -401,6 +401,29 @@ def _combo_outcome(outcome: dict) -> str:
     return head if len(sides) <= 4 else f"{head} +{len(sides) - 4}"
 
 
+def _escalation_pct(stake: float, ceiling: float, fallback: float) -> float:
+    """How far the stake may be raised, from a dollar ceiling when given.
+
+    The engine escalates by a PERCENTAGE, but nobody sizing a bet thinks in
+    "30% more than twelve" -- they think "between twelve and fifteen-sixty".
+    So the form asks for two dollar figures and the percentage is derived
+    here, which keeps one source of truth: the numbers the operator typed.
+
+    A ceiling below the stake is not an error, it is "do not escalate" -- the
+    stake is a floor and a smaller ceiling cannot lower it.
+    """
+    try:
+        stake = float(stake)
+        ceiling = float(ceiling or 0)
+    except (TypeError, ValueError):
+        return float(fallback)
+    if stake <= 0 or ceiling <= 0:
+        return float(fallback)
+    if ceiling <= stake:
+        return 0.0
+    return round((ceiling / stake - 1.0) * 100.0, 2)
+
+
 def _redundant_legs(message: str) -> list[str]:
     """The leg tickers Kalshi named as redundant, from its rejection.
 
@@ -612,7 +635,10 @@ def run_once(cred, args) -> int:
         # regular engine's problem, and vice versa.
         ignore_tickers=set(
             (_load_daily(Path(args.customer_dir)).get("tickers") or [])),
-        escalation_pct=_env("escalation_pct", 30.0, float),
+        escalation_pct=_escalation_pct(
+            _env("stake_usd", args.stake_usd, float),
+            _env("max_usd", 0.0, float),
+            _env("escalation_pct", 30.0, float)),
         fill_wait_s=_env("fill_wait_s", 60, int),
         max_combos=_env("max_combos", args.max_combos, int),
         min_legs=_env("min_legs", args.min_legs, int),

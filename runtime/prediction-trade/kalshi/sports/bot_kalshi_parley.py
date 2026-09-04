@@ -185,7 +185,7 @@ TRADE_CSV = str(_env("TRADE_CSV",
 LEDGER_PATH = Path(_env("LEDGER", str(CUSTOMER_DIR / "trade_history" /
                                       ("parley_ledger_paper.json" if PAPER
                                        else "parley_ledger.json"))))
-LEDGER_KEEP_DAYS = _i("LEDGER_KEEP_DAYS", 3)
+LEDGER_KEEP_DAYS = _i("LEDGER_KEEP_DAYS", 5)
 
 _LEDGER: dict = {}                 # combo key -> epoch of the entry
 _OPEN: dict = {}                   # combined market ticker -> position info

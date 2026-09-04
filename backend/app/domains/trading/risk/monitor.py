@@ -156,7 +156,18 @@ def run_pass(*, tenant_id: str) -> dict:
 
 
 def sweep_all_tenants() -> list[dict]:
-    """Every tenant holding something at risk.
+    """Every ACTIVE tenant -- not just the ones already holding something.
+
+    The obvious version of this asked which tenants have active positions and
+    swept only those. It deadlocked the guard it feeds: an operator with
+    nothing open was never swept, so no heartbeat row was ever written, so
+    ``seconds_since_last_pass`` was infinite, so guard 7 refused the entry
+    that would have given them their first position. The monitor reported
+    "never" and the operator could not get out of it from the desk.
+
+    A tenant with nothing at risk is swept in the cheapest possible way --
+    ``run_pass`` finds no rows and stamps the heartbeat -- and that stamp is
+    the truthful one: there are no stops, so every stop is being watched.
 
     Each tenant is swept independently and a failure is contained: one
     operator's expired credential must not disarm another operator's stop.
@@ -167,18 +178,13 @@ def sweep_all_tenants() -> list[dict]:
     db = session_factory()()
     try:
         tenant_ids = {
-            r[0] for r in db.execute(
-                select(Position.tenant_id).where(Position.status.in_(ACTIVE))
-            )
-        }
-        active = {
             t.id for t in db.scalars(select(Tenant).where(
                 Tenant.status == "active")).all()
         }
     finally:
         db.close()
 
-    for tenant_id in sorted(tenant_ids & active):
+    for tenant_id in sorted(tenant_ids):
         try:
             out.append(run_pass(tenant_id=tenant_id))
         except Exception as exc:                        # noqa: BLE001

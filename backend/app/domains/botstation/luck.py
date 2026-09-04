@@ -62,34 +62,81 @@ def _sweep() -> None:
 
 
 def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
-            min_leg_c: int = 60, min_volume_usd: float = 0.0,
+            min_leg_c: int = 60, max_leg_c: int = 98,
+            min_volume_usd: float = 0.0,
+            max_spread_c: int | None = None,
+            max_hours: int | None = None,
             sports: list[str] | None = None) -> dict:
     """Choose the legs and describe them. Buys nothing, creates nothing.
 
     Returns a token the caller passes back to `place`. Nothing is created on
     the exchange here -- not even the combined market -- so a preview nobody
     confirms leaves no trace.
+
+    ``max_spread_c`` and ``max_hours`` are the two gates the regular parlay
+    engine sets for itself and this ticket has no reason to share. A long
+    shot is bought to be held to settlement, so a wide market costs it less
+    than it costs a parlay meant to be worth its price the whole way -- and
+    the 72h horizon exists to stop ONE leg holding a parlay's capital for
+    weeks, which is a different concern when the whole ticket is $5.
+
+    None means the engine's own default, so there is one place either number
+    is written down.
     """
     from app.domains.botstation.parley import engine, filters
     from app.domains.botstation.parley.models import ComboOrder
+
+    spread_c = (filters.MAX_SPREAD_C if max_spread_c is None
+                else max(0, int(max_spread_c)))
+    hours = (filters.MAX_HOURS_TO_EXPIRY if max_hours is None
+             else max(1, int(max_hours)))
 
     runtime = _runtime()
     markets, scores = runtime._load_markets(
         cred, sports or [], include_sub_events=True)
 
     frac = max(1, int(min_leg_c)) / 100.0
+    # The CEILING was never offered, so it silently used the engine's 98%.
+    # It matters more here than on a regular parlay: a long shot is built from
+    # many legs, and one already-decided leg at 99c adds cost without adding
+    # any real chance -- it just shortens the payout.
+    ceiling = min(99, max(int(min_leg_c) + 1, int(max_leg_c))) / 100.0
     candidates, _rejected = filters.eligible_legs(
         markets, scores=scores, tracker=filters.PositionTracker(),
-        tennis_min=frac, other_min=frac, soccer_min=frac)
+        tennis_min=frac, other_min=frac, soccer_min=frac,
+        max_leg=ceiling, max_spread_c=spread_c, max_hours=hours,
+        # Tennis on the same terms as every other sport. This ticket sets one
+        # bar for the whole board, and the score rule -- written for legs
+        # bought as near-certainties at 90c -- was quietly deleting tennis
+        # from it: scores are only ever fetched for legs above 90%, so a
+        # tennis leg at the operator's own 60c bar was refused for lacking a
+        # score nobody had gone to look for.
+        tennis_needs_score=False,
+        # And no price waiver here. The regular engine waives its gates for a
+        # tennis leg above 93c because at that price the quote has settled the
+        # question; this ticket is built from long odds, and a waiver that
+        # also waived the CEILING would put 99c legs in a combo bought for
+        # its payout.
+        tennis_lock_c=None)
+
+    # Counted at every stage, by sport. Nothing here filters ON sport -- the
+    # scan takes whatever Kalshi has open -- so "why is there never a cricket
+    # leg" can only be answered by showing where cricket was lost, and the
+    # honest answer is usually a gate the operator set or a collection that
+    # does not carry the match. Without this the sheet shows twenty soccer
+    # legs and no reason, and the bot looks like it has a sport list.
+    eligible_by_sport = _by_sport(candidates)
 
     floor = max(0.0, float(min_volume_usd))
     if floor:
         candidates = [c for c in candidates if c.market.volume_usd >= floor]
+    volume_by_sport = _by_sport(candidates)
 
     collection, candidates = runtime._daily_collection(cred, candidates)
     if not collection:
         return {"ok": False,
                 "detail": "no open collection can host these legs"}
+    hosted_by_sport = _by_sport(candidates)
 
     candidates.sort(key=lambda c: (c.market.volume_usd, c.market.volume),
                     reverse=True)
@@ -97,7 +144,10 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
     if len(picked) < int(min_legs):
         return {"ok": False, "scanned": len(markets),
                 "detail": f"only {len(picked)} legs clear the bar, "
-                          f"{min_legs} required"}
+                          f"{min_legs} required",
+                "funnel": _funnel(markets, eligible_by_sport,
+                                  volume_by_sport, hosted_by_sport,
+                                  _by_sport(picked))}
 
     combo = ComboOrder(legs=picked, allow_same_event=True)
     token = uuid.uuid4().hex
@@ -106,6 +156,13 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         "expires": time.time() + PREVIEW_TTL_S,
         "tickers": [c.ticker for c in picked],
         "collection": collection,
+        # The gates these legs were chosen under, carried to `place`. Its
+        # re-check runs the same filters again, and on the engine's defaults
+        # it would throw out every leg a widened spread had just admitted --
+        # the operator would see a ticket built and then refused for legs
+        # they were shown and approved.
+        "max_spread_c": spread_c,
+        "max_hours": hours,
     }
     return {
         "ok": True,
@@ -115,16 +172,60 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         "collection": collection,
         "probability": round(combo.combined_probability, 6),
         "fair_c": engine.theoretical_price_c(combo),
+        # Echoed so the sheet can say what this ticket was filtered on
+        # rather than the operator having to remember what they typed.
+        "max_spread_c": spread_c,
+        "max_hours": hours,
+        # The QUOTE, not just the price. price_c is the bid, and a bid on its
+        # own cannot be judged: 89 is a different leg at 89/91 than it is at
+        # 89/97, and the second is what a spread gate exists to keep out. The
+        # sheet is where a leg is accepted or dropped by hand, so both sides
+        # and the width belong on it.
         "legs": [{"ticker": c.ticker,
                   "outcome": c.market.outcome or c.ticker,
                   "market": c.market.title or c.ticker,
                   "event": c.market.event_ticker or "",
                   "sport": c.market.sport,
                   "price_c": c.market.yes_bid_c,
+                  "bid_c": c.market.yes_bid_c,
+                  "ask_c": c.market.yes_ask_c,
+                  "spread_c": c.market.spread_c,
                   "volume_usd": round(c.market.volume_usd, 2)}
                  for c in picked],
         "expires_in_s": PREVIEW_TTL_S,
+        "funnel": _funnel(markets, eligible_by_sport, volume_by_sport,
+                          hosted_by_sport, _by_sport(picked)),
     }
+
+
+def _by_sport(items) -> dict[str, int]:
+    """How many of these legs each sport contributed."""
+    out: dict[str, int] = {}
+    for item in items:
+        sport = (getattr(item, "market", item).sport or "other").lower()
+        out[sport] = out.get(sport, 0) + 1
+    return out
+
+
+def _funnel(markets, eligible: dict, volume: dict, hosted: dict,
+            picked: dict) -> list[dict]:
+    """One row per sport on the board, from live markets down to legs kept.
+
+    Ordered by what is LIVE rather than by what survived, so a sport that
+    contributed nothing still appears -- that row is the whole point. The
+    columns narrow left to right, and whichever pair a sport falls between
+    names the gate that stopped it.
+    """
+    live: dict[str, int] = {}
+    for m in markets:
+        sport = (m.sport or "other").lower()
+        live[sport] = live.get(sport, 0) + 1
+    return [{"sport": sport, "live": n,
+             "eligible": eligible.get(sport, 0),
+             "on_volume": volume.get(sport, 0),
+             "hosted": hosted.get(sport, 0),
+             "picked": picked.get(sport, 0)}
+            for sport, n in sorted(live.items(), key=lambda kv: -kv[1])]
 
 
 def place(cred, token: str, *, tenant_slug: str = "",
@@ -173,7 +274,14 @@ def place(cred, token: str, *, tenant_slug: str = "",
     candidates, _ = filters.eligible_legs(
         [m for m in markets if m.ticker in wanted], scores=scores,
         tracker=filters.PositionTracker(),
-        tennis_min=0.01, other_min=0.01, soccer_min=0.01)
+        tennis_min=0.01, other_min=0.01, soccer_min=0.01,
+        # On the preview's own gates, not the engine's. A leg admitted by a
+        # widened spread would otherwise be thrown out here, and the ticket
+        # refused for legs the operator was shown and kept. Tennis likewise:
+        # the re-check must not apply a rule the selection did not.
+        max_spread_c=int(held.get("max_spread_c", filters.MAX_SPREAD_C)),
+        max_hours=int(held.get("max_hours", filters.MAX_HOURS_TO_EXPIRY)),
+        tennis_needs_score=False, tennis_lock_c=None)
 
     if len(candidates) < int(min_legs):
         return {"placed": False,

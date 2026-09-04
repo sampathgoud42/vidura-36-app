@@ -189,7 +189,7 @@ _PARLEY_OPTIONS = {
     # parlay at 91c and one at 45c are both normal), so a fixed count spends
     # a different amount every pass while this spends the same.
     "stake_usd": {"type": "number", "min": 1, "max": 5000, "default": 12,
-                  "label": "Dollars per parlay", "group": "Per trade"},
+                  "label": "Spend at least ($)", "group": "Per trade"},
     "min_legs": {"type": "integer", "min": 2, "max": 5, "default": 2,
                  "label": "Minimum legs per combo", "group": "Parlay"},
     "max_legs": {"type": "integer", "min": 2, "max": 5, "default": 5,
@@ -207,6 +207,12 @@ _PARLEY_OPTIONS = {
     # If a parlay does not execute, raise the stake once by this much and try
     # again. A maker who will not fill a small ticket often fills a larger
     # one. The cap is on the whole escalation, not per step -- 0 turns it off.
+    # The ceiling in DOLLARS. escalation_pct still exists and still works, but
+    # nobody sizing a bet thinks in "30% more than twelve" -- they think
+    # "between twelve and fifteen-sixty". Given both, the dollar ceiling wins,
+    # because it is the one the operator typed.
+    "max_usd": {"type": "number", "min": 0, "max": 5000, "default": 15.6,
+                "label": "Spend at most ($)", "group": "Per trade"},
     "escalation_pct": {"type": "number", "min": 0, "max": 100, "default": 30,
                        "label": "Raise stake by up to (%) if unfilled",
                        "group": "Parlay"},

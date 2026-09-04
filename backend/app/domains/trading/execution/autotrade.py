@@ -253,9 +253,16 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
     # available, and it is better to refuse at arm time -- when someone is
     # looking -- than at 2pm inside a loop nobody is reading.
     if not heartbeat.is_fresh(tenant_id):
-        raise AutoTradeRefused(
-            "stop monitoring is not running for this operator; the watcher "
-            "will not arm while stops are unwatched")
+        if get_settings().enforce_stop_watchdog:
+            raise AutoTradeRefused(
+                "stop monitoring is not running for this operator; the watcher "
+                "will not arm while stops are unwatched")
+        # Same override as the order path. An UNATTENDED trader with an
+        # unwatched stop is the worst combination this system can be put in,
+        # so it is said at WARNING every time one arms this way.
+        logger.warning(
+            "tenant %s: arming an unattended watcher while stop monitoring is "
+            "stale -- TBOT_ENFORCE_STOP_WATCHDOG is off", tenant_id)
 
     with _LOCK:
         existing = _WATCHERS.get(tenant_id)
