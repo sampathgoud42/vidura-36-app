@@ -1249,7 +1249,16 @@ function LuckPanel() {
                       </td>
                       <td className="num">{i + 1}</td>
                       <td title={l.event}>{l.market}</td>
-                      <td>{l.outcome}</td>
+                      {/* A leg taken from the other side of its market is
+                          the opposite bet, and the outcome text already says
+                          "NOT X" -- the chip is so it cannot be skim-read as
+                          a backing of the team it names. */}
+                      <td>
+                        {l.side === 'no'
+                          ? <span className="chip pl" style={{ marginRight: 5 }}>NO</span>
+                          : null}
+                        {l.outcome}
+                      </td>
                       <td className="dim">{l.sport}</td>
                       <td className="num">{l.price_c}c</td>
                       {/* Both sides, as the book shows them: a leg at 89 is

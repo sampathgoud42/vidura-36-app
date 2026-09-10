@@ -135,7 +135,7 @@ def within_spread(market, *, max_c: int = MAX_SPREAD_C) -> tuple[bool, str]:
     if spread is None:
         return False, "not quoted on both sides"
     if spread > max_c:
-        return False, (f"{market.yes_bid_c}/{market.yes_ask_c} is {spread}c "
+        return False, (f"{market.bid_c}/{market.ask_c} is {spread}c "
                        f"wide; {max_c}c is the limit")
     return True, f"{spread}c spread"
 
@@ -170,7 +170,7 @@ def meets_odds_floor(market: MarketState, minimum: float | None = None,
     probability = market.implied_probability
     if probability is None:
         return False, "no bid — the market is not quoted"
-    if market.yes_ask_c is None:
+    if market.ask_c is None:
         return False, "no ask — the market cannot be bought"
     if probability < floor:
         return False, (f"implied {probability:.0%} is below the "
@@ -366,6 +366,7 @@ def eligible_legs(markets: list[MarketState],
                   max_spread_c: int = MAX_SPREAD_C,
                   tennis_needs_score: bool = True,
                   tennis_lock_c: int | None = TENNIS_LOCK_C,
+                  soccer_no_side: bool = True,
                   now=None
                   ) -> tuple[list[ComboCandidate], list[dict]]:
     """Every market that may become a leg, and why the rest were refused.
@@ -388,15 +389,35 @@ def eligible_legs(markets: list[MarketState],
     long-shot ticket wants: it is buying cheap legs on purpose and a waiver
     that also waives its price CEILING would let 99c legs into a combo whose
     whole point is the payout.
+
+    ``soccer_no_side`` offers each soccer market from both sides. Soccer is
+    three-way, so most of its markets are outsiders nobody would back -- and
+    an outsider is a strong leg read the other way round: a side quoted 6c to
+    win is 93c NOT to. The two sides are then ranked against each other like
+    any other pair, and the one-leg-per-event rule below decides which of them
+    survives, so a match still contributes exactly one leg.
     """
     scores = scores or {}
     tracker = tracker or PositionTracker()
     candidates: list[ComboCandidate] = []
     rejected: list[dict] = []
 
+    # Each soccer market offered from both sides, as two separate legs. The
+    # NO side is not a fallback for when the YES side fails -- it is a leg in
+    # its own right, and on a three-way market it is usually the better one.
+    offered = list(markets)
+    if soccer_no_side:
+        for market in markets:
+            if not is_soccer(market.sport):
+                continue
+            flipped = market.as_no()
+            if flipped is not None:
+                offered.append(flipped)
+
     # Highest probability first, so that when two markets from one event both
-    # qualify the stronger one is the leg that is kept.
-    ordered = sorted(markets,
+    # qualify the stronger one is the leg that is kept -- which is also what
+    # picks between the two sides of one market.
+    ordered = sorted(offered,
                      key=lambda m: (m.implied_probability or 0.0), reverse=True)
     seen_events: set[str] = set()
 
@@ -420,7 +441,7 @@ def eligible_legs(markets: list[MarketState],
         # about the book's shape, not the leg's odds.
         locked = (tennis_lock_c is not None
                   and is_tennis(market.sport)
-                  and (market.yes_bid_c or 0) > int(tennis_lock_c))
+                  and (market.bid_c or 0) > int(tennis_lock_c))
 
         if not locked:
             floor = (soccer_min if is_soccer(market.sport)
@@ -439,7 +460,7 @@ def eligible_legs(markets: list[MarketState],
             seen_events.add(event)
             candidates.append(ComboCandidate(
                 market=market,
-                reason=f"tennis bid {market.yes_bid_c}c, above the "
+                reason=f"tennis bid {market.bid_c}c, above the "
                        f"{tennis_lock_c}c lock — priced in"))
             continue
 

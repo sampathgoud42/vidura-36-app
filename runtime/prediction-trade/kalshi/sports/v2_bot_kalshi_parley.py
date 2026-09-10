@@ -307,9 +307,12 @@ def _daily_ticket(cred, args, customer_dir: Path) -> None:
         return
 
     for leg in picked:
+        # The price of the SIDE this leg takes -- a no-side soccer leg costs
+        # what the no side costs, and printing the yes bid beside it would
+        # log a 6c number for a 94c leg.
         log.info("    leg %-34s %3dc  vol $%.0f",
                  leg.market.outcome[:34] or leg.ticker,
-                 leg.market.yes_bid_c or 0, leg.market.volume_usd)
+                 leg.market.bid_c or 0, leg.market.volume_usd)
 
     # Build, and let the EXCHANGE prune. Kalshi refuses a combo holding two
     # legs that say the same thing and names the offending pair; we drop the
@@ -395,10 +398,18 @@ def _combo_outcome(outcome: dict) -> str:
     legs = [str(t) for t in (outcome.get("tickers") or [])]
     if not legs:
         return ""
-    # The trailing segment of a Kalshi ticker is the side: ...-FED -> FED.
-    sides = [t.rsplit("-", 1)[-1] for t in legs]
-    head = ", ".join(sides[:4])
-    return head if len(sides) <= 4 else f"{head} +{len(sides) - 4}"
+    # The trailing segment of a Kalshi ticker is the market: ...-FED -> FED.
+    # Which WAY the leg backs it is not in the ticker at all, so a leg bought
+    # on the no side is written "not FED" -- the row would otherwise name the
+    # opposite of the bet.
+    sides = list(outcome.get("sides") or [])
+    names = []
+    for i, ticker in enumerate(legs):
+        name = ticker.rsplit("-", 1)[-1]
+        side = sides[i] if i < len(sides) else "yes"
+        names.append(f"not {name}" if side == "no" else name)
+    head = ", ".join(names[:4])
+    return head if len(names) <= 4 else f"{head} +{len(names) - 4}"
 
 
 def _escalation_pct(stake: float, ceiling: float, fallback: float) -> float:

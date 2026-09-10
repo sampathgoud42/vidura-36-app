@@ -49,6 +49,22 @@ class MarketState(BaseModel):
 
     yes_bid_c: int | None = None
     yes_ask_c: int | None = None
+    # The other side of the same market. Kalshi quotes it explicitly and it
+    # mirrors the yes side -- no_bid = 100 - yes_ask -- but it is READ rather
+    # than derived, because the mirror is an identity of the order book and
+    # not a promise in the API contract.
+    no_bid_c: int | None = None
+    no_ask_c: int | None = None
+    # Which side of this market a leg would take. "Chelsea to win" and
+    # "Chelsea NOT to win" are one market and two bets, and on a three-way
+    # soccer market the second is often the only one worth having: a 6c
+    # outsider is a 93c leg read from the other side.
+    #
+    # It lives on the market rather than on the candidate because every
+    # filter downstream asks the same questions -- what does it pay, how wide
+    # is it, is it inside the band -- and those answers differ by side. One
+    # field here means none of them has to learn about sides.
+    side: Literal["yes", "no"] = "yes"
     volume: int = 0
     # Volume in DOLLARS, which is what "biggest market" means to an operator.
     # Contracts alone rank a penny market above a dollar one for the same
@@ -89,18 +105,42 @@ class MarketState(BaseModel):
         return self
 
     @property
+    def bid_c(self) -> int | None:
+        """The bid on the side this leg would take.
+
+        Falls back to the mirror when the exchange omitted the no side, which
+        is the identity every order book satisfies: buying NO at 1 - yes_ask
+        is the same trade as selling YES at the ask.
+        """
+        if self.side == "no":
+            if self.no_bid_c is not None:
+                return self.no_bid_c
+            return None if self.yes_ask_c is None else 100 - self.yes_ask_c
+        return self.yes_bid_c
+
+    @property
+    def ask_c(self) -> int | None:
+        """The ask on the side this leg would take."""
+        if self.side == "no":
+            if self.no_ask_c is not None:
+                return self.no_ask_c
+            return None if self.yes_bid_c is None else 100 - self.yes_bid_c
+        return self.yes_ask_c
+
+    @property
     def implied_probability(self) -> float | None:
         """What the quote says the chance is, 0..1.
 
-        Taken from the BID. The ask is what you would pay and is always the
-        higher of the two, so testing the ask against a floor would admit
-        legs the market is not actually that confident about. The bid is the
-        conservative side of the spread and the one a threshold should bite
-        on.
+        Taken from the BID, on whichever side the leg is. The ask is what you
+        would pay and is always the higher of the two, so testing the ask
+        against a floor would admit legs the market is not actually that
+        confident about. The bid is the conservative side of the spread and
+        the one a threshold should bite on.
         """
-        if self.yes_bid_c is None:
+        bid = self.bid_c
+        if bid is None:
             return None
-        return self.yes_bid_c / 100.0
+        return bid / 100.0
 
     @property
     def spread_c(self) -> int | None:
@@ -111,15 +151,35 @@ class MarketState(BaseModel):
         position starts underwater by the width of the spread -- and on a
         parlay leg that cost is multiplied by every other leg.
         """
-        if self.yes_bid_c is None or self.yes_ask_c is None:
+        bid, ask = self.bid_c, self.ask_c
+        if bid is None or ask is None:
             return None
-        return self.yes_ask_c - self.yes_bid_c
+        return ask - bid
 
     @property
     def is_tradeable(self) -> bool:
         """Quoted on both sides and not already over."""
         return (self.live and not self.completed
-                and self.yes_bid_c is not None and self.yes_ask_c is not None)
+                and self.bid_c is not None and self.ask_c is not None)
+
+    def as_no(self) -> MarketState | None:
+        """The same market read from the other side, or None if it cannot be.
+
+        A separate object rather than a flag on the leg: two sides of one
+        market are two different bets with two different prices, and the
+        combinator ranks them against each other exactly as it ranks any
+        other pair. The event they belong to is unchanged, so the rule that
+        one match contributes one leg still decides which of the two survives.
+        """
+        if self.side == "no":
+            return None
+        flipped = self.model_copy(update={"side": "no"})
+        if flipped.bid_c is None or flipped.ask_c is None:
+            return None
+        # Kalshi's no_sub_title is often the yes title verbatim, which would
+        # print a leg that reads like its own opposite.
+        label = self.outcome or self.ticker
+        return flipped.model_copy(update={"outcome": f"NOT {label}"})
 
     @classmethod
     def from_kalshi(cls, raw: dict, *, sport: str = "unknown",
@@ -132,6 +192,8 @@ class MarketState(BaseModel):
             sport=sport,
             yes_bid_c=cents(raw.get("yes_bid_dollars")),
             yes_ask_c=cents(raw.get("yes_ask_dollars")),
+            no_bid_c=cents(raw.get("no_bid_dollars")),
+            no_ask_c=cents(raw.get("no_ask_dollars")),
             volume=int(raw.get("volume") or 0),
             open_interest=int(raw.get("open_interest") or 0),
             live=live, completed=completed,
@@ -225,8 +287,12 @@ class ComboCandidate(BaseModel):
         return self.market.implied_probability or 0.0
 
     @property
+    def side(self) -> str:
+        return self.market.side
+
+    @property
     def ask_c(self) -> int:
-        return self.market.yes_ask_c or 100
+        return self.market.ask_c or 100
 
 
 class ComboOrder(BaseModel):
@@ -261,6 +327,20 @@ class ComboOrder(BaseModel):
         preserve, so it is enforced on the object rather than trusted to the
         code that builds it.
         """
+        # ONE MARKET, ONE LEG -- checked before the same-event escape hatch
+        # below, because this one holds even for the deliberately correlated
+        # ticket. A combo carrying both sides of a market can never pay: the
+        # legs contradict each other, so one of them is guaranteed to fail
+        # and the contract is worthless the moment it is created. Carrying
+        # the same side twice is merely pointless; carrying both is a bet
+        # against yourself.
+        markets = [leg.ticker for leg in self.legs]
+        if len(set(markets)) != len(markets):
+            clash = sorted({t for t in markets if markets.count(t) > 1})
+            raise ValueError(
+                "a combo cannot hold two legs on the same market "
+                "(both sides of one cannot both land): " + ", ".join(clash))
+
         if self.allow_same_event:
             return self
         events = [leg.event_ticker or leg.ticker for leg in self.legs]
@@ -269,14 +349,17 @@ class ComboOrder(BaseModel):
                 "a combo cannot hold two legs from the same event: "
                 + ", ".join(sorted(events))
             )
-        tickers = [leg.ticker for leg in self.legs]
-        if len(set(tickers)) != len(tickers):
-            raise ValueError("a combo cannot hold the same ticker twice")
         return self
 
     @property
     def tickers(self) -> list[str]:
         return [leg.ticker for leg in self.legs]
+
+    @property
+    def sides(self) -> list[str]:
+        """Parallel to ``tickers``. The ticker names the market; only this
+        says which way round the bet on it is."""
+        return [leg.market.side for leg in self.legs]
 
     @property
     def combined_probability(self) -> float:
@@ -304,4 +387,4 @@ class ComboOrder(BaseModel):
 
     def describe(self) -> str:
         return " + ".join(f"{leg.market.outcome or leg.ticker}"
-                          f"@{leg.market.yes_bid_c}c" for leg in self.legs)
+                          f"@{leg.market.bid_c}c" for leg in self.legs)

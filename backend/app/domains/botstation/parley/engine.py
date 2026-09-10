@@ -269,8 +269,13 @@ def place_combo(cred, combo: ComboOrder, collection: str, *,
     """
     from app.domains.botstation import venue as kalshi
 
+    # The SIDE comes from the leg, not from a constant. A soccer leg picked
+    # from the other side of its market is "this team does not win", and
+    # sending it as yes would create a combined market on the opposite of
+    # every reason it was chosen.
     legs = [{"event_ticker": leg.event_ticker or leg.ticker,
-             "market_ticker": leg.ticker, "side": "yes"} for leg in combo.legs]
+             "market_ticker": leg.ticker, "side": leg.market.side}
+            for leg in combo.legs]
     fair_c = theoretical_price_c(combo)
     limit_c = min(MAX_COMBO_PRICE_C, fair_c + slippage_c)
     count = contracts_for(stake_usd, limit_c)
@@ -290,7 +295,8 @@ def place_combo(cred, combo: ComboOrder, collection: str, *,
 
     if dry_run:
         return {"placed": False, "dry_run": True, "collection": collection,
-                "tickers": combo.tickers, "theoretical_c": fair_c,
+                "tickers": combo.tickers, "sides": combo.sides,
+                "theoretical_c": fair_c,
                 "limit_c": limit_c, "contracts": count, "stake_usd": stake_usd,
                 "detail": f"dry run — would buy {count:g} x {limit_c}c "
                           f"(${count * limit_c / 100:.2f})"}
@@ -347,6 +353,10 @@ def place_combo(cred, combo: ComboOrder, collection: str, *,
                           f"{MIN_COMBO_PRICE_C}c floor — not worth the fees"}
 
     base = {"combo_ticker": ticker, "tickers": combo.tickers,
+            # Parallel to tickers. Without them a ledger row reads "RMA" for
+            # a leg that is a bet AGAINST Real Madrid -- the ticker names the
+            # market, and only the side says which way round the bet is.
+            "sides": combo.sides,
             "theoretical_c": fair_c, "limit_c": limit_c,
             "contracts": count, "stake_usd": stake_usd,
             "book_had_asks": has_asks}

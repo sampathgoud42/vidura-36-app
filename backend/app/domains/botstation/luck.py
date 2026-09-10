@@ -186,9 +186,13 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
                   "market": c.market.title or c.ticker,
                   "event": c.market.event_ticker or "",
                   "sport": c.market.sport,
-                  "price_c": c.market.yes_bid_c,
-                  "bid_c": c.market.yes_bid_c,
-                  "ask_c": c.market.yes_ask_c,
+                  # The side's own quote. A soccer leg taken from the NO side
+                  # is priced there too, and showing it the yes prices would
+                  # put a 7c number beside a leg bought at 93c.
+                  "side": c.market.side,
+                  "price_c": c.market.bid_c,
+                  "bid_c": c.market.bid_c,
+                  "ask_c": c.market.ask_c,
                   "spread_c": c.market.spread_c,
                   "volume_usd": round(c.market.volume_usd, 2)}
                  for c in picked],
