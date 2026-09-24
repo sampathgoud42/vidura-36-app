@@ -426,6 +426,9 @@ export const vidura = {
   // history-disagreeing types already left out -- the auto-trade form's list
   superSignalsRank: (date) =>
     api.get('/super-signals/rank', { params: date ? { date } : undefined }),
+  // the report's best ticker + signal pairs over 30 sessions, best first;
+  // { min_win_pct, min_edge, min_net_r } are optional and inclusive
+  superSignalsBestPairs: (mins) => api.get('/super-signals/best-pairs', { params: mins }),
   superSignalsReports: () => api.get('/super-signals/reports'),
   // a report page is ~1 MB of HTML; give it longer than a board poll
   superSignalsReport: (date) =>

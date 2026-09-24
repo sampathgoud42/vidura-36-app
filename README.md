@@ -246,7 +246,10 @@ stop, timeout, or still open), the day's W-L-T and net R, filters for open
 signals, one agent, or the **watchlist** tracker's hits, desk health (live,
 pre-open, closed, desk offline), and pills for today's and every earlier daily
 report. A report opens in a sandboxed viewer -- full-screen on a phone -- that
-can step between days and save the page. "call" / "put" on an open signal
+can step between days and save the page. The **Best ticker + signal pairs**
+link opens the report's 30-session pairs as a table (full-screen on a phone).
+Every column sorts, click again to reverse, and the win %, edge and net R
+minimums filter it through the API below. "call" / "put" on an open signal
 opens the desk's own buy ticket, prefilled; nothing is placed until you
 confirm it.
 

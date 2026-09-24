@@ -283,3 +283,110 @@
   .ss-vbtn { min-width: 44px; height: 44px; }
   .ss-vsel { height: 44px; font-size: 16px; flex: 1 1 auto; max-width: none; min-width: 0; }
 }
+
+/* ── best ticker + signal pairs: the link, and a sheet whose table sorts on
+   every column. The sheet is portaled like the report viewer, so it wears the
+   viewer's fixed dark palette rather than the --tr-* tokens. ───────────── */
+.ss-best {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--tr-line, rgba(91, 106, 240, 0.22));
+}
+.ss-bestlink {
+  display: block; width: 100%; text-align: left; font-size: 11.5px; font-weight: 600;
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace;
+}
+.ss-bestlink .d { font-weight: 400; color: var(--tr-dim, #9aa3d0); }
+.ss--touch .ss-bestlink { font-size: 12.5px; }
+
+.ss-viewer.bp { max-width: 1320px; height: auto; }
+.ss-bp-bar {
+  display: flex; flex-wrap: wrap; align-items: flex-end; flex: 0 0 auto;
+  padding: 4px 12px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace;
+}
+.ss-bp-bar > * { margin: 6px 10px 0 0; }
+.ss-bp-f { display: flex; flex-direction: column; }
+.ss-bp-f span {
+  margin-bottom: 3px; font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: #9aa3d0;
+}
+.ss-bp-f input {
+  width: 104px; height: 34px; padding: 0 9px; border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14); background: #0b0c16; color: inherit;
+  font-family: inherit; font-size: 13px;
+}
+.ss-bp-f input:focus { outline: none; border-color: var(--ss-accent, #5b6af0); }
+.ss-bp-f input.bad { border-color: #fbbf24; }
+.ss-bp-clear { height: 34px; }
+.ss-bp-sum { flex: 1 1 220px; align-self: center; margin-right: 0 !important; font-size: 11px; line-height: 1.45; color: #9aa3d0; }
+.ss-bp-sum b { color: #e3e6fa; }
+
+/* separate borders: a sticky cell under border-collapse loses its rule */
+.ss-bp {
+  min-width: 100%; border-collapse: separate; border-spacing: 0;
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace; font-size: 12px;
+}
+.ss-bp th, .ss-bp td {
+  padding: 7px 10px; text-align: left; white-space: nowrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ss-bp .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ss-bp thead th { position: sticky; top: 0; z-index: 2; padding: 0; background: #12142a; }
+.ss-bp th button {
+  display: flex; align-items: center; width: 100%; min-height: 34px; padding: 0 10px;
+  border: 0; background: transparent; color: #9aa3d0; cursor: pointer; white-space: nowrap;
+  font-family: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  -webkit-tap-highlight-color: transparent;
+}
+.ss-bp th.num button { justify-content: flex-end; }
+.ss-bp th[aria-sort='ascending'] button, .ss-bp th[aria-sort='descending'] button { color: var(--ss-accent, #93a0ff); }
+.ss-bp .ar { margin-left: 5px; font-size: 9px; opacity: 0.4; }
+.ss-bp th[aria-sort='ascending'] .ar, .ss-bp th[aria-sort='descending'] .ar { opacity: 1; }
+/* the signal names the row, so it stays put while the numbers scroll past */
+.ss-bp .sig { position: sticky; left: 0; z-index: 1; background: #0b0c16; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+.ss-bp thead .sig { z-index: 3; background: #12142a; }
+.ss-bp .rank { color: #5f679b; }
+.ss-bp .ag, .ss-bp .gr { color: #7f87b5; }
+.ss-bp .dir { font-size: 10.5px; font-weight: 700; }
+.ss-bp .dir.long { color: #34d399; }
+.ss-bp .dir.short { color: #ff6b5e; }
+.ss-bp .tkr { font-weight: 700; color: #e3e6fa; }
+.ss-bp .wlt b { font-weight: 600; }
+.ss-bp .w { color: #34d399; }
+.ss-bp .l { color: #ff6b5e; }
+.ss-bp .t { color: #fbbf24; }
+.ss-bp .meter {
+  display: inline-block; width: 46px; height: 6px; margin-right: 7px; vertical-align: middle;
+  border-radius: 3px; overflow: hidden; background: rgba(147, 160, 255, 0.18);
+}
+.ss-bp .meter i { display: block; height: 100%; background: var(--ss-accent, #5b6af0); }
+.ss-bp .net { font-weight: 700; }
+.ss-bp .net.pos { color: #34d399; }
+.ss-bp .net.neg { color: #ff6b5e; }
+.ss-bp .when { color: #9aa3d0; }
+.ss-bp .cnt { color: #7f87b5; }
+.ss-bp .cnt.hot { color: #93a0ff; font-weight: 700; }
+.ss-bp-note { margin: 0; padding: 12px 14px 16px; font-size: 10.5px; line-height: 1.55; color: #7f87b5; }
+
+@media (hover: hover) {
+  .ss-bp tbody tr:hover td { background: #151833; }
+  .ss-bp th button:hover { color: #e3e6fa; }
+}
+
+/* phones: 44pt headings and inputs at 16px (no Safari zoom); the signal wraps
+   onto two lines so more of the numbers fit beside it */
+@media (max-width: 720px) {
+  .ss-viewer.bp { height: 100%; }
+  /* the report viewer drops its title for its controls; this sheet has only
+     the close button, so the title stays and keeps it on the right */
+  .ss-viewer.bp .ss-vtitle { display: block; }
+  .ss-bp-bar {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .ss-bp-f input { width: 92px; height: 44px; font-size: 16px; }
+  .ss-bp-clear { height: 44px; }
+  .ss-bp th button { min-height: 44px; }
+  .ss-bp td { padding: 9px 9px; }
+  .ss-bp .sig { white-space: normal; min-width: 140px; max-width: 168px; line-height: 1.35; }
+  .ss-bp-note { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}

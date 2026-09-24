@@ -6,8 +6,10 @@ import './superSignals.css';
 // Super Signals — the signal-agent desk, inside both trading worlds.
 //
 // Today's signals from the desk's eight strategy agents with their live
-// outcomes, the watchlist tracker's hits, the desk's own health, and every
-// daily report. All of it arrives through /super-signals, which proxies the
+// outcomes, the watchlist tracker's hits, the desk's own health, every daily
+// report, and the report's best ticker + signal pairs over 30 sessions as a
+// table that sorts on any column. All of it arrives through /super-signals,
+// which proxies the
 // desk's read-only service; the desk is a separate project with its own
 // schedule, so "offline" here means its service is down, not this API.
 //
@@ -150,6 +152,7 @@ export default function SuperSignals({
   const [openKey, setOpenKey] = useState(null);
   const [shown, setShown] = useState(PAGE);
   const [viewer, setViewer] = useState(null);     // report date on screen
+  const [best, setBest] = useState(false);        // the best-pairs sheet
 
   const setScope = (v) => {
     setScopeState(v);
@@ -404,6 +407,15 @@ export default function SuperSignals({
         </>
       )}
 
+      {(data || reports?.length > 0) && (
+        <div className="ss-best">
+          <button type="button" className="ss-link ss-bestlink" onClick={() => setBest(true)}
+            title="the daily report's best ticker + signal pairs over the last 30 sessions: sort any column, filter by win %, edge and net R">
+            ★ Best ticker + signal pairs<span className="d"> · last 30 sessions ›</span>
+          </button>
+        </div>
+      )}
+
       {(reports?.length > 0 || data?.is_today) && (
         <div className="ss-reports">
           <div className="ss-rhead">daily reports</div>
@@ -434,6 +446,7 @@ export default function SuperSignals({
         <ReportViewer date={viewer} reports={reports || []} accent={accent}
           onClose={() => setViewer(null)} />
       )}
+      {best && <BestPairsViewer accent={accent} onClose={() => setBest(false)} />}
     </section>
   );
 }
@@ -524,6 +537,227 @@ function ReportViewer({ date, reports, accent, onClose }) {
             <iframe key={cur} title={`signal report ${cur}`} sandbox="allow-scripts"
               srcDoc={page.html} className={painted === cur ? '' : 'hold'}
               onLoad={() => setPainted(cur)} />
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// The report's "Best ticker + signal pairs — Last 30 days", as a table in which
+// every column sorts. The desk rewrites the list after each daily report (its
+// best_ticker_signal_pairs table). The minimums are the API's own and
+// inclusive, so the rows are exactly what /super-signals/best-pairs answers.
+// Portaled like the report viewer, for the same iPhone reason.
+const BEST_COLS = [
+  // key, heading, kind, first click: numbers and dates best / newest first
+  ['rank', '#', 'num', 'asc'],
+  ['signal', 'Signal', 'text', 'asc'],
+  ['ticker', 'Ticker', 'text', 'asc'],
+  ['edge', 'Edge', 'num', 'desc'],
+  ['wins', 'W–L–T', 'num', 'desc'],
+  ['win_pct', 'Win', 'num', 'desc'],
+  ['net_r', 'Net R', 'num', 'desc'],
+  ['first_fired', 'First fired', 'text', 'desc'],
+  ['last_fired', 'Last fired', 'text', 'desc'],
+  ['fired_today', 'Today', 'num', 'desc'],
+  ['fired_yesterday', 'Yesterday', 'num', 'desc'],
+  ['fired_past_week', 'Past week', 'num', 'desc'],
+];
+const BEST_MINS = [
+  // param, label, lowest, highest: the API's own bounds
+  ['min_win_pct', 'min win %', 0, 100],
+  ['min_edge', 'min edge', 0, 100],
+  ['min_net_r', 'min net R', -1000, 1000],
+];
+const NO_MINS = { min_win_pct: '', min_edge: '', min_net_r: '' };
+
+// Blanks sort last whichever way, and ties keep the report's order. W–L–T
+// sorts on wins, then on fewer losses.
+function sortPairs(rows, key, dir) {
+  const sign = dir === 'asc' ? 1 : -1;
+  return [...rows].sort((a, b) => {
+    const x = a[key];
+    const y = b[key];
+    if (x == null || y == null) {
+      if (x == null && y == null) return a.rank - b.rank;
+      return x == null ? 1 : -1;
+    }
+    let c = typeof x === 'number' ? x - y : String(x).localeCompare(String(y));
+    if (!c && key === 'wins') c = b.losses - a.losses;
+    return c ? sign * c : a.rank - b.rank;
+  });
+}
+
+const signed = (v) => (v == null ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(2)}`);
+
+function BestPairsViewer({ accent, onClose }) {
+  const [mins, setMins] = useState(NO_MINS);
+  const [res, setRes] = useState(null);           // the API's answer
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(true);
+  const [sort, setSort] = useState({ key: 'rank', dir: 'asc' });
+  const loaded = useRef(false);
+  const closeRef = useRef(null);
+
+  const bad = BEST_MINS.filter(([k, , lo, hi]) => {
+    const v = mins[k].trim();
+    if (!v) return false;
+    const n = Number(v);
+    return !Number.isFinite(n) || n < lo || n > hi;
+  }).map(([k]) => k);
+  const asked = JSON.stringify(Object.fromEntries(BEST_MINS
+    .map(([k]) => [k, mins[k].trim()])
+    .filter(([, v]) => v !== '')
+    .map(([k, v]) => [k, Number(v)])));
+
+  // Typing settles before the desk is asked; the first answer comes at once.
+  // A minimum out of range asks nothing: the API would only refuse it.
+  useEffect(() => {
+    if (bad.length) { setBusy(false); return undefined; }
+    let alive = true;
+    setBusy(true);
+    const t = setTimeout(() => {
+      vidura.superSignalsBestPairs(JSON.parse(asked))
+        .then((d) => { if (alive) { setRes(d); setErr(null); } })
+        .catch((e) => { if (alive) setErr(errText(e)); })
+        .finally(() => { if (alive) { setBusy(false); loaded.current = true; } });
+    }, loaded.current ? 350 : 0);
+    return () => { alive = false; clearTimeout(t); };
+  }, [asked, bad.length]);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // the board underneath must not scroll behind the sheet
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    closeRef.current?.focus();
+    return () => { document.body.style.overflow = prev; };
+  }, []);
+
+  const rows = useMemo(() => sortPairs(res?.pairs || [], sort.key, sort.dir), [res, sort]);
+  const filtered = asked !== '{}';
+  const onSort = (key, first) => setSort((s) => (s.key === key
+    ? { key, dir: s.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: first }));
+
+  return createPortal(
+    <div className="ss-scrim" style={{ '--ss-accent': accent }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ss-viewer bp" role="dialog" aria-modal="true"
+        aria-label="best ticker and signal pairs, last 30 sessions">
+        <div className="ss-vhead">
+          <span className="ss-vtitle">best ticker + signal pairs</span>
+          <button type="button" className="ss-vbtn" ref={closeRef} onClick={onClose}
+            aria-label="close best pairs" title="close (Esc)">×</button>
+        </div>
+        <form className="ss-bp-bar" onSubmit={(e) => e.preventDefault()}
+          aria-label="minimums: only the pairs at or above each">
+          {BEST_MINS.map(([k, text, lo, hi]) => (
+            <label key={k} className="ss-bp-f">
+              <span>{text}</span>
+              <input type="number" inputMode="decimal" step="any" min={lo} max={hi}
+                value={mins[k]} placeholder="any" aria-invalid={bad.includes(k)}
+                className={bad.includes(k) ? 'bad' : ''}
+                onChange={(e) => setMins((m) => ({ ...m, [k]: e.target.value }))} />
+            </label>
+          ))}
+          {filtered && (
+            <button type="button" className="ss-vbtn wide ss-bp-clear" onClick={() => setMins(NO_MINS)}>
+              clear
+            </button>
+          )}
+          <p className="ss-bp-sum" aria-live="polite">
+            {bad.length ? 'Win % and edge run 0 to 100; net R runs −1000 to 1000.' : res ? (
+              <>
+                <b>{filtered ? `${res.count} of ${res.total}` : res.total}</b>
+                {` pair${res.total === 1 ? '' : 's'}`}
+                {res.window && ` · ${md(res.window.from)} → ${md(res.window.to)} (${res.window.sessions} sessions)`}
+                {res.updated_at && ` · written ${res.updated_at.slice(5, 16)} CST`}
+                {busy && ' · updating…'}
+              </>
+            ) : (busy ? 'loading…' : '')}
+          </p>
+        </form>
+        <div className="ss-vbody">
+          {err && <p className="ss-vmsg err">⚠ {err === 'offline' ? OFFLINE : err}</p>}
+          {!err && res && !res.session && (
+            <p className="ss-vmsg">No pairs yet: the desk writes them with its 15:00 CST report.</p>
+          )}
+          {!err && res?.session && rows.length === 0 && (
+            <p className="ss-vmsg">No pair meets these minimums.</p>
+          )}
+          {!err && rows.length > 0 && (
+            <>
+              <table className="ss-bp">
+                <thead>
+                  <tr>
+                    {BEST_COLS.map(([key, head, kind, first]) => {
+                      const on = sort.key === key;
+                      return (
+                        <th key={key} scope="col" className={`${kind}${key === 'signal' ? ' sig' : ''}`}
+                          aria-sort={on ? (sort.dir === 'asc' ? 'ascending' : 'descending') : 'none'}>
+                          <button type="button" onClick={() => onSort(key, first)}
+                            title={head === '#' ? 'back to the report’s order' : `sort by ${head}`}>
+                            {head}
+                            <span className="ar" aria-hidden="true">{on ? (sort.dir === 'asc' ? '▲' : '▼') : '↕'}</span>
+                          </button>
+                        </th>
+                      );
+                    })}
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((p) => {
+                    const [agent, setup, grade, direction] = String(p.type_key || '').split('|');
+                    const long = direction !== 'SHORT';
+                    return (
+                      <tr key={`${p.type_key}|${p.ticker}`}>
+                        <td className="num rank">{p.rank}</td>
+                        <td className="sig" title={p.signal}>
+                          <span className="ag">{agent}</span> {label(setup)}
+                          {grade && <span className="gr"> [{grade}]</span>}
+                          <span className={`dir ${long ? 'long' : 'short'}`}>{long ? ' ▲ LONG' : ' ▼ SHORT'}</span>
+                        </td>
+                        <td className="tkr">{p.ticker}</td>
+                        <td className="num">{p.edge == null ? '—' : p.edge.toFixed(1)}</td>
+                        <td className="num wlt">
+                          <b className="w">{p.wins}</b>–<b className="l">{p.losses}</b>–<b className="t">{p.timeouts}</b>
+                        </td>
+                        <td className="num win">
+                          {p.win_pct == null ? '—' : (
+                            <>
+                              <span className="meter" aria-hidden="true">
+                                <i style={{ width: `${Math.max(0, Math.min(100, p.win_pct))}%` }} />
+                              </span>
+                              {Math.round(p.win_pct)}%
+                            </>
+                          )}
+                        </td>
+                        <td className={`num net${p.net_r > 0 ? ' pos' : p.net_r < 0 ? ' neg' : ''}`}>{signed(p.net_r)}</td>
+                        {/* the window is 30 sessions, so the year is left to the tooltip */}
+                        <td className="when" title={p.first_fired || ''}>{p.first_fired ? p.first_fired.slice(5) : '—'}</td>
+                        <td className="when" title={p.last_fired || ''}>{p.last_fired ? p.last_fired.slice(5) : '—'}</td>
+                        <td className={`num cnt${p.fired_today ? ' hot' : ''}`}>{p.fired_today}</td>
+                        <td className="num cnt">{p.fired_yesterday}</td>
+                        <td className="num cnt">{p.fired_past_week}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <p className="ss-bp-note">
+                Edge is the 80% lower bound of the R-credit rate ×100, where 50 is breakeven. Win is
+                targets ÷ (targets + stops); timeouts sit outside it. Today, Yesterday and Past week
+                count the pair&rsquo;s signals on the report&rsquo;s session, the session before it, and
+                the last 5 sessions. Click any heading to sort by it, and again to reverse.
+              </p>
+            </>
           )}
         </div>
       </div>
