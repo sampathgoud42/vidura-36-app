@@ -397,6 +397,8 @@ MARKET_DATA_PATHS = [
     "/api/v1/super/snapshots",
     "/api/v1/super/sync/status",
     "/api/v1/super-signals/session",
+    "/api/v1/super-signals/rank",
+    "/api/v1/super-signals/best-pairs",
     "/api/v1/super-signals/reports",
     "/api/v1/super-signals/reports/{report_date}",
 ]

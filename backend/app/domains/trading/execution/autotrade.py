@@ -1,4 +1,20 @@
-"""The auto-trader: a watcher that opens managed positions on level crosses.
+"""The auto-trader: a watcher that opens managed positions when a signal fires.
+
+Two strategies, and the arm form offers exactly these two (``STRATEGIES``):
+
+``10min_intraday_move`` -- the level-cross watcher described below.
+
+``super_signals`` -- the signal-agent desk's own signals, as they fire. The
+operator picks signal types from the desk's ranking (/super-signals/rank: the
+daily report's edge score for today, else yesterday, with every type whose
+longest window disagrees left out) and the tickers to trade. A new LIVE signal
+of a picked type on one of those tickers buys a CALL for a LONG and a PUT for
+a SHORT -- only inside the CST window, only while the signal is minutes old
+and still open, and at most once per ticker per hour. The list was picked from
+one day's results, so the watcher disarms itself at that session's close.
+Entries go through entry.open_managed, the manual BUY's own path, under an
+idempotency key per signal.
+
 
 Built on the rebuild's own execution path rather than ported from the old
 engine, and that is the whole point of the module. The legacy auto-trader
@@ -24,10 +40,12 @@ it is the "wait a few seconds and re-check" the operator asked for.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
+from datetime import time as dtime
 
 from app.domains.trading.risk import clock
 
@@ -45,6 +63,25 @@ _SIDE_FOR_CROSS = {
     "above_10min_high": "call",
     "below_10min_low": "put",
 }
+
+# The strategies this watcher runs -- the arm form lists exactly these, so a
+# strategy name can no longer label one behaviour while running another.
+STRATEGIES = ("10min_intraday_move", "super_signals")
+
+# super_signals. The desk publishes each 5m bar about half a minute after it
+# closes, so a 15s poll sees a signal within a minute of its candle.
+SUPER_POLL_SECONDS = 15
+# Older than this and the move the signal called has happened without us.
+SUPER_MAX_AGE_S = 6 * 60
+# One entry per ticker per hour, whichever picked signal fires on it: two
+# signal types agreeing on SPY is one idea, not two positions.
+SUPER_COOLDOWN_S = 60 * 60
+SUPER_WINDOW = ("08:30", "14:30")
+SUPER_STRATEGY_LABEL = "Auto/super_signals"
+# agent|setup|grade|direction, as /super-signals/rank keys a signal type
+_TYPE_KEY = re.compile(r"^[a-z_]+\|[^|\s]{1,80}\|[^|\s]{0,24}\|(LONG|SHORT)$")
+_HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+_SYMBOL = re.compile(r"^[A-Z0-9.^-]{1,10}$")
 
 
 @dataclass
@@ -72,6 +109,17 @@ class Watcher:
     errors: int = 0
     stop_flag: threading.Event = field(default_factory=threading.Event)
     thread: threading.Thread | None = None
+    # --- super_signals ---
+    signals: list[str] = field(default_factory=list)
+    window_open: str = SUPER_WINDOW[0]
+    window_close: str = SUPER_WINDOW[1]
+    zero_dte: bool = False
+    # Signal ids already looked at, so each one is judged exactly once.
+    seen_ids: set[str] = field(default_factory=set)
+    # ticker -> when this watcher last entered it (the cooldown).
+    last_entry: dict[str, datetime] = field(default_factory=dict)
+    trades: list[dict] = field(default_factory=list)
+    feed: str = "starting"
 
     def log(self, message: str) -> None:
         stamp = clock.now().strftime("%H:%M:%S")
@@ -81,6 +129,19 @@ class Watcher:
         logger.info("autotrade[%s] %s", self.tenant_id[:8], message)
 
     def public(self) -> dict:
+        out = self._public_common()
+        if self.strategy == "super_signals":
+            out.update({
+                "signals": list(self.signals),
+                "window": f"{self.window_open}-{self.window_close}",
+                "zero_dte": self.zero_dte, "feed": self.feed,
+                "trades": self.trades[-20:], "seen": len(self.seen_ids),
+                "cooldown_min": SUPER_COOLDOWN_S // 60,
+                "max_age_min": SUPER_MAX_AGE_S // 60,
+            })
+        return out
+
+    def _public_common(self) -> dict:
         return {
             "running": not self.stop_flag.is_set(),
             "strategy": self.strategy,
@@ -231,11 +292,249 @@ def _run(watcher: Watcher) -> None:
     watcher.log("disarmed")
 
 
+# ---- super_signals ----------------------------------------------------------
+
+def type_key(row: dict) -> str:
+    """The signal type a desk row belongs to, keyed as /super-signals/rank keys it."""
+    return (f"{row.get('agent', '')}|{row.get('setup', '')}|{row.get('grade', '')}|"
+            f"{row.get('direction', '')}")
+
+
+def refusal(row: dict, *, now: datetime, window_open: str, window_close: str,
+            last_entry: datetime | None = None, max_age_s: int = SUPER_MAX_AGE_S,
+            cooldown_s: int = SUPER_COOLDOWN_S) -> str | None:
+    """Why a signal of a picked type on a picked ticker is NOT traded, or None.
+
+    Pure, so every rule is testable without a clock or a venue. Each one is
+    the difference between trading the signal and trading a memory of it:
+    catchup / backfill / reconcile rows were found after the fact, a resolved
+    signal has already paid or failed, and an old one has already moved.
+    """
+    source = row.get("source") or "unknown"
+    if source != "live":
+        return f"found as {source}, not fired live"
+    outcome = row.get("outcome") or "open"
+    if outcome != "open":
+        return f"already resolved ({outcome})"
+    t = row.get("time") or ""
+    if not (window_open <= t < window_close):
+        return f"fired {t or '?'}, outside {window_open}-{window_close}"
+    try:
+        fired = datetime.combine(now.date(), dtime.fromisoformat(t), tzinfo=now.tzinfo)
+    except ValueError:
+        return f"unreadable signal time {t!r}"
+    age = (now - fired).total_seconds()
+    if age > max_age_s:
+        return f"{int(age // 60)} min old -- older than {max_age_s // 60} min"
+    if last_entry is not None:
+        since = (now - last_entry).total_seconds()
+        if since < cooldown_s:
+            return (f"entered {row.get('ticker', '?')} {int(since // 60)} min ago -- "
+                    f"cooldown, {int((cooldown_s - since) // 60) + 1} min left")
+    return None
+
+
+def _feed(watcher: Watcher, state: str) -> None:
+    """Record the signal feed's state, logging only when it changes -- a service
+    that is down for an hour is one line, not two hundred and forty."""
+    if state != watcher.feed:
+        watcher.feed = state
+        watcher.log(f"signal desk: {state}")
+
+
+def _enter(watcher: Watcher, row: dict, side: str):
+    """One signal -> one managed position, through the manual BUY's own path.
+
+    The idempotency key is the signal's own id, so no restart, re-arm or retry
+    can act on the same signal twice. A refusal records itself and releases
+    the key, exactly as a refused manual order does.
+    """
+    from app.api_v2 import deps
+    from app.domains.trading.execution import entry, idempotency
+    from app.domains.trading.execution.orders import ExecutionRefused
+    from app.platform.db.session import session_scope
+    from app.tenancy import repository as tenants
+
+    # Same-day contracts only while the 0DTE window is open; after the cutoff
+    # the nearest later expiry, rather than a refusal on every afternoon signal.
+    zero_dte = watcher.zero_dte and not clock.past_zero_dte_cutoff()
+    venue_name = "tradier" if watcher.live else "tradier_sandbox"
+    with session_scope() as db:
+        try:
+            attempt = idempotency.begin(
+                db, tenant_id=watcher.tenant_id, intent="open",
+                payload={"signal": row["id"], "symbol": row["ticker"], "side": side,
+                         "live": watcher.live, "strategy": SUPER_STRATEGY_LABEL},
+                client_key=f"auto-super:{row['id']}")
+        except (idempotency.DuplicateRequest, idempotency.KeyReused):
+            watcher.log(f"{row['ticker']}: this signal was already acted on -- skipped")
+            return None
+        try:
+            try:
+                cred = tenants.load_credential(db, watcher.tenant_id, venue_name,
+                                               deps.keyring())
+            except Exception:                           # noqa: BLE001
+                # Never relay the venue's own text: a 401 body can carry the token.
+                raise ExecutionRefused(
+                    f"no usable {venue_name} credential for this operator") from None
+            pos = entry.open_managed(
+                db, tenant_id=watcher.tenant_id, cred=cred, symbol=row["ticker"],
+                side=side, buy_pct=watcher.buy_pct, tp_pct=watcher.tp_pct,
+                sl_pct=watcher.sl_pct, delta_min=watcher.delta_min,
+                delta_max=watcher.delta_max, tolerance_pct=watcher.tolerance_pct,
+                sandbox=not watcher.live, strategy=SUPER_STRATEGY_LABEL,
+                zero_dte=zero_dte, min_contracts=watcher.min_contracts)
+        except Exception as exc:
+            idempotency.fail(db, attempt, reason=str(exc)[:500])
+            db.commit()              # the scope rolls back on the way out
+            raise
+        idempotency.succeed(db, attempt, result={"signal": row["id"], "position_id": pos.id,
+                                                 "occ_symbol": pos.occ_symbol},
+                            position_id=pos.id, venue_order_id=pos.buy_order_id)
+        opened = {"position_id": pos.id, "occ_symbol": pos.occ_symbol,
+                  "contracts": pos.contracts}
+    watcher.placed += 1
+    watcher.trades.append({"at": clock.now().strftime("%H:%M:%S"), "ticker": row["ticker"],
+                           "side": side, "signal": type_key(row),
+                           "signal_time": row.get("time"), **opened})
+    watcher.log(f"{row['ticker']} {side}: opened {opened['contracts']} x {opened['occ_symbol']}"
+                f" on {row.get('agent')} {row.get('setup')} {row.get('direction')}"
+                f" @ {row.get('time')}")
+    return opened
+
+
+def _super_tick(watcher: Watcher, now: datetime, baseline_day: str | None) -> str | None:
+    """One look at the desk. Returns the session whose backlog is baselined."""
+    from app.domains.trading.execution.orders import ExecutionRefused
+    from app.domains.trading.execution.leases import LeaseUnavailable
+    from app.domains.trading.risk.validation import RiskRefused
+    from app.services import super_signals as desk
+
+    today = now.date().isoformat()
+    try:
+        payload = desk.get_json("/api/session")
+    except desk.Unavailable as exc:
+        _feed(watcher, f"unavailable -- {exc.detail}")
+        return baseline_day
+    if payload.get("date") != today:
+        _feed(watcher, f"serving {payload.get('date')}, not today")
+        return baseline_day
+    _feed(watcher, "ok")
+    rows = payload.get("signals") or []
+    if baseline_day != today:
+        # Everything already on the desk when the watcher arms -- or when a new
+        # session begins -- is history, not a trigger: arming must never fire a
+        # burst of entries on signals that were not watched fire.
+        watcher.seen_ids = {r.get("id") for r in rows if r.get("id")}
+        watcher.log(f"{len(watcher.seen_ids)} signal(s) already on the desk today "
+                    f"-- history, not triggers")
+        return today
+
+    wanted, tickers = set(watcher.signals), set(watcher.tickers)
+    for row in sorted(rows, key=lambda r: (r.get("time") or "", r.get("id") or "")):
+        sid = row.get("id")
+        if not sid or sid in watcher.seen_ids:
+            continue
+        watcher.seen_ids.add(sid)            # judged once, whatever happens next
+        if type_key(row) not in wanted or row.get("ticker") not in tickers:
+            continue
+        what = f"{row['ticker']} {row.get('agent')} {row.get('setup')} {row.get('direction')}"
+        why_not = refusal(row, now=now, window_open=watcher.window_open,
+                          window_close=watcher.window_close,
+                          last_entry=watcher.last_entry.get(row["ticker"]))
+        if why_not:
+            watcher.log(f"{what} @ {row.get('time')}: not traded -- {why_not}")
+            continue
+        side = "call" if row.get("direction") == "LONG" else "put"
+        before = watcher.last_entry.get(row["ticker"])
+        # The cooldown starts BEFORE the order: two signals on one ticker in the
+        # same pass must not both slip through behind each other.
+        watcher.last_entry[row["ticker"]] = now
+        try:
+            if _enter(watcher, row, side) is None:
+                _restore(watcher, row["ticker"], before)
+        except (ExecutionRefused, RiskRefused, LeaseUnavailable) as exc:
+            # Refused before the venue was touched: nothing was bought, so the
+            # ticker is not on cooldown for it.
+            _restore(watcher, row["ticker"], before)
+            watcher.errors += 1
+            watcher.log(f"{what}: refused -- {exc}")
+        except Exception as exc:                        # noqa: BLE001
+            # Unknown failure: an order may have gone out, so the cooldown stands.
+            watcher.errors += 1
+            watcher.log(f"{what}: failed -- {type(exc).__name__}: {exc}")
+    return baseline_day
+
+
+def _restore(watcher: Watcher, ticker: str, before: datetime | None) -> None:
+    if before is None:
+        watcher.last_entry.pop(ticker, None)
+    else:
+        watcher.last_entry[ticker] = before
+
+
+def _run_super(watcher: Watcher) -> None:
+    watcher.log(f"armed on {len(watcher.signals)} signal type(s) for "
+                f"{', '.join(watcher.tickers)} · {watcher.window_open}-{watcher.window_close} CST"
+                f" ({'LIVE' if watcher.live else 'paper'})")
+    baseline_day: str | None = None
+    saw_session = False
+    while not watcher.stop_flag.is_set():
+        try:
+            now = clock.now()
+            if clock.is_regular_session(now):
+                saw_session = True
+                baseline_day = _super_tick(watcher, now, baseline_day)
+            elif saw_session and now.timetz().replace(tzinfo=None) >= clock.SESSION_CLOSE:
+                # The list was picked from one day's results, and tomorrow ranks
+                # differently -- so the watcher ends with the session it traded.
+                watcher.log("session closed -- disarming; the signal list was picked for today")
+                break
+        except Exception as exc:                        # noqa: BLE001
+            watcher.errors += 1
+            watcher.log(f"watch loop error: {type(exc).__name__}: {exc}")
+        watcher.stop_flag.wait(SUPER_POLL_SECONDS)
+    watcher.stop_flag.set()
+    with _LOCK:
+        if _WATCHERS.get(watcher.tenant_id) is watcher:
+            _WATCHERS.pop(watcher.tenant_id, None)
+    watcher.log("disarmed")
+
+
 # ---- the API --------------------------------------------------------------
+
+def _check_super(wanted: list[str], signals: list[str], window_open: str,
+                 window_close: str, *, buy_pct: float, tp_pct: float, sl_pct: float,
+                 delta_min: float, delta_max: float, min_contracts: int) -> None:
+    """Refuse a super_signals arm at arm time, while someone is looking, rather
+    than at 2pm inside a loop nobody is reading."""
+    from app.domains.trading.risk.validation import RiskRefused, validate_entry
+
+    if not signals:
+        raise AutoTradeRefused("pick at least one signal type to trade")
+    bad = [k for k in signals if not _TYPE_KEY.match(k)]
+    if bad:
+        raise AutoTradeRefused(f"not a signal type: {bad[0][:80]}")
+    odd = [t for t in wanted if not _SYMBOL.match(t)]
+    if odd:
+        raise AutoTradeRefused(f"tickers must be plain symbols like SPY, QQQ, SPX -- not {odd[0][:12]}")
+    if not (_HHMM.match(window_open) and _HHMM.match(window_close)) or window_open >= window_close:
+        raise AutoTradeRefused("the window must be HH:MM to HH:MM (CST), start before end")
+    try:
+        validate_entry(side="call", buy_pct=buy_pct, tp_pct=tp_pct, sl_pct=sl_pct)
+    except RiskRefused as exc:
+        raise AutoTradeRefused(str(exc)) from None
+    if not (0 < delta_min < delta_max <= 1):
+        raise AutoTradeRefused("the delta range must be 0 < min < max <= 1")
+    if min_contracts < 1:
+        raise AutoTradeRefused("min contracts must be at least 1")
+
 
 def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
           buy_pct: float, tp_pct: float, sl_pct: float, tolerance_pct: float,
-          min_contracts: int, delta_min: float, delta_max: float) -> dict:
+          min_contracts: int, delta_min: float, delta_max: float,
+          signals: list[str] | None = None, window_open: str | None = None,
+          window_close: str | None = None, zero_dte: bool = False) -> dict:
     """Arm the watcher for one operator. One per operator, never two."""
     from app.core.config import get_settings
     from app.domains.trading.risk import heartbeat
@@ -244,9 +543,21 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
         raise AutoTradeRefused(
             "this server is paper-only; a live watcher cannot be armed")
 
+    if strategy not in STRATEGIES:
+        raise AutoTradeRefused(f"unknown strategy '{strategy}' -- this server runs "
+                               f"{', '.join(STRATEGIES)}")
+
     wanted = [t.strip().upper() for t in tickers.split(",") if t.strip()]
     if not wanted:
         raise AutoTradeRefused("name at least one ticker to watch")
+
+    picked = list(dict.fromkeys(str(k).strip() for k in (signals or []) if str(k).strip()))
+    w_open = (window_open or SUPER_WINDOW[0]).strip()
+    w_close = (window_close or SUPER_WINDOW[1]).strip()
+    if strategy == "super_signals":
+        _check_super(wanted, picked, w_open, w_close, buy_pct=buy_pct, tp_pct=tp_pct,
+                     sl_pct=sl_pct, delta_min=delta_min, delta_max=delta_max,
+                     min_contracts=min_contracts)
 
     # Refuse to arm if nothing is watching stops. An unattended trader that
     # can open positions whose stop nobody monitors is the worst combination
@@ -273,31 +584,65 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             tenant_id=tenant_id, tickers=wanted, strategy=strategy, live=live,
             buy_pct=buy_pct, tp_pct=tp_pct, sl_pct=sl_pct,
             tolerance_pct=tolerance_pct, min_contracts=min_contracts,
-            delta_min=delta_min, delta_max=delta_max, armed_at=clock.now())
+            delta_min=delta_min, delta_max=delta_max, armed_at=clock.now(),
+            signals=picked, window_open=w_open, window_close=w_close,
+            zero_dte=bool(zero_dte))
         _WATCHERS[tenant_id] = watcher
 
-    thread = threading.Thread(target=_run, args=(watcher,),
+    # Warm the modules the loop imports lazily, on THIS thread: two threads
+    # importing the same package at once can deadlock on Python's import lock
+    # and kill the watcher silently before its first poll.
+    from app.domains.trading.execution import entry, idempotency  # noqa: F401
+    from app.services import super_signals as _desk  # noqa: F401
+
+    loop = _run_super if strategy == "super_signals" else _run
+    thread = threading.Thread(target=loop, args=(watcher,),
                               name=f"autotrade-{tenant_id[:8]}", daemon=True)
     watcher.thread = thread
     thread.start()
-    return watcher.public()
+    return _answer(watcher.public(), active=True)
+
+
+def defaults() -> dict:
+    """What the arm form prefills, and the strategies it may offer."""
+    return {
+        "strategy": STRATEGIES[0], "strategies": list(STRATEGIES),
+        "tickers": "SPY,QQQ,SPX", "window_open": "08:30", "window_close": "09:30",
+        "super_window_open": SUPER_WINDOW[0], "super_window_close": SUPER_WINDOW[1],
+        "buy_pct": 50.0, "tolerance_pct": 25.0, "tp_pct": 15.0, "sl_pct": 30.0,
+        "delta_min": 0.35, "delta_max": 0.65, "min_contracts": 1,
+        "confirm_s": CONFIRM_SECONDS,
+        "zero_dte_cutoff": clock.ZERO_DTE_CUTOFF.strftime("%H:%M"),
+        "super_poll_s": SUPER_POLL_SECONDS,
+        "super_max_age_min": SUPER_MAX_AGE_S // 60,
+        "super_cooldown_min": SUPER_COOLDOWN_S // 60,
+    }
+
+
+def _answer(body: dict, *, active: bool) -> dict:
+    """Every answer carries the form's defaults and ``active``, which is what both
+    desks read -- without them the 36 Trades sheet waited forever for settings
+    and neither desk could show an armed watcher, or disarm one."""
+    return {**body, "active": active, "strategies": list(STRATEGIES),
+            "defaults": defaults()}
 
 
 def stop(tenant_id: str) -> dict:
     with _LOCK:
         watcher = _WATCHERS.pop(tenant_id, None)
     if watcher is None:
-        return {"running": False, "was_running": False}
+        return _answer({"running": False, "was_running": False}, active=False)
     watcher.stop_flag.set()
-    return {"running": False, "was_running": True, "placed": watcher.placed}
+    return _answer({"running": False, "was_running": True, "placed": watcher.placed},
+                   active=False)
 
 
 def status(tenant_id: str) -> dict:
     with _LOCK:
         watcher = _WATCHERS.get(tenant_id)
     if watcher is None or watcher.stop_flag.is_set():
-        return {"running": False}
-    return watcher.public()
+        return _answer({"running": False}, active=False)
+    return _answer(watcher.public(), active=True)
 
 
 def quiesce(timeout: float = 10.0) -> None:

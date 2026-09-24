@@ -10,7 +10,8 @@ What this holds:
   504, 502), never as an empty board. "No signals today" and "the service is
   off" look identical on screen, which is how the research boards once
   rendered empty for weeks with no error anywhere (routers/research.py);
-* a malformed date is refused here, before the service is asked at all.
+* a malformed date is refused here, before the service is asked at all,
+  and so is a best-pairs minimum that is not a number in range.
 
 No network: the service is replaced by a fake requests session.
 """
@@ -20,8 +21,8 @@ from __future__ import annotations
 import pytest
 import requests
 
-from app.api_v2.routers import super_signals
 from app.core.config import get_settings
+from app.services import super_signals
 
 V1 = "/api/v1/super-signals"
 
@@ -34,6 +35,21 @@ SESSION = {"date": "2026-09-24", "phase": "open",
            "watchlist": [], "report": {"date": "2026-09-24", "available": False}}
 REPORTS = {"latest": "2026-09-23",
            "reports": [{"date": "2026-09-23", "weekday": "Wed", "bytes": 792052}]}
+RANK = {"date": "2026-09-24", "basis": "previous", "basis_date": "2026-09-23",
+        "signals": [{"key": "poc|poc_48h|medium|SHORT", "rank": 4,
+                     "verdict": {"level": "pos", "tag": "history agrees", "extra": 43}}],
+        "excluded": [{"key": "levels|orb30_break||SHORT", "rank": 1,
+                      "verdict": {"level": "neg", "tag": "history disagrees", "extra": 12}}]}
+BEST = {"table": "best_ticker_signal_pairs", "session": "2026-09-24",
+        "window": {"sessions": 30, "from": "2026-08-13", "to": "2026-09-24"},
+        "filters": {"min_win_pct": None, "min_edge": None, "min_net_r": None},
+        "total": 25, "count": 1,
+        "pairs": [{"rank": 1, "signal": "poc · poc_72h [medium] · LONG", "ticker": "TSLA",
+                   "type_key": "poc|poc_72h|medium|LONG", "edge": 70.1, "wins": 9, "losses": 1,
+                   "timeouts": 1, "win_pct": 90.0, "net_r": 8.32,
+                   "first_fired": "2026-08-13 08:45", "last_fired": "2026-09-21 14:15",
+                   "fired_today": 0, "fired_yesterday": 0, "fired_past_week": 3,
+                   "as_of": "2026-09-24", "updated_at": "2026-09-24 17:15:27"}]}
 PAGE = "<!doctype html><title>Signal Desk 2026-09-23</title><main>report</main>"
 
 
@@ -63,6 +79,8 @@ class FakeService:
         self.answers = {
             "/api/session": _Resp(body=SESSION),
             "/api/reports": _Resp(body=REPORTS),
+            "/api/rank": _Resp(body=RANK),
+            "/api/best-pairs": _Resp(body=BEST),
             "/reports/2026-09-23.html": _Resp(text=PAGE),
         }
 
@@ -103,6 +121,45 @@ def test_a_requested_session_is_forwarded(client, alice, service):
 def test_a_malformed_date_never_reaches_the_service(client, alice, service, path):
     """Validated here: the service is not a place to discover bad input."""
     assert client.get(path, headers=alice.headers).status_code == 422
+    assert service.calls == []
+
+
+def test_the_ranking_is_passed_through_with_its_basis(client, alice, service):
+    """The auto-trade form's list: the desk decides the ranking and which types
+    history disagrees with; the proxy must not reorder, refilter or drop them."""
+    r = client.get(f"{V1}/rank", params={"date": "2026-09-24"}, headers=alice.headers)
+    assert r.status_code == 200
+    assert r.json() == RANK
+    assert service.calls[0][1] == {"date": "2026-09-24"}
+
+
+def test_the_best_pairs_are_the_desks_list_untouched(client, alice, service):
+    """Given no minimums,
+    when an operator reads the best pairs,
+    then they get the desk's whole list as it answered, and it was asked for no filter."""
+    r = client.get(f"{V1}/best-pairs", headers=alice.headers)
+    assert r.status_code == 200
+    assert r.json() == BEST
+    assert service.calls[0][1] is None
+
+
+def test_the_minimums_are_forwarded_as_numbers(client, alice, service):
+    """Only the minimums given go through, and as numbers: the desk filters."""
+    client.get(f"{V1}/best-pairs", params={"min_win_pct": "80", "min_net_r": "-2.5"},
+               headers=alice.headers)
+    client.get(f"{V1}/best-pairs", params={"min_edge": 60, "min_win_pct": 100, "min_net_r": 5},
+               headers=alice.headers)
+    assert service.calls[0][1] == {"min_win_pct": 80.0, "min_net_r": -2.5}
+    assert service.calls[1][1] == {"min_win_pct": 100.0, "min_edge": 60.0, "min_net_r": 5.0}
+
+
+@pytest.mark.parametrize("query", ["min_win_pct=101", "min_win_pct=-1", "min_edge=100.5",
+                                   "min_edge=abc", "min_net_r=nan", "min_net_r=inf",
+                                   "min_net_r=1e9"])
+def test_a_bad_minimum_never_reaches_the_service(client, alice, service, query):
+    """A win rate or edge outside 0-100, or a net R that is not a real,
+    sane number, is refused here: NaN would compare false and empty the list."""
+    assert client.get(f"{V1}/best-pairs?{query}", headers=alice.headers).status_code == 422
     assert service.calls == []
 
 

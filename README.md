@@ -250,7 +250,7 @@ can step between days and save the page. "call" / "put" on an open signal
 opens the desk's own buy ticket, prefilled; nothing is placed until you
 confirm it.
 
-The data comes through `/api/v1/super-signals/{session,reports,reports/<date>}`,
+The data comes through `/api/v1/super-signals/{session,rank,best-pairs,reports,reports/<date>}`,
 which proxies the desk's read-only loopback service at `TBOT_SUPER_SIGNALS_URL`
 (default `http://127.0.0.1:8792`). A URL rather than a folder, so this project
 still reads nothing outside itself. Any signed-in operator may read it --
@@ -260,6 +260,38 @@ the panel says so rather than showing an empty day.
 This replaces the A/B-book signal rail that read `runtime/super_research`
 directly. That runtime, its supervisors and the `ab_signal_options`
 auto-trade strategy are untouched.
+
+`GET /api/v1/super-signals/best-pairs` returns the daily report's **best ticker + signal pairs**
+over the last 30 sessions, best first. The desk rewrites that list after every report, in its
+`best_ticker_signal_pairs` table. Each pair carries edge, W-L-T, win %, net R, first and last
+fired, and how often it fired today, yesterday and over the past week. The optional minimums
+`min_win_pct`, `min_edge` and `min_net_r` are inclusive. A win % or edge outside 0-100, or a net
+R outside +/-1000, is a 422 before the desk is asked; that also covers NaN and infinity.
+
+### Auto-trading the signals
+
+ARM AUTO TRADE (in both worlds) has a **super signals** strategy. You choose
+the tickers (default SPY, QQQ, SPX) and tick the signal types to trade from a
+list ranked by today's results (edge score, 2+ settled trades). If no type
+has settled that many trades yet, the list ranks the previous session. Types
+whose 30-session history disagrees are left out. So are types whose agent
+never fires on the chosen tickers. `/super-signals/rank` supplies the list.
+
+Once armed, the watcher (`domains/trading/execution/autotrade.py`) reads the
+desk every 15 s. It enters when a new signal fires live that matches a picked
+type and a picked ticker, if the signal is:
+
+- inside the window (08:30-14:30 CST by default),
+- at most 6 minutes old,
+- and still open.
+
+A LONG buys a CALL and a SHORT buys a PUT. Entries go through the same
+managed entry as the BUY ticket (`execution/entry.py`), with its guards,
+sizing and smart limit. Each ticker gets at most one entry per hour. Each
+signal is entered at most once per account, even across re-arms. It buys same-day
+contracts only before the 13:00 0DTE cutoff. Signals already on the desk when
+you arm it are never entered. The watcher disarms itself at the 15:00 close,
+because the list was picked for that day.
 
 ---
 

@@ -422,6 +422,10 @@ export const vidura = {
   // ---- super signals: the signal-agent desk (its own project, proxied) ------
   superSignalsSession: (date) =>
     api.get('/super-signals/session', { params: date ? { date } : undefined }),
+  // signal types ranked by the report's edge score (today, else yesterday),
+  // history-disagreeing types already left out -- the auto-trade form's list
+  superSignalsRank: (date) =>
+    api.get('/super-signals/rank', { params: date ? { date } : undefined }),
   superSignalsReports: () => api.get('/super-signals/reports'),
   // a report page is ~1 MB of HTML; give it longer than a board poll
   superSignalsReport: (date) =>

@@ -126,6 +126,8 @@ CONTRACT: list[tuple[str, str]] = [
     # Read-only, same answer for every operator, recorded like every other
     # post-freeze addition.
     ("GET", f"{V1}/super-signals/session"),
+    ("GET", f"{V1}/super-signals/rank"),
+    ("GET", f"{V1}/super-signals/best-pairs"),
     ("GET", f"{V1}/super-signals/reports"),
     ("GET", f"{V1}/super-signals/reports/{{report_date}}"),
     # system

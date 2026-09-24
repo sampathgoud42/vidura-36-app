@@ -14,7 +14,7 @@ import threading
 from datetime import timedelta
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
@@ -820,6 +820,13 @@ class AutoTradeStart(BaseModel):
     min_contracts: int = 1
     delta_min: float = 0.35
     delta_max: float = 0.65
+    # super_signals: the signal types to trade (keys from /super-signals/rank),
+    # the CST window their signals must fire in, and whether same-day
+    # contracts may be bought (only before the 0DTE cutoff either way).
+    signals: list[str] = Field(default_factory=list, max_length=60)
+    window_open: str | None = Field(default=None, max_length=5)
+    window_close: str | None = Field(default=None, max_length=5)
+    zero_dte: bool = False
 
 
 @market_router.get("/autotrade/status", operation_id="getTradierAutoTradeStatus")
@@ -852,7 +859,9 @@ def autotrade_start(payload: AutoTradeStart,
             live=payload.live, buy_pct=payload.buy_pct, tp_pct=payload.tp_pct,
             sl_pct=payload.sl_pct, tolerance_pct=payload.tolerance_pct,
             min_contracts=payload.min_contracts, delta_min=payload.delta_min,
-            delta_max=payload.delta_max)
+            delta_max=payload.delta_max, signals=payload.signals,
+            window_open=payload.window_open, window_close=payload.window_close,
+            zero_dte=payload.zero_dte)
     except autotrade.AutoTradeRefused as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
 

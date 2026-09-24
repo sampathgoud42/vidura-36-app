@@ -18,7 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from app.api_v2 import deps
-from app.domains.trading.execution import idempotency, leases, orders, selection
+from app.domains.trading.execution import entry, idempotency, leases, orders
 from app.domains.trading.execution import venue as venue_mod
 from app.domains.trading.execution.orders import ExecutionRefused
 from app.domains.trading.models import Position
@@ -175,39 +175,15 @@ def open_position(payload: OpenRequest,
     sandbox = not payload.live
 
     try:
-        chain, expiration = _load_chain(cred, payload, sandbox=sandbox)
-        opt = selection.pick_contract(chain, payload.side,
-                                      payload.delta_min, payload.delta_max)
-        if opt is None:
-            lo, hi = selection.delta_band(payload.side, payload.delta_min,
-                                          payload.delta_max)
-            raise ExecutionRefused(
-                f"no {payload.side} on {payload.symbol} {expiration} with a "
-                f"delta in {lo:+g}..{hi:+g} and a two-sided quote",
-                status_code=404)
-
-        limit_price = selection.smart_limit(float(opt.get("bid") or 0),
-                                            float(opt["ask"]))
-        buying_power = float(
-            (venue_mod.balance(cred=cred, sandbox=sandbox) or {})
-            .get("option_buying_power") or 0)
-        sizing = selection.size_contracts(
-            buying_power, payload.buy_pct, limit_price,
-            tolerance_pct=payload.tolerance_pct)
-        if sizing.contracts < 1:
-            raise ExecutionRefused(f"sized to zero: {sizing.explain()}",
-                                   status_code=409)
-
-        pos = orders.open_position(
+        # The same pick / price / size / guarded order the auto-trader uses.
+        pos = entry.open_managed(
             db, tenant_id=tenant.id, cred=cred, symbol=payload.symbol,
-            side=payload.side, occ_symbol=opt["symbol"],
-            underlying=payload.symbol, strike=float(opt.get("strike") or 0),
-            expiration=expiration, delta=opt.get("_delta"),
-            contracts=sizing.contracts, limit_price=limit_price,
-            buy_pct=payload.buy_pct, tolerance_pct=payload.tolerance_pct,
-            tp_pct=payload.tp_pct, sl_pct=payload.sl_pct, sandbox=sandbox,
-            strategy=payload.strategy, allow_add=payload.allow_add,
-            zero_dte=payload.zero_dte,
+            side=payload.side, buy_pct=payload.buy_pct, tp_pct=payload.tp_pct,
+            sl_pct=payload.sl_pct, delta_min=payload.delta_min,
+            delta_max=payload.delta_max, tolerance_pct=payload.tolerance_pct,
+            sandbox=sandbox, strategy=payload.strategy,
+            expiration=payload.expiration, zero_dte=payload.zero_dte,
+            allow_add=payload.allow_add,
         )
         result = _serialise(pos)
         idempotency.succeed(db, attempt, result=result, position_id=pos.id,
@@ -232,40 +208,6 @@ def open_position(payload: OpenRequest,
         logger.exception("open_position failed for tenant %s", tenant.id)
         raise HTTPException(status_code=502,
                             detail="the venue could not be reached") from None
-
-
-def _load_chain(cred, payload: OpenRequest, *, sandbox: bool):
-    """The chain to pick from, and the expiration it belongs to.
-
-    Goes through the venue seam like every other broker call. It used to build
-    its own client here, which meant substituting the venue substituted only
-    half of the outbound calls -- the half that was easy to notice.
-    """
-    listed = venue_mod.expirations(payload.symbol, cred=cred, sandbox=sandbox)
-    if not listed:
-        raise ExecutionRefused(f"no listed expirations for {payload.symbol}",
-                               status_code=404)
-    expiration = payload.expiration or _choose_expiration(
-        listed, zero_dte=payload.zero_dte)
-    return venue_mod.option_chain(payload.symbol, expiration,
-                                  cred=cred, sandbox=sandbox), expiration
-
-
-def _choose_expiration(expirations: list[str], *, zero_dte: bool) -> str:
-    """Nearest listed expiry, skipping today unless 0DTE was asked for.
-
-    A same-day contract with hours left is a different trade from the one a
-    delta band describes, so it has to be requested rather than fallen into.
-    """
-    from app.domains.trading.risk import clock
-
-    today = clock.today().isoformat()
-    for exp in sorted(expirations):
-        if exp == today and not zero_dte:
-            continue
-        if exp >= today:
-            return exp
-    return sorted(expirations)[-1]
 
 
 # ---- the exit -------------------------------------------------------------

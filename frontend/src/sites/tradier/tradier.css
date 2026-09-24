@@ -1273,6 +1273,59 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
 .tr-discount-row { display: flex; gap: 4px; margin-top: 4px; }
 .tr-discount-row .tr-chip { padding: 2px 7px; font-size: 9px; cursor: pointer; }
 
+/* super_signals: the signal types to trade, as the signal desk ranks them.
+   Margins, not flex gap, for the older iPhone Safari 36 Trades still serves. */
+.tr-sigpick { min-width: 0; }
+.tr-sigpick-clear {
+  margin-left: 8px; border: 0; padding: 0; background: none; cursor: pointer;
+  font: inherit; color: var(--tr-accent-hi); text-decoration: underline; text-underline-offset: 2px;
+}
+.tr-sigpick-basis { margin: 2px 0 6px; line-height: 1.45; }
+.tr-sigpick-basis b { color: var(--tr-ink); font-weight: 600; }
+.tr-sigpick-list {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--tr-line); border-radius: 10px; overflow: hidden;
+}
+.tr-sigpick-row {
+  display: flex; align-items: flex-start; padding: 7px 10px; cursor: pointer;
+  border-top: 1px solid var(--tr-line); -webkit-tap-highlight-color: transparent;
+}
+.tr-sigpick-row:first-child { border-top: 0; }
+.tr-sigpick-row.on {
+  background: rgba(91, 106, 240, 0.1);
+  background: color-mix(in srgb, var(--tr-accent) 12%, transparent);
+}
+.tr-sigpick-row input {
+  flex: 0 0 auto; width: 15px; height: 15px; margin: 2px 9px 0 0; accent-color: var(--tr-accent);
+}
+.tr-sigpick-body { display: flex; flex-direction: column; min-width: 0; }
+.tr-sigpick-name {
+  font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--tr-ink);
+  overflow-wrap: anywhere;
+}
+.tr-sigpick-rank, .tr-sigpick-agent { color: var(--tr-faint); }
+.tr-sigpick-name b.long { color: var(--tr-green); font-weight: 600; }
+.tr-sigpick-name b.short { color: var(--tr-red); font-weight: 600; }
+.tr-sigpick-stats {
+  margin-top: 2px; font-family: ui-monospace, Consolas, monospace; font-size: 10.5px;
+  color: var(--tr-dim);
+}
+.tr-sigpick-stats .agrees { color: var(--tr-green); }
+.tr-sigpick-stats .new { color: var(--tr-amber); }
+.tr-sigpick-more {
+  margin-top: 6px; padding: 5px 10px; border: 1px dashed var(--tr-line); border-radius: 8px;
+  background: transparent; color: var(--tr-dim); cursor: pointer;
+  font-family: ui-monospace, Consolas, monospace; font-size: 10.5px;
+}
+/* phones: 44pt rows and a checkbox a thumb can hit */
+@media (max-width: 720px), (pointer: coarse) {
+  .tr-sigpick-row { min-height: 44px; padding: 9px 10px; }
+  .tr-sigpick-row input { width: 20px; height: 20px; }
+  .tr-sigpick-name { font-size: 12.5px; }
+  .tr-sigpick-stats { font-size: 11.5px; }
+  .tr-sigpick-more, .tr-sigpick-clear { min-height: 44px; }
+}
+
 /* a chart tile is a section too, but its grip lives inside — there is no
    outside margin to hang it in */
 .tr-sec.tile { margin-bottom: 0; min-width: 0; }

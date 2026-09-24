@@ -750,6 +750,8 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
   --tr-green: var(--d36-green); --tr-red: var(--d36-red);
   --tr-amber: var(--d36-amber);
 }
+.d36-autosheet .tr-input,
+.d36-autosheet .tr-select { font-size: 16px; }   /* see .d36-syminput */
 
 /* ── footer ─────────────────────────────────────────────────────────────── */
 .d36-footer {

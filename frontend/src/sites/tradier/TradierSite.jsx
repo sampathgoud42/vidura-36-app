@@ -2359,6 +2359,118 @@ function TargetCell({ pos, busy, onSave }) {
 // Exported with the rest, so another board arms the auto-trader through
 // the SAME form and the same knobs rather than a second one that drifts.
 const AUTO_DISCOUNT_OPTIONS = [10, 20, 40];
+const STRATEGY_LABELS = { super_signals: 'super signals' };
+const SIGNALS_SHOWN = 8;
+
+const signedR = (r) => (r == null ? '—' : `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r).toFixed(2)}R`);
+
+/* super_signals: which signal types to trade. The list is the signal desk's
+   own ranking (/super-signals/rank) -- today's edge score, the previous
+   session's when nothing has settled enough trades today -- and the desk has
+   already left out every type whose longest window disagrees. A type whose
+   agent never trades any of the chosen tickers is hidden as well: picking it
+   could never fire. Nothing is pre-selected; this list spends money. */
+function SignalPicker({ tickers, value, onChange }) {
+  const [rank, setRank] = useState(null);
+  const [err, setErr] = useState(null);
+  const [all, setAll] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    vidura.superSignalsRank()
+      .then((r) => { if (alive) { setRank(r); setErr(null); } })
+      .catch((e) => { if (alive) setErr(errText(e)); });
+    return () => { alive = false; };
+  }, []);
+
+  const wanted = useMemo(() => String(tickers || '').toUpperCase().split(',')
+    .map((t) => t.trim()).filter(Boolean), [tickers]);
+  const listed = rank?.signals || [];
+  const usable = listed.filter((s) => !(s.universe || []).length
+    || s.universe.some((t) => wanted.includes(t)));
+  const shown = all ? usable : usable.slice(0, SIGNALS_SHOWN);
+  const stranded = value.filter((k) => !usable.some((s) => s.key === k)).length;
+  const toggle = (k) => onChange(value.includes(k) ? value.filter((x) => x !== k) : [...value, k]);
+  const fromToday = rank && rank.basis === 'session' && rank.basis_date === rank.today;
+
+  return (
+    <div className="tr-sigpick" style={{ gridColumn: '1 / -1' }}>
+      <span className="tr-label">
+        Signals{value.length ? ` · ${value.length} picked` : ''}
+        {value.length > 0 && (
+          <button type="button" className="tr-sigpick-clear" onClick={() => onChange([])}>clear</button>
+        )}
+      </span>
+      {err && <p className="tr-err" style={{ margin: '4px 0' }}>⚠ the signal desk&rsquo;s ranking is unavailable — {err}</p>}
+      {!err && !rank && <p className="tr-note">loading the signal desk&rsquo;s ranking…</p>}
+      {rank && (
+        <p className="tr-note tr-sigpick-basis">
+          {fromToday
+            ? <>Ranked by <b>today&rsquo;s</b> results</>
+            : rank.basis === 'previous'
+              ? <>Nothing has settled {rank.min_resolved}+ trades today yet — ranked by <b>{rank.basis_weekday} {rank.basis_date.slice(5)}</b></>
+              : <>Ranked by <b>{rank.basis_weekday} {rank.basis_date.slice(5)}</b>, the last session</>}
+          {' '}· edge score, {rank.min_resolved}+ settled trades
+          {rank.excluded?.length > 0 && (
+            <> · <span title={rank.excluded.map((x) => `${x.label} (${signedR(x.history?.net_r)} over ${rank.history_sessions} sessions)`).join('\n')}>
+              {rank.excluded.length} left out — {rank.history_sessions}-session history disagrees</span></>
+          )}
+        </p>
+      )}
+      {rank && usable.length === 0 && (
+        <p className="tr-note">No ranked signal type trades {wanted.join(', ') || 'these tickers'} yet.</p>
+      )}
+      {shown.length > 0 && (
+        <div className="tr-sigpick-list" role="group" aria-label="signal types to trade">
+          {shown.map((s) => {
+            const d = s.day || {};
+            const h = s.history;
+            const on = value.includes(s.key);
+            const fires = (s.universe || []).filter((t) => wanted.includes(t));
+            const verdict = s.verdict?.level === 'pos' ? 'history agrees'
+              : s.verdict?.level === 'flat' ? 'history flat' : 'no earlier trades';
+            return (
+              <label key={s.key} className={`tr-sigpick-row${on ? ' on' : ''}`}>
+                <input type="checkbox" checked={on} onChange={() => toggle(s.key)} />
+                <span className="tr-sigpick-body">
+                  <span className="tr-sigpick-name">
+                    <span className="tr-sigpick-rank">#{s.rank}</span>{' '}
+                    <span className="tr-sigpick-agent">{s.agent}</span>{' '}
+                    {s.setup.replace(/_/g, ' ').replace(/\+/g, ' + ')}
+                    {s.grade && <span className="tr-sigpick-agent"> [{s.grade}]</span>}{' '}
+                    <b className={s.direction === 'SHORT' ? 'short' : 'long'}>
+                      {s.direction === 'SHORT' ? '▼ SHORT' : '▲ LONG'}</b>
+                  </span>
+                  <span className="tr-sigpick-stats">
+                    {d.wins}–{d.losses}–{d.timeouts} · {signedR(d.net_r)} · edge {d.score ?? '—'}
+                    {' · '}
+                    <span className={s.verdict?.level === 'pos' ? 'agrees' : 'new'}
+                      title={h ? `${rank.history_sessions} sessions: ${h.wins}–${h.losses}–${h.timeouts}, ${signedR(h.net_r)}` : 'no trades before this session'}>
+                      {h && s.verdict?.level !== 'none'
+                        ? `${rank.history_sessions}d ${signedR(h.net_r)} · ${verdict}` : verdict}
+                    </span>
+                    {fires.length > 0 && <> · fires on {fires.join(', ')}</>}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {usable.length > SIGNALS_SHOWN && (
+        <button type="button" className="tr-sigpick-more" onClick={() => setAll((v) => !v)}>
+          {all ? 'show the top 8' : `show all ${usable.length}`}
+        </button>
+      )}
+      {(listed.length > usable.length || stranded > 0) && (
+        <p className="tr-note" style={{ marginTop: 4 }}>
+          {listed.length > usable.length && `${listed.length - usable.length} more never trade ${wanted.join(', ')}. `}
+          {stranded > 0 && `${stranded} picked type${stranded > 1 ? 's' : ''} cannot fire on these tickers.`}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
   const [f, setF] = useState({
@@ -2375,6 +2487,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
     zero_dte_cutoff: defaults?.zero_dte_cutoff || '13:00',
     cooldown_min: String(defaults?.cooldown_min ?? 60),
     top_n: String(defaults?.top_n ?? 3),
+    signals: [],
   });
   const [market, setMarket] = useState(true);
   const [discount, setDiscount] = useState(10);
@@ -2383,6 +2496,8 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
   const isHot = f.strategy === 'hot_tickers';
   const isSuperHot = f.strategy === 'super_hot_tickers';
   const isAutoScan = isHot || isSuperHot;
+  const isSuper = f.strategy === 'super_signals';
+  const confirmS = defaults?.confirm_s ?? 300;
 
   useEffect(() => {
     if (isHot) {
@@ -2392,6 +2507,18 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
     if (isSuperHot) {
       setMarket(false); setDiscount(10);
       setF((p) => ({ ...p, buy_pct: 30, delta: '0.30-0.50' }));
+    }
+    // Each strategy opens on its own window: the level cross is an opening-
+    // range play, super signals fire all session.
+    if (isSuper) {
+      setF((p) => ({ ...p,
+        tickers: p.tickers && !p.tickers.startsWith('(') ? p.tickers : (defaults?.tickers || 'SPY,QQQ,SPX'),
+        window_open: defaults?.super_window_open || '08:30',
+        window_close: defaults?.super_window_close || '14:30' }));
+    } else if (f.strategy === '10min_intraday_move') {
+      setF((p) => ({ ...p,
+        window_open: defaults?.window_open || '08:30',
+        window_close: defaults?.window_close || '09:30' }));
     }
   }, [f.strategy]);
 
@@ -2410,7 +2537,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
           <div><span className="tr-label">Strategy</span>
             <select className="tr-select" value={f.strategy} onChange={set('strategy')}>
               {(defaults?.strategies || [f.strategy]).map((s) => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s}>{STRATEGY_LABELS[s] || s}</option>
               ))}
             </select></div>
           <div><span className="tr-label">Tickers</span>
@@ -2435,6 +2562,10 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
               <input className="tr-input" value={f.window_close} onChange={set('window_close')}
                 placeholder="09:30" maxLength={5} />
             </div></div>
+          {isSuper && (
+            <SignalPicker tickers={f.tickers} value={f.signals}
+              onChange={(v) => setF((p) => ({ ...p, signals: v }))} />
+          )}
           <div><span className="tr-label">Delta range</span>
             <input className="tr-input" value={f.delta}
               onChange={set('delta')} placeholder="0.12-0.30"
@@ -2457,6 +2588,15 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
             <input className="tr-input" type="number" min="1" max="1000" value={f.min_contracts}
               onWheel={(e) => e.currentTarget.blur()} onChange={set('min_contracts')}
               title="the Buy % sizing must reach this many contracts, or the trade is skipped" /></div>
+          {isSuper ? (
+            // The watcher buys through the desk's own BUY, which bids a smart
+            // limit; a MKT / discount toggle here would promise what it ignores.
+            <div><span className="tr-label">Order type</span>
+              <span className="tr-note" style={{ display: 'block', lineHeight: 1.4 }}
+                title="the desk's own BUY: the mid on a wide spread, the ask on a tight one">
+                smart limit — the desk&rsquo;s BUY</span>
+            </div>
+          ) : (
           <div><span className="tr-label">Order type</span>
             <div className="tr-market-toggle">
               <button type="button"
@@ -2478,18 +2618,37 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
               </div>
             )}
           </div>
+          )}
           <div><span className="tr-label">Expiration</span>
             <button type="button" className={`tr-chip tr-0dte ${zeroDte ? 'on' : ''}`}
               aria-pressed={zeroDte} onClick={() => setZeroDte((v) => !v)}
-              title={zeroDte
-                ? "same-day expiries allowed — the nearest expiry, today included"
-                : "same-day expiries skipped — the nearest expiry after today"}>
+              title={isSuper
+                ? (zeroDte
+                  ? `same-day contracts until ${defaults?.zero_dte_cutoff || '13:00'} CST, then the next expiry`
+                  : 'the nearest expiry after today')
+                : zeroDte
+                  ? "same-day expiries allowed — the nearest expiry, today included"
+                  : "same-day expiries skipped — the nearest expiry after today"}>
               0DTE {zeroDte ? 'ON' : 'OFF'}
             </button>
           </div>
         </div>
         <p className="tr-note mt-3">
-          {isSuperHot ? (
+          {isSuper ? (
+            <>
+              Watches the signal desk live: a new signal of a picked type on{' '}
+              {f.tickers || 'your tickers'} buys a CALL for a LONG and a PUT for a SHORT — only
+              signals fired live inside {f.window_open}–{f.window_close} CST, at most{' '}
+              {defaults?.super_max_age_min ?? 6} min old and still open, and at most one entry per
+              ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}
+              {zeroDte
+                ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '13:00'} CST, then the next expiry.`
+                : 'The nearest expiry after today.'}{' '}
+              Sized by Buy % through the desk&rsquo;s own BUY (delta {f.delta}, TP {f.tp_pct}% / SL{' '}
+              {f.sl_pct}%); below min contracts the trade is skipped. Disarms itself at the 15:00
+              close — the list is today&rsquo;s.
+            </>
+          ) : isSuperHot ? (
             <>
               Picks the top {f.top_n} tickers from the SUPERHOT scan (period-9 DMI/ADX,
               directional efficiency, trend acceleration). Each gets a {market ? 'market' : `LIMIT −${discount}%`} buy,
@@ -2510,15 +2669,18 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
           ) : (
             <>
               New above_10min_high → CALL / below_10min_low → PUT crosses inside the window,
-              confirmed after {Math.round((defaults?.confirm_s ?? 300) / 60)} min, open a managed
-              0DTE position sized by Buy % — sized below min contracts, the trade is skipped.
+              confirmed after {confirmS < 60 ? `${confirmS}s` : `${Math.round(confirmS / 60)} min`},
+              open a managed 0DTE position sized by Buy % — sized below min contracts, the trade
+              is skipped.
             </>
           )}{' '}
           {paper === false ? 'LIVE account — this spends real money on its own.'
             : 'SANDBOX venue — paper money, real order flow.'}
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button type="button" className="tr-btn sm auto" disabled={busy}
+          <button type="button" className="tr-btn sm auto"
+            disabled={busy || (isSuper && f.signals.length === 0)}
+            title={isSuper && f.signals.length === 0 ? 'pick at least one signal type to trade' : undefined}
             onClick={() => onArm({ ...f, discount_pct: market ? 0 : discount, zero_dte: zeroDte })}>{busy ? '…' : '🤖 Arm auto-trade'}</button>
           <button type="button" className="tr-btn sm" onClick={onClose}>Cancel</button>
         </div>
@@ -2942,6 +3104,7 @@ export default function TradierSite() {
         discount_pct: parseFloat(f.discount_pct) || 0,
         top_n: parseInt(f.top_n, 10) || 3,
         zero_dte: f.zero_dte !== false,
+        signals: f.signals || [],
         live,
       }));
       setAutoFormOpen(false);
