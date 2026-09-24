@@ -579,6 +579,11 @@
    than widening the page. */
 .d36-hot > * { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
+/* Super signals (shared/SuperSignals.jsx): dense rows, so the card hands the
+   width back, and nothing in it may scroll sideways -- its chip rows and
+   report pills scroll on their own. */
+.d36-signals > .ss { padding: 12px 10px; overflow-x: visible; }
+
 /* The desk's chart carries its own panel chrome; this only has to host it. */
 .d36-chartcell .tr-chart {
   border-radius: 10px;

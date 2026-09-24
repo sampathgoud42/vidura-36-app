@@ -419,4 +419,12 @@ export const vidura = {
   superSnapshots: (params) => api.get('/super/snapshots', { params }),
   superQuote: (ticker) => api.get(`/super/quote/${encodeURIComponent(ticker)}`),
 
+  // ---- super signals: the signal-agent desk (its own project, proxied) ------
+  superSignalsSession: (date) =>
+    api.get('/super-signals/session', { params: date ? { date } : undefined }),
+  superSignalsReports: () => api.get('/super-signals/reports'),
+  // a report page is ~1 MB of HTML; give it longer than a board poll
+  superSignalsReport: (date) =>
+    api.get(`/super-signals/reports/${encodeURIComponent(date)}`, { timeout: 60000 }),
+
 };

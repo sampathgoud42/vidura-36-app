@@ -4,6 +4,7 @@ import React, {
 import { Link } from 'react-router-dom';
 import { api, auth, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
+import SuperSignals from '../../shared/SuperSignals.jsx';
 import {
   AutoTradeForm, CommoditiesPanel, HotScan, MiniChart, OptionsFlow, useMovers,
 } from '../tradier/TradierSite.jsx';
@@ -128,6 +129,8 @@ const Chart = React.memo(MiniChart);
 const Hot = React.memo(HotScan);
 const Commodities = React.memo(CommoditiesPanel);
 const Flow = React.memo(OptionsFlow);
+// A busy day is several hundred rows; a quote tick must not re-render them.
+const Signals = React.memo(SuperSignals);
 
 // One tile. Renaming is per-symbol, so that handler has to be per-symbol too
 // — this is where the closure gets a stable identity, instead of the grid
@@ -155,6 +158,7 @@ const SECTIONS = [
   ['main', 'main'],
   ['watch', 'watchlist'],
   ['positions', 'positions'],
+  ['signals', 'signals'],
   ['commodities', 'commodities'],
   ['hot', 'hot'],
   ['charts', 'charts'],
@@ -990,6 +994,8 @@ export default function Desk36Site() {
   const [commOpen, setCommOpen] = useState(false);
   const [posOpen, setPosOpen] = useState(false);
   const [flowOpen, setFlowOpen] = useState(false);
+  // Open: one small JSON poll, and what fired today is what this board is for.
+  const [sigOpen, setSigOpen] = useState(true);
   const [top5Open, setTop5Open] = useState(true);
 
   // While any overlay is up, background refreshes stop. They are all cheap
@@ -1499,6 +1505,27 @@ export default function Desk36Site() {
             {posOpen && user && (
               <PositionsPanel user={user} live={live} blocked={busy}
                 onError={onPanelErr} onOk={onPanelOk} />
+            )}
+          </React.Fragment>
+        );
+
+        if (id === 'signals') return (
+          <React.Fragment key={id}>
+            {/* The signal-agent desk: today's signals with live outcomes, the
+                watchlist hits and every daily report -- the Tradier rail's
+                panel, laid out for a thumb. call/put opens the BuySheet. */}
+            <div className="d36-secthd">
+              <button type="button" className="d36-charttoggle"
+                onClick={() => setSigOpen((v) => !v)}>
+                {sigOpen ? '▾' : '▸'} super signals
+              </button>
+              <span className="d36-charthint">today · 8 agents · daily reports</span>
+            </div>
+            {sigOpen && (
+              <div className="d36-hot d36-signals">
+                <Signals touch accent="#86efac" paused={busy}
+                  onPick={pickSym} onTrade={buySym} />
+              </div>
             )}
           </React.Fragment>
         );

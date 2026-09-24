@@ -229,6 +229,40 @@ comparing, so hashing keeps the master key out of its blast radius entirely.
 
 ---
 
+## Super Signals
+
+The signal-agent desk -- eight strategy agents on one 5-minute feed, a
+watchlist tracker, and a daily report at 15:00 CST -- is its own project
+(vidura-super-signals) with its own scheduled tasks. Both trading worlds show
+it through one shared panel, `frontend/src/shared/SuperSignals.jsx`:
+
+| world | where |
+| --- | --- |
+| Tradier Platform | right rail, first panel (draggable like the others) |
+| 36 Trade Desk | the **signals** section and tab, laid out for a phone |
+
+What it shows: today's signals newest first with their live outcome (target,
+stop, timeout, or still open), the day's W-L-T and net R, filters for open
+signals, one agent, or the **watchlist** tracker's hits, desk health (live,
+pre-open, closed, desk offline), and pills for today's and every earlier daily
+report. A report opens in a sandboxed viewer -- full-screen on a phone -- that
+can step between days and save the page. "call" / "put" on an open signal
+opens the desk's own buy ticket, prefilled; nothing is placed until you
+confirm it.
+
+The data comes through `/api/v1/super-signals/{session,reports,reports/<date>}`,
+which proxies the desk's read-only loopback service at `TBOT_SUPER_SIGNALS_URL`
+(default `http://127.0.0.1:8792`). A URL rather than a folder, so this project
+still reads nothing outside itself. Any signed-in operator may read it --
+a signal is the same fact for everybody on the desk. If that service is down
+the panel says so rather than showing an empty day.
+
+This replaces the A/B-book signal rail that read `runtime/super_research`
+directly. That runtime, its supervisors and the `ab_signal_options`
+auto-trade strategy are untouched.
+
+---
+
 ## The Bot Station
 
 `/bot-station` is mission control for the **Kalshi** bots. Seven families,

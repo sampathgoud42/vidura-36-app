@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
 import SiteFooter from '../../shared/SiteFooter.jsx';
+import SuperSignals from '../../shared/SuperSignals.jsx';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
 import '../../shared/worldHeader.css';
@@ -2677,16 +2678,6 @@ export function GexInline() {
   );
 }
 
-// ── right rail: A/B super signals from the central ledgers, past 48h ───────
-function sigWhen(iso) {
-  if (!iso) return '';
-  const d = new Date(/Z$|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleString([], { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
-
 /* ── options flow: heaviest contracts across the large caps ────────────────
    Served from a background chain sweep, so this polls a snapshot rather than
    waiting on the venue. Open interest is a prior-close figure and cannot
@@ -2808,186 +2799,6 @@ export function OptionsFlow({ user, live, onPick, onError, onBuy, buying, blocke
             ? `OI change vs ${meta.oi_baseline_date}`
             : 'OI change starts once a prior session is on file — vol/OI meanwhile'}
         </p>
-      )}
-    </div>
-  );
-}
-
-// The band the operator wants for signal-driven entries — deliberately
-// tighter than the composer's default.
-const SIGNAL_DELTA = [0.25, 0.40];
-
-/* The universal power glyph — a ring broken at the top with a stem through
-   it, drawn rather than typed so it is crisp at chip size and needs no emoji
-   support. Same mark as the Super-Signals world's power button, because it is
-   the same action. */
-function PowerGlyph() {
-  return (
-    <svg className="tr-powerglyph" viewBox="0 0 100 100" aria-hidden="true" focusable="false">
-      <path d="M28 26a34 34 0 1 0 44 0" />
-      <line x1="50" y1="12" x2="50" y2="48" />
-    </svg>
-  );
-}
-
-function SignalRail({ onPick, onBuy, buying }) {
-  const [items, setItems] = useState(null);
-  const [err, setErr] = useState(null);
-  // the signal watcher (super_research supervisors) — same backend action as
-  // the Super Signals site's start button, minus the splash theatrics
-  const [watcher, setWatcher] = useState(null);   // {live, cats[]} | null
-  const [starting, setStarting] = useState(false);
-  const [offBusy, setOffBusy] = useState(false);
-
-  const checkWatcher = useCallback(async () => {
-    try {
-      const st = await vidura.superState();
-      const cats = st?.categories || [];
-      setWatcher({
-        live: cats.some((c) => c.live),
-        cats: cats.filter((c) => c.live).map((c) => c.key || c.label || '?'),
-      });
-    } catch { /* backend down — signals fetch shows the error */ }
-  }, []);
-
-  useEffect(() => {
-    checkWatcher();
-    const t = setInterval(checkWatcher, 60_000);
-    return () => clearInterval(t);
-  }, [checkWatcher]);
-
-  const startWatcher = async () => {
-    if (starting) return;
-    setStarting(true);
-    try { await vidura.superOn(); } catch (e) { setErr(errText(e)); }
-    await checkWatcher();
-    setStarting(false);
-  };
-
-  // ⏻ off — the Super-Signals world's power-down, reachable from here. Same
-  // call, same confirmation, same scope: every category supervisor, not just
-  // the ones feeding this rail. The desk could already START the watcher, so
-  // being unable to stop it was the asymmetry (user 08/17).
-  const stopWatcher = async () => {
-    if (offBusy) return;
-    const sure = await confirmDialog({
-      title: 'Power down the Super-Signals desk?',
-      body: 'This stops all category supervisor bots. Workers finish their cycle and exit.',
-      notes: watcher?.cats?.length
-        ? [`running now: ${watcher.cats.join(', ')}`,
-          'the A/B signals on this rail stop updating until it is started again']
-        : undefined,
-      confirmText: 'Power down',
-      tone: 'danger',
-    });
-    if (!sure) return;
-    setOffBusy(true);
-    try { await vidura.superOff(); } catch (e) { setErr(errText(e)); }
-    await checkWatcher();
-    setOffBusy(false);
-  };
-
-  useEffect(() => {
-    let alive = true;
-    const load = async () => {
-      try {
-        const page = await vidura.superSignals({ days: 2, central: 1, limit: 200 });
-        if (!alive) return;
-        const cutoff = Date.now() - 48 * 3600 * 1000;
-        setItems((page.items || []).filter((s) => {
-          if (!s.logged_at) return false;
-          const t = new Date(/Z$/.test(s.logged_at) ? s.logged_at : `${s.logged_at}Z`).getTime();
-          return t >= cutoff;
-        }));
-        setErr(null);
-      } catch (e) { if (alive) setErr(errText(e)); }
-    };
-    load();
-    const t = setInterval(load, 60_000);
-    return () => { alive = false; clearInterval(t); };
-  }, []);
-
-  // 48h outcome tally for the header: target / stop / deadline-timeout
-  const tally = { target: 0, stop: 0, timeout: 0 };
-  for (const s of items || []) {
-    const o = s.raw?.outcome;
-    if (o in tally) tally[o] += 1;
-  }
-
-  // brand-new signals pulse until acknowledged (any click) or 5 min old
-  const sigKeys = useMemo(() => (items ? items.map((s) => String(s.id)) : null), [items]);
-  const freshSigs = useNewBlink(sigKeys);
-
-  return (
-    <div className="tr-panel tr-rail">
-      <div className="tr-sighead mb-2">
-        <span className="tr-eyebrow" style={{ display: 'inline' }}>signals · 48h</span>
-        {watcher && (watcher.live ? (
-          <button type="button" className="tr-chip on tr-power"
-            style={{ marginRight: 'auto' }}
-            onClick={stopWatcher} disabled={offBusy}
-            aria-label="Power down the Super-Signals supervisors"
-            title={`signal watcher live: ${watcher.cats.join(', ')}`
-              + ' — click to power down every category supervisor'}>
-            {offBusy ? '…' : <><PowerGlyph /> live</>}
-          </button>
-        ) : (
-          <button type="button" className="tr-chip" style={{ marginRight: 'auto' }}
-            onClick={startWatcher} disabled={starting}
-            title="start the signal watcher on the backend (same as the Super Signals start button)">
-            {starting ? '…' : '▶ start'}
-          </button>
-        ))}
-        {items && items.length > 0 && (
-          <span className="tr-sigstats tr-mono"
-            title="settled outcomes of the signals below (past 48h): take-profit / stop-loss / timeout">
-            <b style={{ color: 'var(--tr-green)' }}>TP: {tally.target}</b>
-            <b style={{ color: 'var(--tr-red)' }}>SL: {tally.stop}</b>
-            <b style={{ color: 'var(--tr-faint)' }}>TO: {tally.timeout}</b>
-          </span>
-        )}
-      </div>
-      {err && !items && <p className="tr-err">⚠ {err}</p>}
-      {!err && !items && <p className="tr-note">loading signals…</p>}
-      {items && items.length === 0 && <p className="tr-note">no A/B signals in the past 48 hours</p>}
-      {items && items.length > 0 && (
-        <div className="tr-siglist tr-mono">
-          {items.map((s) => {
-            const r = s.raw || {};
-            const short = (s.direction || '').toUpperCase() === 'SHORT';
-            return (
-              <div key={s.id}
-                className={`tr-sig ${(s.book || '').toLowerCase()} ${freshSigs[String(s.id)] ? 'tr-newblink' : ''}`}>
-                <span className="ts">{sigWhen(s.logged_at)}</span>
-                <span className="line">
-                  <b className={`bk ${(s.book || '').toLowerCase()}`}>{s.book}-book</b>{' '}
-                  <b style={{ color: short ? 'var(--tr-red)' : 'var(--tr-green)' }}>
-                    {(s.direction || '?').toUpperCase()}
-                  </b>{' '}
-                  <button type="button" className="tr-tkr"
-                    title={`${s.ticker} — live price, pivot points, TradingView`}
-                    onClick={() => onPick(s.ticker)}>{s.ticker}</button>
-                  {' '}px {px(s.price)} → {px(r.target_price)} / {px(r.stop_price)}{' '}
-                  SL/TP ≤{r.stop_deadline_cst || '—'}
-                  {r.eng_hot && <span className="hot"> ·{'🔥'.repeat(Math.max(0, Number(r.eng_hot) - 1))}</span>}
-                  {r.outcome && (
-                    <span className={`oc ${r.outcome}`}> {r.outcome}</span>
-                  )}
-                </span>
-                {onBuy && (
-                  <button type="button" className="tr-sigbuy"
-                    disabled={!!buying}
-                    onClick={() => onBuy(s)}
-                    title={`find the ${SIGNAL_DELTA[0]}-${SIGNAL_DELTA[1]} delta `
-                      + `${short ? 'put' : 'call'} on ${s.ticker}`}>
-                    {buying === s.id ? '…' : 'buy'}
-                  </button>
-                )}
-              </div>
-            );
-          })}
-          <p className="tr-note mt-2">A + B books · merged ledger rows · 60s refresh</p>
-        </div>
       )}
     </div>
   );
@@ -3313,7 +3124,7 @@ export default function TradierSite() {
   // rearrangeable panels, per column
   const mainOrder = useSectionOrder('tradier.order.main2',
     ['charts-top', 'positions', 'charts-mid', 'charts-bottom']);
-  const railOrder = useSectionOrder('tradier.order.rail2', ['flow']);
+  const railOrder = useSectionOrder('tradier.order.rail2', ['signals', 'flow']);
   const mainDrag = useDrag(mainOrder.move);
   const railDrag = useDrag(railOrder.move);
   const colResize = useColumnResize(232, 232);
@@ -3751,13 +3562,24 @@ export default function TradierSite() {
         <aside className="tr-col side"
           style={colResize.right > 232 ? { fontSize: `${Math.min(12, 9 * (colResize.right / 232))}px` } : undefined}>
           <LevelCrosses maxPerTicker={3} />
-          {railOrder.order.map((sid) => (sid === 'flow' ? (
-            <Section key="flow" id="flow" label="options flow" drag={railDrag}>
-              <OptionsFlow user={user} live={live} onPick={setQuoteTicker}
-                onError={pushErr} onBuy={buyFlowContract}
-                blocked={isBlocked('options flow')} />
-            </Section>
-          ) : null))}
+          {railOrder.order.map((sid) => {
+            if (sid === 'signals') return (
+              // the signal-agent desk: today's signals, watchlist hits and the
+              // daily reports; "call ▸ / put ▸" opens the ticket, prefilled
+              <Section key="signals" id="signals" label="super signals" drag={railDrag}>
+                <SuperSignals compact accent="#5b6af0" onPick={setQuoteTicker}
+                  onTrade={(sym, side) => openTicket({ symbol: sym, side })} />
+              </Section>
+            );
+            if (sid === 'flow') return (
+              <Section key="flow" id="flow" label="options flow" drag={railDrag}>
+                <OptionsFlow user={user} live={live} onPick={setQuoteTicker}
+                  onError={pushErr} onBuy={buyFlowContract}
+                  blocked={isBlocked('options flow')} />
+              </Section>
+            );
+            return null;
+          })}
         </aside>
         </div>
 
