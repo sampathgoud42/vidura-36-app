@@ -1490,6 +1490,13 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
   .tr-offline-banner button { font-size: 11px; padding: 4px 12px; }
 }
 
+/* the arm form, when another trader (the best-pairs bot) holds the signal desk */
+.tr-deskowner {
+  margin: 0 0 12px; padding: 8px 10px;
+  border: 1px solid var(--tr-amber); border-radius: 6px;
+  color: var(--tr-amber); font-size: 11.5px; line-height: 1.45;
+}
+
 /* best_pairs: the pairs table's own minimums, above the pair list */
 .tr-pairmins { display: flex; flex-wrap: wrap; margin: 2px 0 4px; }
 .tr-pairmins label { display: flex; flex-direction: column; margin: 0 10px 4px 0; }

@@ -2611,7 +2611,17 @@ function PairPicker({ value, onChange }) {
   );
 }
 
-export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
+// Who else holds the signal desk for this operator -- today only ever the
+// standalone best-pairs bot (backend/bot_best_pair) -- as /autotrade/status
+// reports it. One line, the same on both boards' buttons.
+export function deskOwnerNote(owner) {
+  if (!owner) return '';
+  return owner.kind === 'bot_best_pair'
+    ? `${owner.describe} is trading best pairs from the backend`
+    : `${owner.describe} holds the signal desk`;
+}
+
+export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, deskOwner }) {
   const [f, setF] = useState({
     strategy: defaults?.strategy || '10min_intraday_move',
     tickers: defaults?.tickers || 'SPY,QQQ,SPX',
@@ -2639,6 +2649,8 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
   const isSuper = f.strategy === 'super_signals';
   const isPairs = f.strategy === 'best_pairs';
   const onDesk = isSuper || isPairs;        // trades the signal desk's live signals
+  // the server refuses a second trader on the signal desk; say so before it has to
+  const deskTaken = onDesk && !!deskOwner;
   const confirmS = defaults?.confirm_s ?? 300;
 
   useEffect(() => {
@@ -2675,6 +2687,13 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
       aria-label="arm auto-trade">
       <div className="tr-modal tr-panel" onClick={(e) => e.stopPropagation()}>
         <span className="tr-eyebrow mb-3" style={{ display: 'block' }}>arm auto trade</span>
+        {deskOwner && (
+          <p className="tr-deskowner" role="status">
+            🤖 {deskOwnerNote(deskOwner)}. While it runs, super signals and best pairs cannot
+            be armed here &mdash; one trader per signal desk, so no signal is bought twice. The
+            level-cross strategy is unaffected. Stop the bot (Ctrl-C in its window) to arm here.
+          </p>
+        )}
         <div className="tr-modal-grid">
           <div><span className="tr-label">Strategy</span>
             <select className="tr-select" value={f.strategy} onChange={set('strategy')}>
@@ -2840,8 +2859,10 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button type="button" className="tr-btn sm auto"
-            disabled={busy || (isSuper && f.signals.length === 0) || (isPairs && f.pairs.length === 0)}
-            title={isSuper && f.signals.length === 0 ? 'pick at least one signal type to trade'
+            disabled={busy || deskTaken || (isSuper && f.signals.length === 0)
+              || (isPairs && f.pairs.length === 0)}
+            title={deskTaken ? deskOwnerNote(deskOwner)
+              : isSuper && f.signals.length === 0 ? 'pick at least one signal type to trade'
               : isPairs && f.pairs.length === 0 ? 'pick at least one best pair to trade' : undefined}
             onClick={() => {
               // delta_min/max ride along so a board that forwards the form as it
@@ -3640,7 +3661,9 @@ export default function TradierSite() {
                       onClick={toggleAutoTrade} disabled={autoBusy}
                       title={autoST?.active
                         ? 'auto-trader ARMED on this venue — click to open its form'
-                        : 'arm the auto-trader on this venue'}>
+                        : autoST?.signal_desk_owner
+                          ? `${deskOwnerNote(autoST.signal_desk_owner)} — click to open the form`
+                          : 'arm the auto-trader on this venue'}>
                       {autoBusy ? '…' : '🤖 AUTO'}
                     </button>
                     <button type="button" className="tr-buybtn"
@@ -3939,6 +3962,7 @@ export default function TradierSite() {
             busy={autoBusy}
             onArm={armAutoTrade}
             onClose={() => setAutoFormOpen(false)}
+            deskOwner={autoST?.signal_desk_owner}
           />
         )}
         <BuyTicket open={ticket} desk={desk} onDesk={setDesk} live={live} bal={bal}
