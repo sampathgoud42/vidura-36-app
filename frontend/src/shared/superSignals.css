@@ -1,0 +1,392 @@
+/* Super Signals — one panel for the Tradier right rail and the 36 Trade Desk.
+   Colours are the --tr-* tokens: .tr-root defines them on the desk and
+   .d36-hot remaps them to 36 Trades' palette, so the panel wears whichever
+   world it is in. Spacing between flex children is margin, not `gap` — older
+   iPhone Safari ignores gap in flexbox (vidura36 skill). */
+
+.ss { min-width: 0; color: var(--tr-ink, #e3e6fa); }
+.ss-mono,
+.ss-status, .ss-day, .ss-score, .ss-econ, .ss-seg button, .ss-chip, .ss-l1, .ss-l2,
+.ss-pill, .ss-rhead, .ss-more, .ss-btn {
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace;
+}
+
+/* ── header ───────────────────────────────────────────────────────────────── */
+.ss-head { display: flex; align-items: center; flex-wrap: wrap; min-width: 0; }
+.ss-head > * { margin-right: 8px; }
+.ss-eyebrow { display: inline; }
+.ss-status {
+  display: inline-flex; align-items: center; white-space: nowrap;
+  font-size: 10px; color: var(--tr-faint, #5f679b);
+}
+.ss-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; margin-right: 5px; }
+.ss-status.live { color: var(--tr-green, #34d399); }
+.ss-status.live .ss-dot { animation: ss-pulse 2s ease-in-out infinite; }
+.ss-status.warn { color: var(--tr-amber, #fbbf24); }
+@keyframes ss-pulse { 50% { opacity: 0.3; } }
+.ss-day { margin-left: auto; margin-right: 0 !important; font-size: 10px; color: var(--tr-dim, #9aa3d0); }
+
+.ss-score {
+  display: flex; flex-wrap: wrap; align-items: baseline;
+  margin: 10px 0 8px; font-size: 11px; color: var(--tr-dim, #9aa3d0);
+}
+.ss-score > * { margin-right: 12px; white-space: nowrap; }
+.ss-score b { font-weight: 700; }
+.ss-score .w, .ss-l2 .w { color: var(--tr-green, #34d399); }
+.ss-score .l, .ss-l2 .l { color: var(--tr-red, #ff6b5e); }
+.ss-score .t { color: var(--tr-amber, #fbbf24); }
+.ss-score .o { color: var(--tr-accent-hi, #93a0ff); }
+.ss-net { font-weight: 700; }
+.ss-net.pos { color: var(--tr-green, #34d399); }
+.ss-net.neg { color: var(--tr-red, #ff6b5e); }
+.ss-count { color: var(--tr-faint, #5f679b); }
+.ss-econ { margin: -2px 0 8px; font-size: 10.5px; color: var(--tr-amber, #fbbf24); }
+
+.ss-offline {
+  margin: 10px 0 4px; padding: 8px 10px; border-radius: 8px; font-size: 11.5px; line-height: 1.45;
+  color: var(--tr-amber, #fbbf24); border: 1px solid rgba(251, 191, 36, 0.35);
+  background: rgba(251, 191, 36, 0.06);
+}
+.ss-err { margin: 8px 0; }
+
+/* ── scope: one segmented control ─────────────────────────────────────────── */
+.ss-seg {
+  display: flex; margin: 0 0 8px; padding: 2px;
+  border: 1px solid var(--tr-line, rgba(91, 106, 240, 0.22)); border-radius: 999px;
+}
+.ss-seg button {
+  flex: 1 1 auto; min-width: 0; border: 0; border-radius: 999px; padding: 6px 6px;
+  background: transparent; color: var(--tr-dim, #9aa3d0);
+  font-size: 10.5px; font-weight: 600; line-height: 1; white-space: nowrap; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ss-seg button.on {
+  color: var(--tr-accent-hi, #93a0ff);
+  background: rgba(127, 127, 160, 0.16);
+  background: color-mix(in srgb, var(--tr-accent, #5b6af0) 20%, transparent);
+}
+.ss-seg .n { margin-left: 5px; font-weight: 400; opacity: 0.75; }
+
+/* ── agent chips: one line that scrolls sideways ──────────────────────────── */
+.ss-agents {
+  display: flex; margin: 0 0 6px; padding-bottom: 2px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.ss-agents::-webkit-scrollbar { display: none; }
+.ss-chip {
+  flex: 0 0 auto; margin-right: 5px; padding: 3px 8px;
+  border: 1px solid var(--tr-line, rgba(91, 106, 240, 0.22)); border-radius: 999px;
+  background: transparent; color: var(--tr-dim, #9aa3d0);
+  font-size: 10px; line-height: 1.4; white-space: nowrap; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.ss-chip b { margin-left: 4px; color: var(--tr-ink, #e3e6fa); font-weight: 600; }
+.ss-chip.on { border-color: var(--tr-accent, #5b6af0); color: var(--tr-accent-hi, #93a0ff); }
+.ss-chip.zero { opacity: 0.45; }
+
+/* ── the list ─────────────────────────────────────────────────────────────── */
+.ss-list { list-style: none; margin: 0; padding: 0; }
+/* The rail scrolls its own list rather than growing the column by metres on
+   a busy day. 36 Trades pages instead: nested scrolling on a phone is a trap. */
+.ss--compact .ss-list {
+  max-height: 560px; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain; margin-right: -6px; padding-right: 6px;
+}
+/* a 4px gutter on every row, so marking a fresh one moves nothing */
+.ss-sig { padding: 6px 0 5px 4px; border-top: 1px solid var(--tr-line, rgba(91, 106, 240, 0.22)); }
+.ss-sig:first-child { border-top: 0; }
+.ss-sig.fresh { box-shadow: inset 2px 0 0 var(--tr-accent-hi, #93a0ff); }
+.ss-sig.fresh .ss-l1 { animation: ss-fresh 1.1s ease-in-out 3; }
+@keyframes ss-fresh {
+  50% { background: rgba(147, 160, 255, 0.16);
+        background: color-mix(in srgb, var(--tr-accent, #5b6af0) 18%, transparent); }
+}
+
+.ss-l1 { display: flex; align-items: center; min-width: 0; font-size: 11.5px; border-radius: 4px; }
+.ss-l1 > * { margin-right: 6px; }
+.ss-l1 > :last-child { margin-right: 0; }
+.ss-time { flex: 0 0 auto; font-size: 10.5px; color: var(--tr-faint, #5f679b); }
+.ss-dir { flex: 0 0 auto; font-size: 9.5px; }
+.ss-dir.long { color: var(--tr-green, #34d399); }
+.ss-dir.short { color: var(--tr-red, #ff6b5e); }
+.ss-tkr {
+  flex: 0 0 auto; border: 0; padding: 0; background: transparent; font: inherit; font-weight: 700;
+  color: var(--tr-accent-hi, #93a0ff); cursor: pointer;
+  text-decoration: underline dotted; text-underline-offset: 2px;
+  -webkit-tap-highlight-color: transparent;
+}
+.ss-what {
+  flex: 1 1 auto; min-width: 0; border: 0; padding: 0; background: transparent; font: inherit;
+  color: var(--tr-dim, #9aa3d0); text-align: left; cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.ss-agent, .ss-grade, .ss-x { color: var(--tr-faint, #5f679b); }
+.ss-star { color: var(--tr-amber, #fbbf24); }
+.ss-oc {
+  flex: 0 0 auto; padding: 1px 6px; border-radius: 6px;
+  font-size: 10.5px; font-weight: 700; white-space: nowrap;
+}
+.ss-oc.target { color: var(--tr-green, #34d399); background: rgba(52, 211, 153, 0.12); }
+.ss-oc.stop { color: var(--tr-red, #ff6b5e); background: rgba(255, 107, 94, 0.12); }
+.ss-oc.timeout { color: var(--tr-amber, #fbbf24); background: rgba(251, 191, 36, 0.1); }
+.ss-oc.open {
+  color: var(--tr-accent-hi, #93a0ff); background: transparent;
+  box-shadow: inset 0 0 0 1px var(--tr-accent, #5b6af0);
+}
+.ss-l2 {
+  display: flex; align-items: center; min-width: 0;
+  margin-top: 2px; padding-left: 48px; font-size: 10px; color: var(--tr-faint, #5f679b);
+}
+.ss-px { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ss-l2 .ss-oc { margin-left: 6px; }
+
+.ss-detail {
+  margin: 6px 0 2px; padding: 8px 10px; border-radius: 8px; font-size: 11.5px; line-height: 1.45;
+  color: var(--tr-dim, #9aa3d0); background: rgba(255, 255, 255, 0.035);
+}
+.ss-detail p { margin: 0 0 4px; }
+.ss-ctx { color: var(--tr-ink, #e3e6fa); }
+.ss-note { color: var(--tr-amber, #fbbf24); }
+.ss-meta, .ss-setups { color: var(--tr-faint, #5f679b); font-size: 10.5px; }
+.ss-actions { display: flex; flex-wrap: wrap; }
+.ss-actions > * { margin: 4px 6px 0 0; }
+.ss-btn {
+  border: 1px solid var(--tr-line, rgba(91, 106, 240, 0.22)); border-radius: 8px; padding: 5px 11px;
+  background: transparent; color: var(--tr-ink, #e3e6fa);
+  font-size: 11px; font-weight: 600; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.ss-btn.call { border-color: var(--tr-green, #34d399); color: var(--tr-green, #34d399); }
+.ss-btn.put { border-color: var(--tr-red, #ff6b5e); color: var(--tr-red, #ff6b5e); }
+
+.ss-more {
+  display: block; width: 100%; margin-top: 8px; padding: 8px;
+  border: 1px dashed var(--tr-line, rgba(91, 106, 240, 0.22)); border-radius: 8px;
+  background: transparent; color: var(--tr-dim, #9aa3d0); font-size: 11px; cursor: pointer;
+}
+.ss-empty { margin: 8px 0 4px; font-size: 11.5px; line-height: 1.5; color: var(--tr-faint, #5f679b); }
+.ss-watching { color: var(--tr-dim, #9aa3d0); }
+.ss-link {
+  border: 0; padding: 0; background: transparent; font: inherit; cursor: pointer;
+  color: var(--tr-accent-hi, #93a0ff); text-decoration: underline; text-underline-offset: 2px;
+}
+
+/* ── daily reports ────────────────────────────────────────────────────────── */
+.ss-reports {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--tr-line, rgba(91, 106, 240, 0.22));
+}
+.ss-rhead {
+  margin-bottom: 6px; font-size: 9.5px; letter-spacing: 0.22em; text-transform: uppercase;
+  color: var(--tr-faint, #5f679b);
+}
+.ss-pills {
+  display: flex; padding-bottom: 2px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+}
+.ss-pills::-webkit-scrollbar { display: none; }
+.ss-pill {
+  flex: 0 0 auto; margin-right: 6px; padding: 5px 9px;
+  border: 1px solid var(--tr-line, rgba(91, 106, 240, 0.22)); border-radius: 8px;
+  background: transparent; color: var(--tr-ink, #e3e6fa);
+  font-size: 11px; white-space: nowrap; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.ss-pill .d { margin-left: 5px; color: var(--tr-faint, #5f679b); }
+.ss-pill.today { border-color: var(--tr-accent, #5b6af0); color: var(--tr-accent-hi, #93a0ff); }
+.ss-pill.more { color: var(--tr-dim, #9aa3d0); }
+.ss-pill:disabled { cursor: default; opacity: 0.5; }
+
+@media (hover: hover) {
+  .ss-chip:hover, .ss-pill:not(:disabled):hover, .ss-btn:hover, .ss-more:hover {
+    border-color: var(--tr-accent, #5b6af0);
+  }
+  .ss-what:hover { color: var(--tr-ink, #e3e6fa); }
+}
+
+/* ── touch: 36 Trade Desk — every target at Apple's 44pt ─────────────────── */
+.ss--touch .ss-seg button { min-height: 44px; font-size: 12px; }
+.ss--touch .ss-chip { min-height: 44px; padding: 0 12px; font-size: 11.5px; }
+.ss--touch .ss-pill { min-height: 44px; padding: 0 13px; font-size: 12px; }
+.ss--touch .ss-l1 { min-height: 44px; font-size: 13px; }
+.ss--touch .ss-time { font-size: 11.5px; }
+.ss--touch .ss-tkr { min-height: 44px; min-width: 44px; }
+.ss--touch .ss-what { align-self: stretch; }
+.ss--touch .ss-l2 { padding-left: 52px; font-size: 11.5px; margin-top: -4px; }
+.ss--touch .ss-oc { font-size: 11.5px; padding: 2px 8px; }
+.ss--touch .ss-btn { min-height: 44px; min-width: 88px; font-size: 12.5px; }
+.ss--touch .ss-more, .ss--touch .ss-link { min-height: 44px; font-size: 12px; }
+.ss--touch .ss-detail { font-size: 12.5px; }
+
+/* ── report viewer: portaled to <body>, so it cannot use the --tr-* tokens ─── */
+.ss-scrim {
+  position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center;
+  padding: 3vh 2vw; background: rgba(3, 4, 12, 0.74);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+}
+.ss-viewer {
+  display: flex; flex-direction: column; width: 100%; max-width: 1320px; height: 100%; max-height: 94vh;
+  overflow: hidden; border-radius: 14px; border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0b0c16; color: #e3e6fa; color-scheme: dark;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+.ss-vhead {
+  display: flex; align-items: center; flex: 0 0 auto; padding: 8px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace;
+}
+.ss-vhead > * { margin-left: 6px; }
+.ss-vtitle {
+  margin: 0 auto 0 4px !important; font-size: 10px; letter-spacing: 0.24em; text-transform: uppercase;
+  color: var(--ss-accent, #5b6af0);
+}
+.ss-vbtn {
+  min-width: 36px; height: 34px; padding: 0 8px; border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14); background: transparent; color: inherit;
+  font-family: inherit; font-size: 15px; font-weight: 600; line-height: 1;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.ss-vbtn.wide { font-size: 12px; }
+.ss-vbtn:disabled { opacity: 0.35; cursor: default; }
+.ss-vsel {
+  height: 34px; max-width: 46vw; padding: 0 8px; border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14); background: #0b0c16; color: inherit;
+  font-family: inherit; font-size: 13px;
+}
+.ss-vbody {
+  position: relative; flex: 1 1 auto; min-height: 0;
+  overflow: auto; -webkit-overflow-scrolling: touch; background: #0d0d0d;
+}
+.ss-vbody iframe { display: block; width: 100%; height: 100%; border: 0; background: transparent; }
+/* laid out but invisible until it has painted, so the sheet never flashes blank */
+.ss-vbody iframe.hold { position: absolute; inset: 0; opacity: 0; }
+.ss-vmsg { margin: 0; padding: 28px 24px; font-size: 12.5px; color: #9aa3d0; }
+.ss-vmsg.err { color: #fbbf24; }
+
+@media (hover: hover) {
+  .ss-vbtn:not(:disabled):hover, .ss-vsel:hover { border-color: var(--ss-accent, #5b6af0); }
+}
+
+/* phones: the report takes the whole screen, clear of the notch and the
+   home indicator, with 44pt controls and a 16px select (no Safari zoom) */
+@media (max-width: 720px) {
+  .ss-scrim { padding: 0; }
+  .ss-viewer {
+    max-width: none; max-height: none; border: 0; border-radius: 0;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+  }
+  .ss-vhead {
+    padding-left: max(8px, env(safe-area-inset-left));
+    padding-right: max(8px, env(safe-area-inset-right));
+  }
+  .ss-vtitle { display: none; }
+  .ss-vhead > :nth-child(2) { margin-left: 0; }
+  .ss-vbtn { min-width: 44px; height: 44px; }
+  .ss-vsel { height: 44px; font-size: 16px; flex: 1 1 auto; max-width: none; min-width: 0; }
+}
+
+/* ── best ticker + signal pairs: the link, and a sheet whose table sorts on
+   every column. The sheet is portaled like the report viewer, so it wears the
+   viewer's fixed dark palette rather than the --tr-* tokens. ───────────── */
+.ss-best {
+  margin-top: 12px; padding-top: 10px;
+  border-top: 1px solid var(--tr-line, rgba(91, 106, 240, 0.22));
+}
+.ss-bestlink {
+  display: block; width: 100%; text-align: left; font-size: 11.5px; font-weight: 600;
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace;
+}
+.ss-bestlink .d { font-weight: 400; color: var(--tr-dim, #9aa3d0); }
+.ss--touch .ss-bestlink { font-size: 12.5px; }
+
+.ss-viewer.bp { max-width: 1320px; height: auto; }
+.ss-bp-bar {
+  display: flex; flex-wrap: wrap; align-items: flex-end; flex: 0 0 auto;
+  padding: 4px 12px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace;
+}
+.ss-bp-bar > * { margin: 6px 10px 0 0; }
+.ss-bp-f { display: flex; flex-direction: column; }
+.ss-bp-f span {
+  margin-bottom: 3px; font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: #9aa3d0;
+}
+.ss-bp-f input {
+  width: 104px; height: 34px; padding: 0 9px; border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.14); background: #0b0c16; color: inherit;
+  font-family: inherit; font-size: 13px;
+}
+.ss-bp-f input:focus { outline: none; border-color: var(--ss-accent, #5b6af0); }
+.ss-bp-f input.bad { border-color: #fbbf24; }
+.ss-bp-clear { height: 34px; }
+.ss-bp-sum { flex: 1 1 220px; align-self: center; margin-right: 0 !important; font-size: 11px; line-height: 1.45; color: #9aa3d0; }
+.ss-bp-sum b { color: #e3e6fa; }
+
+/* separate borders: a sticky cell under border-collapse loses its rule */
+.ss-bp {
+  min-width: 100%; border-collapse: separate; border-spacing: 0;
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace; font-size: 12px;
+}
+.ss-bp th, .ss-bp td {
+  padding: 7px 10px; text-align: left; white-space: nowrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.ss-bp .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ss-bp thead th { position: sticky; top: 0; z-index: 2; padding: 0; background: #12142a; }
+.ss-bp th button {
+  display: flex; align-items: center; width: 100%; min-height: 34px; padding: 0 10px;
+  border: 0; background: transparent; color: #9aa3d0; cursor: pointer; white-space: nowrap;
+  font-family: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase;
+  -webkit-tap-highlight-color: transparent;
+}
+.ss-bp th.num button { justify-content: flex-end; }
+.ss-bp th[aria-sort='ascending'] button, .ss-bp th[aria-sort='descending'] button { color: var(--ss-accent, #93a0ff); }
+.ss-bp .ar { margin-left: 5px; font-size: 9px; opacity: 0.4; }
+.ss-bp th[aria-sort='ascending'] .ar, .ss-bp th[aria-sort='descending'] .ar { opacity: 1; }
+/* the signal names the row, so it stays put while the numbers scroll past */
+.ss-bp .sig { position: sticky; left: 0; z-index: 1; background: #0b0c16; max-width: 360px; overflow: hidden; text-overflow: ellipsis; }
+.ss-bp thead .sig { z-index: 3; background: #12142a; }
+.ss-bp .rank { color: #5f679b; }
+.ss-bp .ag, .ss-bp .gr { color: #7f87b5; }
+.ss-bp .dir { font-size: 10.5px; font-weight: 700; }
+.ss-bp .dir.long { color: #34d399; }
+.ss-bp .dir.short { color: #ff6b5e; }
+.ss-bp .tkr { font-weight: 700; color: #e3e6fa; }
+.ss-bp .wlt b { font-weight: 600; }
+.ss-bp .w { color: #34d399; }
+.ss-bp .l { color: #ff6b5e; }
+.ss-bp .t { color: #fbbf24; }
+.ss-bp .meter {
+  display: inline-block; width: 46px; height: 6px; margin-right: 7px; vertical-align: middle;
+  border-radius: 3px; overflow: hidden; background: rgba(147, 160, 255, 0.18);
+}
+.ss-bp .meter i { display: block; height: 100%; background: var(--ss-accent, #5b6af0); }
+.ss-bp .net { font-weight: 700; }
+.ss-bp .net.pos { color: #34d399; }
+.ss-bp .net.neg { color: #ff6b5e; }
+.ss-bp .when { color: #9aa3d0; }
+.ss-bp .cnt { color: #7f87b5; }
+.ss-bp .cnt.hot { color: #93a0ff; font-weight: 700; }
+.ss-bp-note { margin: 0; padding: 12px 14px 16px; font-size: 10.5px; line-height: 1.55; color: #7f87b5; }
+
+@media (hover: hover) {
+  .ss-bp tbody tr:hover td { background: #151833; }
+  .ss-bp th button:hover { color: #e3e6fa; }
+}
+
+/* phones: 44pt headings and inputs at 16px (no Safari zoom); the signal wraps
+   onto two lines so more of the numbers fit beside it */
+@media (max-width: 720px) {
+  .ss-viewer.bp { height: 100%; }
+  /* the report viewer drops its title for its controls; this sheet has only
+     the close button, so the title stays and keeps it on the right */
+  .ss-viewer.bp .ss-vtitle { display: block; }
+  .ss-bp-bar {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .ss-bp-f input { width: 92px; height: 44px; font-size: 16px; }
+  .ss-bp-clear { height: 44px; }
+  .ss-bp th button { min-height: 44px; }
+  .ss-bp td { padding: 9px 9px; }
+  .ss-bp .sig { white-space: normal; min-width: 140px; max-width: 168px; line-height: 1.35; }
+  .ss-bp-note { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
+}

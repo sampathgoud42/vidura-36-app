@@ -1,8 +1,54 @@
-# Silver-15 — default engine (v2)
+# Silver-15 — default engine (v3, the V7 DMI-stack engine)
 
-Default version per `app/services/bot_registry.py`: **v2** (`v2_bot_kalshi_silver15.py`).
-v1 (`bot_kalshi_silver15.py`, Yahoo trend/volume score) is still selectable
-but no longer runs by default.
+Default version per `app/domains/botstation/builtin.py`: **v3**
+(`v3_bot_kalshi_silver15.py`). That file is ~20 lines: the engine itself is
+[`runtime/prediction-trade/kalshi/v7_engine.py`](../../v7_engine.py),
+shared with the other three V7 bots, and the entry rule is
+`app/domains/botstation/dmi_stack.py`.
+
+## The rule
+
+Read silver's own row on the desk's **COMMODITIES** board — the same module the
+panel renders from, so the bot and the screen cannot disagree — and require
+all four timeframes to point the same way:
+
+```
+SILVER 66.59  1m 15↑  2m 37↑  5m 50↑  10m 34↑   ->  buy YES
+SILVER 66.59  1m 15↓  2m 37↓  5m 50↓  10m 34↓   ->  buy NO
+anything else                                       ->  stand aside
+```
+
+Three gates, all of which must pass:
+
+| Gate | Rule |
+|---|---|
+| DMI stack | 1m, 2m, 5m and 10m all `call`, or all `put`. A blank or flat column blocks — an unknown is not agreement. |
+| Timing | strictly **5–300 s** after the market opened (`entry_open_s` / `entry_close_s`). |
+| Price | **30–65 c** on the side being bought (`min_price_c` / `max_price_c`). Refused, never clamped. |
+
+Take-profit +20%, stop −40% of the entry, both configurable per launch.
+
+## Order lifecycle
+
+The buy rests at best-bid + 1c, so it usually does **not** fill immediately.
+Nothing is monitored until it does: the resting order is remembered, each pass
+asks whether it has become a position, and only a real fill opens the ledger
+row, rests the take-profit and arms the stop. A market that already has an
+order working never receives a second one.
+
+Every sell — take-profit and stop alike — goes through
+[`sell_guard.confirm`](../../sell_guard.py), the desk-wide check shared
+by every bot on this desk: there **is** a position on the side being sold, and
+there is **no** pending or resting order on the ticker, each read twice ten
+seconds apart. The stop cancels its own resting take-profit first, since that
+order would otherwise block it.
+
+## Older versions
+
+v1 and v2 remain selectable. Everything below this line documents them and is
+unchanged.
+
+---
 
 ## Signal source
 

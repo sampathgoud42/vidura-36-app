@@ -229,6 +229,135 @@ comparing, so hashing keeps the master key out of its blast radius entirely.
 
 ---
 
+## Super Signals
+
+The signal-agent desk -- eight strategy agents on one 5-minute feed, a
+watchlist tracker, and a daily report at 15:00 CST -- is its own project
+(vidura-super-signals) with its own scheduled tasks. Both trading worlds show
+it through one shared panel, `frontend/src/shared/SuperSignals.jsx`:
+
+| world | where |
+| --- | --- |
+| Tradier Platform | right rail, first panel (draggable like the others) |
+| 36 Trade Desk | the **signals** section and tab, laid out for a phone |
+
+What it shows: today's signals newest first with their live outcome (target,
+stop, timeout, or still open), the day's W-L-T and net R, filters for open
+signals, one agent, or the **watchlist** tracker's hits, desk health (live,
+pre-open, closed, desk offline), and pills for today's and every earlier daily
+report. A report opens in a sandboxed viewer -- full-screen on a phone -- that
+can step between days and save the page. The **Best ticker + signal pairs**
+link opens the report's 30-session pairs as a table (full-screen on a phone).
+Every column sorts, click again to reverse, and the win %, edge and net R
+minimums filter it through the API below. "call" / "put" on an open signal
+opens the desk's own buy ticket, prefilled; nothing is placed until you
+confirm it.
+
+The data comes through `/api/v1/super-signals/{session,rank,best-pairs,reports,reports/<date>}`,
+which proxies the desk's read-only loopback service at `TBOT_SUPER_SIGNALS_URL`
+(default `http://127.0.0.1:8792`). A URL rather than a folder, so this project
+still reads nothing outside itself. Any signed-in operator may read it --
+a signal is the same fact for everybody on the desk. If that service is down
+the panel says so rather than showing an empty day.
+
+This replaces the A/B-book signal rail that read `runtime/super_research`
+directly. That runtime, its supervisors and the `ab_signal_options`
+auto-trade strategy are untouched.
+
+`GET /api/v1/super-signals/best-pairs` returns the daily report's **best ticker + signal pairs**
+over the last 30 sessions, best first. The desk rewrites that list after every report, in its
+`best_ticker_signal_pairs` table. Each pair carries edge, W-L-T, win %, net R, first and last
+fired, and how often it fired today, yesterday and over the past week. The optional minimums
+`min_win_pct`, `min_edge` and `min_net_r` are inclusive. A win % or edge outside 0-100, or a net
+R outside +/-1000, is a 422 before the desk is asked; that also covers NaN and infinity.
+
+### Auto-trading the signals
+
+ARM AUTO TRADE (in both worlds) has a **super signals** strategy. You choose
+the tickers (default SPY, QQQ, SPX) and tick the signal types to trade from a
+list ranked by today's results (edge score, 2+ settled trades). If no type
+has settled that many trades yet, the list ranks the previous session. Types
+whose 30-session history disagrees are left out. So are types whose agent
+never fires on the chosen tickers. `/super-signals/rank` supplies the list.
+
+Once armed, the watcher (`domains/trading/execution/autotrade.py`) reads the
+desk every 15 s. It enters when a new signal fires live that matches a picked
+type and a picked ticker, if the signal is:
+
+- inside the window (08:30-14:30 CST by default),
+- at most 6 minutes old,
+- and still open.
+
+A LONG buys a CALL and a SHORT buys a PUT. Entries go through the same
+managed entry as the BUY ticket (`execution/entry.py`), with its guards,
+sizing and smart limit. Each ticker gets at most one entry per hour. Each
+signal is entered at most once per account, even across re-arms. It buys same-day
+contracts only before 11:50 CST, the auto-trader's own 0DTE cutoff (a person's
+is 13:00), and the next expiry after it. The order itself refuses a same-day
+contract for any `Auto/` entry from 11:50 on. Signals already on the desk when
+you arm it are never entered. The watcher disarms itself at the 15:00 close,
+because the list was picked for that day.
+
+**best pairs** is the same watcher, but a signal must match a pair: the
+report's best ticker + signal pairs (`/super-signals/best-pairs`, 30
+sessions). A pair is one signal type on one ticker, so the watcher trades
+that type on that ticker and nowhere else. The form lists the desk's current
+pairs, all picked. You can narrow them by min win %, min edge and min net R,
+or untick any. The Tickers field is greyed out, because each pair names its
+own ticker. Arming re-checks every pick against the desk's list, which is
+rewritten after each report. It is refused if a pick has dropped off or the
+desk cannot answer. Every other rule is super signals' own, the per-signal
+idempotency key included. So a signal either strategy has bought is never
+bought again by the other.
+
+### The best-pairs bot (runs on its own)
+
+`backend/bot_best_pair/` is the **best pairs** strategy as a process of its
+own. It needs no browser, no sign-in and no arm button. It keeps trading day
+after day until you stop it, and it keeps going through a desk restart.
+
+```bash
+backend\bot_best_pair\bot_best_pair.bat --check   # check the setup, trade nothing
+backend\bot_best_pair\bot_best_pair.bat           # trade until Ctrl-C
+```
+
+(`./backend/bot_best_pair/bot_best_pair.sh` on Linux/macOS.)
+
+Its settings live in `backend/bot_best_pair/bot_best_pair.env`, beside the
+scripts. They ship as: min edge 57, delta 0.25-0.45, no 0DTE, TP 10%, SL 30%,
+40% of buying power ±10%, min 1 contract, smart limit, 08:30-14:30 CST, on
+the sandbox. Set `BOT_BEST_PAIR_OPERATOR` to your sign-in before the first
+run. The bot will not guess whose account to trade. The database, the master
+key and paper-only come from the project `.env`, so the bot and the desk use
+the same database.
+
+It trades through the desk's own code, not a copy. That means the watcher's
+own tick, the BUY ticket's own entry, and every guard. So it never duplicates
+the desk:
+
+- **One signal, one entry.** It uses the same per-signal idempotency key as
+  the desk's watcher, so whichever of them gets to a signal first is the
+  only one that buys it.
+- **One entry per ticker per hour, across both.** The cooldown is read from
+  the positions table, so it covers the desk's watcher, the bot, and a
+  restart of either.
+- **One trader per operator.** Whoever trades the signal desk holds a claim on
+  it (`execution/signal_owner.py`). While the bot runs, both worlds say so in
+  the arm form and refuse **super signals** and **best pairs** there. The
+  level-cross strategy is unaffected. The bot stands by while an armed desk
+  watcher holds the claim, and takes over when that watcher disarms. A
+  second bot for the same operator exits (code 3). A crashed bot's claim
+  expires within two minutes.
+
+Its positions say `Auto/bot_best_pair` in the positions list. Exits are
+armed by the risk monitor after the fill. While the desk is up (its
+`/readiness` shows `risk-monitor` running), the desk does this. While the
+desk is down, the bot sweeps its own operator's positions, so nothing it
+opened goes unwatched. It re-reads the pairs at the first pass of each
+session, because the report re-ranks them overnight.
+
+---
+
 ## The Bot Station
 
 `/bot-station` is mission control for the **Kalshi** bots. Seven families,
@@ -369,6 +498,7 @@ reading the result back, touching nothing real.
 | `test_sensitive_data.py` | credentials absent from responses, logs, errors and `repr` |
 | `test_stop_loss_durability.py` | both exit legs resting; one filling cancels the other |
 | `test_migration.py` | migrate from empty, rollback, no model drift, one head |
+| `test_bot_best_pair.py` | the best-pairs bot never buys what the desk's watcher bought; one trader per signal desk; its settings are the form's |
 
 ---
 
@@ -390,6 +520,9 @@ Before stopping the app or deploying:
    holds both legs. Anything `monitored_only` loses its stop when the process
    stops.
 4. Bots do **not** auto-resume on startup. Restarting them is explicit.
+5. The best-pairs bot is its own process, and stopping the desk does not
+   stop it. While the desk is down it watches its own positions' stops. Stop
+   it with Ctrl-C in its window.
 
 ---
 
@@ -405,6 +538,7 @@ backend/app/
   platform/        db, security, migrations — no domain knowledge
   core/            settings
 backend/migrations/  Alembic
+backend/bot_best_pair/  the best-pairs bot: its own process, settings and launchers
 frontend/src/      the three worlds
 runtime/           vendored signal engines and bot scripts
 customers/<name>/  per-operator credentials (gitignored, never committed)

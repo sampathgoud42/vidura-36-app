@@ -70,6 +70,11 @@ if not (Path.cwd() / ".env").exists():
 load_dotenv(Path.cwd() / ".env")
 load_dotenv()
 
+# The desk-wide sell guard, shared by every engine that sells.
+# parents[2]: btc15 -> btc -> kalshi
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import sell_guard                                       # noqa: E402
+
 # ── config (v4-compatible auth, bot-specific safety flags) ───────────────────
 BASE_URI          = os.getenv("BASE_URI", "https://external-api.kalshi.com/trade-api/v2")
 API_KEY_ID        = os.getenv("KALSHI_API_KEY_ID", "")
@@ -576,31 +581,30 @@ async def tp_seller(c: KalshiClient, ticker: str, side: str, mark: datetime,
             + (f" (entry {entry_c}¢ +{TP_PCT:g}%)" if TP_PCT > 0 and entry_c else ""))
         log_trade(ticker, mark, {}, side, None, action="sell", price=tp_c)
         return
-    # ── DOUBLE-CONFIRM the position (partial fills!): two reads ~2s apart; the
-    # sell quantity is ALWAYS the latest API value, never the intended buy size.
-    pos1 = await position_contracts(c, ticker)
-    if pos1 == 0:
-        log(f"[TP  ] {ticker}: no open position at market minute {TP_AT_MIN} — no sell")
-        return
-    await asyncio.sleep(2)
-    pos2 = await position_contracts(c, ticker)
-    if pos2 == 0:
-        log(f"[TP  ] {ticker}: position vanished on re-check ({pos1} → 0) — no sell")
-        return
-    if (pos1 > 0) != (pos2 > 0):
-        log(f"[TP  ] {ticker}: position SIDE changed between checks ({pos1} → {pos2}) — aborting sell")
-        return
-    if pos2 != pos1:
-        log(f"[TP  ] {ticker}: position drifted between checks ({pos1} → {pos2}) — using latest")
-    pos = pos2
-    held_side, held = ("yes" if pos > 0 else "no"), abs(pos)
+    # ── DOUBLE-CONFIRM before selling. This used to be two position reads ~2s
+    # apart, done here; it is now the desk-wide guard every engine shares, so
+    # the rule is identical across bots and versions. It keeps the double read
+    # (at 10s, and the sell size is still ALWAYS the latest API value rather
+    # than the intended buy size) and adds the check this engine never made:
+    # that no order of ours is still live on the ticker. Selling over a
+    # resting order sells the same contracts twice.
+    #
+    # The side is read from the position rather than asserted: the guard
+    # refuses outright when the held leg is not the one being sold, because a
+    # sell on the other leg opens a new position instead of closing this one.
+    pos = await position_contracts(c, ticker)
+    held_side = "yes" if pos > 0 else "no"
     if held_side != side:
         log(f"[TP  ] {ticker}: held side {held_side.upper()} differs from signal side "
             f"{side.upper()} — selling what is actually held")
+    held = await sell_guard.confirm(c, ticker, held_side, want=abs(pos),
+                                    why="TP", log=log)
+    if held <= 0:
+        return
     order = _mk_order(ticker, "sell", held_side, held, tp_c)
     log(f"  [TP ] SELL {held_side.upper()} ×{held} @ {tp_c}¢  {ticker}  "
         + (f"(entry {entry_c}¢ +{TP_PCT:g}%, " if TP_PCT > 0 and entry_c else "(")
-        + f"confirmed {pos1}→{pos2})")
+        + "confirmed twice)")
     try:
         r = await c.req("POST", ORDER_CREATE_PATH, body=order)
         log(f"  [TP ] resp: {json.dumps(r)[:200]}")

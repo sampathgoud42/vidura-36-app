@@ -98,6 +98,16 @@ def is_stale(tenant_id: str) -> bool:
     return seconds_since_last_pass(tenant_id) > STALE_AFTER_S
 
 
+def is_fresh(tenant_id: str) -> bool:
+    """The positive form, for callers that read better that way.
+
+    ``autotrade.arm`` called this before it existed, so arming a watcher
+    raised AttributeError instead of the refusal it meant to raise -- an
+    unhelpful 500 in the one place the answer was supposed to be a clear no.
+    """
+    return not is_stale(tenant_id)
+
+
 def summary() -> dict:
     """What /readiness reports.
 

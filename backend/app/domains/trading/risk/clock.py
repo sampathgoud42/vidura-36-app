@@ -21,6 +21,12 @@ DESK_TZ = ZoneInfo("America/Chicago")
 # the move to happen.
 ZERO_DTE_CUTOFF = time(13, 0)
 
+# The auto-trader stops buying same-day contracts earlier than a person may:
+# nobody is there to judge whether a late 0DTE entry still has room to work.
+# Every automated entry is labelled "Auto/<strategy>", and the order itself
+# (orders.open_position) refuses a same-day contract for one from this time on.
+AUTO_ZERO_DTE_CUTOFF = time(11, 50)
+
 
 def now() -> datetime:
     return datetime.now(DESK_TZ)
@@ -32,6 +38,10 @@ def today() -> date:
 
 def past_zero_dte_cutoff(at: datetime | None = None) -> bool:
     return (at or now()).timetz().replace(tzinfo=None) >= ZERO_DTE_CUTOFF
+
+
+def past_auto_zero_dte_cutoff(at: datetime | None = None) -> bool:
+    return (at or now()).timetz().replace(tzinfo=None) >= AUTO_ZERO_DTE_CUTOFF
 
 
 def is_same_day(expiration: str, at: datetime | None = None) -> bool:

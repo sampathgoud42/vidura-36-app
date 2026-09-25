@@ -1,19 +1,24 @@
 """Parley v2: which legs qualify, and how they are bundled.
 
-The rules under test, as specified:
+The rules under test, as the filters state them:
 
-    tennis        >= 90% implied AND (1-0 in sets leading set 2 by >= 2 games,
-                  or 2-0 in sets leading set 3 by >= 2 games)
-    other sports  >= 91% implied
-    combos        2 to 5 legs, DISJOINT: no ticker and no EVENT twice, and
-                  nothing already held
+    every leg     bid >= 85% implied (soccer >= 80%), <= 98%, a spread of at
+                  most 3c, and a close within 72 hours
+    tennis        also (1-0 in sets leading set 2 by >= 2 games, or 2-0 in
+                  sets leading set 3 by >= 2 games) -- unless the bid is ABOVE
+                  the 93c lock, where the quote is the evidence and the floor,
+                  spread and score are waived (the horizon and the book's
+                  shape are not)
+    combos        2 to 5 legs from the engine, DISJOINT: no ticker and no
+                  EVENT twice, and nothing already held; the ComboOrder model
+                  itself allows 2 to 24, for the daily long-shot ticket
 
 Two of these are easy to get subtly wrong in ways no error would report, so
 they get the most attention here:
 
-  The score gate is not the price gate. A tennis market at 96% whose player is
-  only one game clear must be refused -- otherwise the score condition is
-  decorative and the real rule is just "96%".
+  The score gate is not the price gate. Below the lock, a tennis market whose
+  player is only one game clear must be refused -- otherwise the score
+  condition is decorative and the real rule is just the price.
 
   Disjointness is by EVENT, not ticker. Two markets on one match are the same
   question asked twice; a parlay holding both is one bet at worse odds that
@@ -21,6 +26,8 @@ they get the most attention here:
 """
 
 from __future__ import annotations
+
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -30,8 +37,16 @@ from app.domains.botstation.parley.models import (ComboCandidate, ComboOrder,
                                                   MarketState, TennisScoreState)
 
 
+def _closes_in(hours: float) -> str:
+    return (datetime.now(timezone.utc) + timedelta(hours=hours)).isoformat()
+
+
 def market(ticker: str, event: str, sport: str, bid: int,
            ask: int | None = None, **kw) -> MarketState:
+    # Closing tomorrow unless a test says otherwise: well inside the 72-hour
+    # horizon, which every leg must meet and which is not what most tests are
+    # about. A market with no close time is refused before any other rule.
+    kw.setdefault("closes_at", _closes_in(24))
     return MarketState(ticker=ticker, event_ticker=event, sport=sport,
                        yes_bid_c=bid, yes_ask_c=ask if ask is not None else bid + 2,
                        live=kw.pop("live", True), **kw)
@@ -70,12 +85,14 @@ def test_the_tennis_conditions(label, state, expected):
 def test_a_one_game_lead_is_refused_however_good_the_price():
     """The score gate is not the price gate.
 
-    A 96% market whose player is one game clear must still be refused. If it
-    were not, the score condition would be decorative and the effective rule
-    would be "any tennis market above 90%" — which is precisely the v1
-    behaviour v2 exists to replace.
+    A 92% market -- as good as a price gets below the 93c lock -- whose player
+    is one game clear must still be refused. If it were not, the score
+    condition would be decorative and the effective rule would be "any
+    tennis market above the floor", which is precisely the v1 behaviour v2
+    exists to replace. Above the lock the price does decide:
+    test_a_tennis_leg_above_the_lock_is_taken_on_the_price.
     """
-    markets = [market("KXATP-M1-A", "KXATP-M1", "tennis", 96)]
+    markets = [market("KXATP-M1-A", "KXATP-M1", "tennis", 92)]
     scores = {"KXATP-M1-A": score(1, 0, [6, 2], [4, 1])}   # +1, not +2
 
     candidates, rejected = filters.eligible_legs(markets, scores=scores)
@@ -84,26 +101,54 @@ def test_a_one_game_lead_is_refused_however_good_the_price():
 
 
 def test_a_tennis_leg_with_no_score_is_refused():
-    """90% is the LOWER bar, and it is only lower because the scoreboard
-    confirms it. With no score there is nothing confirming anything, so the
-    leg cannot have the discount."""
-    markets = [market("KXATP-M1-A", "KXATP-M1", "tennis", 95)]
+    """Below the lock a tennis leg is taken on its price AND its score. With
+    no score there is nothing confirming the lead the price implies."""
+    markets = [market("KXATP-M1-A", "KXATP-M1", "tennis", 92)]
     candidates, rejected = filters.eligible_legs(markets, scores={})
     assert candidates == []
     assert "no live score" in rejected[0]["reason"]
 
 
+@pytest.mark.parametrize("bid,taken", [(94, True), (97, True), (93, False)])
+def test_a_tennis_leg_above_the_lock_is_taken_on_the_price(bid, taken):
+    """Above 93c the quote is the evidence: no score, and a spread the
+    ordinary legs could not carry, do not refuse it. The lock is a bar to
+    beat, not one to reach -- at 93 the score still decides."""
+    wide = market("KXATP-M9-A", "KXATP-M9", "tennis", bid, ask=bid + 5)
+    candidates, rejected = filters.eligible_legs([wide], scores={})
+    assert ([c.ticker for c in candidates] == ["KXATP-M9-A"]) is taken, rejected
+
+
+def test_the_lock_does_not_waive_the_horizon():
+    """A 96c leg on a market closing in a week holds the whole parlay's
+    capital for a week; no price argues with that."""
+    late = market("KXATP-M9-A", "KXATP-M9", "tennis", 96, closes_at=_closes_in(24 * 7))
+    candidates, rejected = filters.eligible_legs([late], scores={})
+    assert candidates == []
+    assert "horizon" in rejected[0]["reason"]
+
+
+def test_a_market_with_no_close_time_is_refused():
+    """Unknown is refused, never guessed as soon: a leg with no close could
+    lock a combo up indefinitely."""
+    unknown = market("KXNBA-G1-A", "KXNBA-G1", "nba", 95, closes_at=None)
+    candidates, rejected = filters.eligible_legs([unknown])
+    assert candidates == []
+    assert "no close time" in rejected[0]["reason"]
+
+
 # ---- the odds floors ------------------------------------------------------
 
 @pytest.mark.parametrize("sport,bid,expected", [
-    ("tennis", 90, True), ("tennis", 89, False),
-    ("nba", 91, True), ("nba", 90, False),
-    ("nfl", 95, True), ("mlb", 90, False),
-    ("soccer", 91, True),
+    ("tennis", 85, True), ("tennis", 84, False),
+    ("nba", 85, True), ("nba", 84, False),
+    ("nfl", 95, True), ("mlb", 84, False),
+    ("soccer", 80, True), ("soccer", 79, False),
 ])
 def test_each_sport_has_its_own_floor(sport, bid, expected):
-    """Tennis at 90, everything else at 91. One cent under is refused —
-    a threshold that bends is not a threshold."""
+    """85 for every sport, soccer at 80: a soccer side at 82c is genuinely
+    ahead. One cent under is refused -- a threshold that bends is not a
+    threshold."""
     ok, why = filters.meets_odds_floor(market("T", "E", sport, bid))
     assert ok is expected, f"{sport} at {bid}c: {why}"
 
@@ -111,9 +156,16 @@ def test_each_sport_has_its_own_floor(sport, bid, expected):
 def test_the_floor_is_measured_on_the_bid():
     """A market quoted 85/95 is an 85% market with a wide spread, not a 95%
     one. Testing the ask would admit it on a price nobody is offering."""
-    wide = market("T", "E", "nba", 85, ask=95)
+    wide = market("T", "E", "nba", 80, ask=95)
     ok, _ = filters.meets_odds_floor(wide)
     assert ok is False
+
+
+def test_a_leg_above_the_ceiling_is_refused():
+    """A 99c leg is effectively decided: it adds almost nothing to a
+    parlay's chance while costing 99c of its price."""
+    ok, why = filters.meets_odds_floor(market("T", "E", "nba", 99))
+    assert ok is False, why
 
 
 def test_an_unquoted_market_is_not_a_zero():
@@ -129,13 +181,31 @@ def test_an_unquoted_market_is_not_a_zero():
 
 def test_an_event_already_held_is_excluded():
     """Holding one side of a match rules out the whole match, not just that
-    ticker. A second leg on it is more of the same bet."""
+    ticker, once the match is at its limit of open parlays. At a limit of one
+    a second leg on it is more of the same bet."""
     tracker = filters.PositionTracker.from_positions(
-        [{"ticker": "KXNBA-G1-LAL", "position_fp": "10.00"}])
+        [{"ticker": "KXNBA-G1-LAL", "position_fp": "10.00"}], max_per_event=1)
     candidates, rejected = filters.eligible_legs(
         [market("KXNBA-G1-BOS", "KXNBA-G1", "nba", 95)], tracker=tracker)
     assert candidates == []
-    assert "already exposed" in rejected[0]["reason"]
+    assert "the limit is 1" in rejected[0]["reason"]
+
+
+def test_a_match_takes_as_many_parlays_as_its_limit():
+    """The limit is an operator's dial on correlated risk, two open parlays
+    per match by default: one held leaves room for another, two fill it --
+    counted by EVENT, whichever side of the match is held."""
+    leg = [market("KXNBA-G1-BOS", "KXNBA-G1", "nba", 95)]
+    one = filters.PositionTracker.from_positions(
+        [{"ticker": "KXNBA-G1-LAL", "position_fp": "10.00"}])
+    two = filters.PositionTracker.from_positions(
+        [{"ticker": "KXNBA-G1-LAL", "position_fp": "10.00"},
+         {"ticker": "KXNBA-G1-BOS", "position_fp": "4.00"}])
+    assert filters.DEFAULT_MAX_PER_EVENT == 2
+    assert len(filters.eligible_legs(leg, tracker=one)[0]) == 1
+    candidates, rejected = filters.eligible_legs(leg, tracker=two)
+    assert candidates == []
+    assert "the limit is 2" in rejected[0]["reason"]
 
 
 def test_a_flat_position_does_not_exclude_anything():
@@ -205,10 +275,18 @@ def test_a_combo_cannot_hold_two_legs_from_one_event():
         ComboOrder(legs=same_event)
 
 
-@pytest.mark.parametrize("n_legs", [0, 1, 6])
+@pytest.mark.parametrize("n_legs", [0, 1, 25])
 def test_a_combo_is_between_two_and_five_legs(n_legs):
+    """The model's bounds are 2 to 24 -- 24 for the daily long-shot ticket --
+    so 0, 1 and 25 are refused by the ComboOrder itself. Five is the regular
+    engine's cap: test_the_engine_builds_no_regular_parlay_over_five_legs."""
     with pytest.raises(Exception):
         ComboOrder(legs=_candidates(n_legs))
+
+
+def test_the_engine_builds_no_regular_parlay_over_five_legs():
+    built = combinator.build_combos(_candidates(12))
+    assert built and max(len(c.legs) for c in built) == combinator.MAX_LEGS == 5
 
 
 def test_combined_probability_is_the_product():
@@ -242,22 +320,27 @@ def test_a_full_pass_applies_every_rule_together():
     markets = [
         market("KXNFL-G4-KC", "KXNFL-G4", "nfl", 95),
         market("KXNBA-G1-LAL", "KXNBA-G1", "nba", 93),
-        market("KXNBA-G3-GSW", "KXNBA-G3", "nba", 90),      # under the 91 floor
-        market("KXMLB-G5-NYY", "KXMLB-G5", "mlb", 92),      # already held
+        market("KXNBA-G3-GSW", "KXNBA-G3", "nba", 84),      # under the 85 floor
+        market("KXMLB-G5-NYY", "KXMLB-G5", "mlb", 92),      # its match is full
         market("KXATP-M1-ALC", "KXATP-M1", "tennis", 90),   # 90 ok + good score
-        market("KXATP-M3-DJO", "KXATP-M3", "tennis", 96),   # great price, bad score
+        market("KXATP-M3-DJO", "KXATP-M3", "tennis", 92),   # under the lock, bad score
+        market("KXATP-M5-SIN", "KXATP-M5", "tennis", 96),   # above the lock, no score
+        market("KXNHL-G7-BOS", "KXNHL-G7", "nhl", 95,
+               closes_at=_closes_in(100)),                  # beyond the 72h horizon
     ]
     scores = {
         "KXATP-M1-ALC": score(1, 0, [6, 3], [4, 1]),
         "KXATP-M3-DJO": score(1, 0, [6, 2], [4, 1]),
     }
-    held = [{"ticker": "KXMLB-G5-NYY", "position_fp": "10.00"}]
+    # Two open parlays already ride on the MLB match: its limit.
+    held = [{"ticker": "KXMLB-G5-NYY", "position_fp": "10.00"},
+            {"ticker": "KXMLB-G5-BOS", "position_fp": "10.00"}]
 
     from app.domains.botstation.parley import engine
 
     result = engine.build_pass(markets, scores=scores, held_positions=held)
     eligible = {c.ticker for c in result.candidates}
-    assert eligible == {"KXNFL-G4-KC", "KXNBA-G1-LAL", "KXATP-M1-ALC"}
+    assert eligible == {"KXNFL-G4-KC", "KXNBA-G1-LAL", "KXATP-M1-ALC", "KXATP-M5-SIN"}
 
     assert len(result.combos) == 1
     combo = result.combos[0]

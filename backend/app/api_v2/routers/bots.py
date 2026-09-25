@@ -154,6 +154,42 @@ def bot_config(bot_key: str,
 
 # ---- state ----------------------------------------------------------------
 
+def _since_launch_for_running(db: DbSession, tenant: Tenant) -> dict:
+    """Each running bot's EXCHANGE-side result since it was launched.
+
+    Read here rather than inside lifecycle.status because this is the layer
+    that holds a credential -- and read ONCE for every bot rather than per
+    bot, because seven tiles asking Kalshi the same two questions on a
+    ten-second poll is fourteen round trips for two answers.
+
+    Best-effort throughout: an operator with no Kalshi credential, or an
+    exchange having a bad minute, gets a station that still renders. The
+    figure goes missing; nothing else does.
+    """
+    from app.domains.botstation import since_launch
+
+    try:
+        cred = tenants.load_credential(db, tenant.id, "kalshi",
+                                       deps.keyring())
+    except Exception:                                   # noqa: BLE001
+        return {}
+
+    runs = {}
+    for config in registry.all_bots():
+        run = lifecycle.running_run(db, tenant.id, config.key)
+        if run is not None:
+            runs[config.key] = (config, run.started_at, run.bankroll)
+    if not runs:
+        return {}
+    try:
+        return since_launch.for_running_bots(cred, cache_key=str(tenant.id),
+                                             runs=runs)
+    except Exception as exc:                            # noqa: BLE001
+        logger.info("since-launch unavailable: %s: %s",
+                    type(exc).__name__, exc)
+        return {}
+
+
 @router.get("/statuses", operation_id="getAllBotStatuses")
 @deps.tenant_scoped
 def all_statuses(tenant: Tenant = Depends(deps.current_tenant),
@@ -168,9 +204,13 @@ def all_statuses(tenant: Tenant = Depends(deps.current_tenant),
     Declared BEFORE /{bot_key}/status so the literal path matches first and is
     never read as a bot named "statuses".
     """
-    return {config.key: lifecycle.status(db, tenant_id=tenant.id,
-                                         bot_key=config.key)
-            for config in registry.all_bots()}
+    out = {config.key: lifecycle.status(db, tenant_id=tenant.id,
+                                        bot_key=config.key)
+           for config in registry.all_bots()}
+    for bot_key, figure in _since_launch_for_running(db, tenant).items():
+        if bot_key in out:
+            out[bot_key]["since_launch"] = figure
+    return out
 
 
 @router.get("/{bot_key}/status", operation_id="getBotStatus")
@@ -178,7 +218,13 @@ def all_statuses(tenant: Tenant = Depends(deps.current_tenant),
 def bot_status(bot_key: str, tenant: Tenant = Depends(deps.current_tenant),
                db: DbSession = Depends(deps.get_db)) -> dict:
     _config_or_404(bot_key)
-    return lifecycle.status(db, tenant_id=tenant.id, bot_key=bot_key)
+    out = lifecycle.status(db, tenant_id=tenant.id, bot_key=bot_key)
+    # The same figure the station's combined poll carries, so a single-bot
+    # request and the all-bots request never disagree about a percentage.
+    figure = _since_launch_for_running(db, tenant).get(bot_key)
+    if figure is not None:
+        out["since_launch"] = figure
+    return out
 
 
 @router.get("/{bot_key}/logs", operation_id="getBotLogs")
@@ -519,7 +565,13 @@ class LuckPreviewRequest(BaseModel):
     min_legs: int = Field(default=5, ge=2, le=24)
     max_legs: int = Field(default=24, ge=2, le=24)
     min_leg_c: int = Field(default=60, ge=5, le=98)
+    max_leg_c: int = Field(default=98, ge=6, le=99)
     min_volume_usd: float = Field(default=0, ge=0)
+    # The two gates the long shot used to inherit from the regular parlay
+    # engine. Omitted means the engine's own numbers -- 3c and 72h -- so the
+    # default lives in one place rather than being restated here.
+    max_spread_c: int | None = Field(default=None, ge=0, le=99)
+    max_hours: int | None = Field(default=None, ge=1, le=720)
 
 
 class LuckPlaceRequest(BaseModel):
@@ -542,6 +594,7 @@ def _kalshi_cred(db: DbSession, tenant: Tenant):
 
 
 @router.post("/luck/preview", operation_id="previewLuckTicket")
+@deps.tenant_scoped
 def luck_preview(payload: LuckPreviewRequest,
                  tenant: Tenant = Depends(deps.current_tenant),
                  db: DbSession = Depends(deps.get_db)) -> dict:
@@ -561,14 +614,19 @@ def luck_preview(payload: LuckPreviewRequest,
     # a request that waits for it is killed by the proxy no matter what the
     # browser's timeout says.
     return {"job_id": luck.start(luck.preview, cred,
+                                 job_owner=tenant.id, owner=tenant.id,
                                  min_legs=payload.min_legs,
                                  max_legs=payload.max_legs,
                                  min_leg_c=payload.min_leg_c,
-                                 min_volume_usd=payload.min_volume_usd),
+                                 max_leg_c=payload.max_leg_c,
+                                 min_volume_usd=payload.min_volume_usd,
+                                 max_spread_c=payload.max_spread_c,
+                                 max_hours=payload.max_hours),
             "status": "running"}
 
 
 @router.post("/luck/place", operation_id="placeLuckTicket")
+@deps.tenant_scoped
 def luck_place(payload: LuckPlaceRequest,
                tenant: Tenant = Depends(deps.current_tenant),
                db: DbSession = Depends(deps.get_db)) -> dict:
@@ -587,6 +645,7 @@ def luck_place(payload: LuckPlaceRequest,
     # Also a job: placing re-scans the board and may sit through a stake
     # escalation, which is longer than the preview, not shorter.
     return {"job_id": luck.start(luck.place, cred, payload.token,
+                                 job_owner=tenant.id, owner=tenant.id,
                                  tenant_slug=tenant.slug,
                                  tickers=payload.tickers,
                                  min_usd=payload.min_usd,
@@ -596,12 +655,15 @@ def luck_place(payload: LuckPlaceRequest,
 
 
 @router.get("/luck/job/{job_id}", operation_id="getLuckJob")
+@deps.tenant_scoped
 def luck_job(job_id: str,
-             _: Tenant = Depends(deps.current_tenant)) -> dict:
-    """How a preview or a placement is getting on."""
+             tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """How a preview or a placement is getting on -- for the operator who
+    started it. Another operator's job id is not found, exactly as a job that
+    never existed: a result can hold legs, stakes and fills."""
     from app.domains.botstation import luck
 
-    out = luck.job(job_id)
+    out = luck.job(job_id, owner=tenant.id)
     if out is None:
         raise HTTPException(status_code=404,
                             detail="no such job — it may have expired")

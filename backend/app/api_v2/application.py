@@ -31,7 +31,7 @@ from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.api_v2.routers import (auth, bots, desk, positions, research,
-                                tenants,
+                                super_signals, tenants,
                                 wellness)
 from app.core.config import get_settings
 from app.platform.security.envelope import MasterKeyMissing
@@ -198,6 +198,7 @@ def create_app() -> FastAPI:
     app.include_router(desk.desk36_router, prefix=prefix)
     app.include_router(desk.levels_router, prefix=prefix)
     app.include_router(research.router, prefix=prefix)
+    app.include_router(super_signals.router, prefix=prefix)
 
     @app.get("/health", operation_id="healthCheck")
     def health() -> dict:
