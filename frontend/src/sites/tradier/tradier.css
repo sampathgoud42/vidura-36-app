@@ -1324,6 +1324,7 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
   .tr-sigpick-name { font-size: 12.5px; }
   .tr-sigpick-stats { font-size: 11.5px; }
   .tr-sigpick-more, .tr-sigpick-clear { min-height: 44px; }
+  .tr-pairmins .tr-input { min-height: 44px; }
 }
 
 /* a chart tile is a section too, but its grip lives inside — there is no
@@ -1488,3 +1489,10 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
   .tr-offline-banner { font-size: 12px; padding: 10px 16px; }
   .tr-offline-banner button { font-size: 11px; padding: 4px 12px; }
 }
+
+/* best_pairs: the pairs table's own minimums, above the pair list */
+.tr-pairmins { display: flex; flex-wrap: wrap; margin: 2px 0 4px; }
+.tr-pairmins label { display: flex; flex-direction: column; margin: 0 10px 4px 0; }
+.tr-pairmins .tr-note { font-size: 10px; margin-bottom: 2px; }
+.tr-pairmins .tr-input { width: 96px; }
+.tr-pairmins .tr-input.bad { border-color: var(--tr-amber); }

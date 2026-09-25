@@ -165,12 +165,16 @@ def open_position(db: Session, *, tenant_id: str, cred, symbol: str, side: str,
     # The 0DTE cutoff, checked again HERE rather than only on arrival. A
     # request that was legal when it was made can become illegal before it is
     # executed, and a same-day contract entered late is a different trade.
+    # The auto-trader's cutoff is earlier, and it is enforced here, where every
+    # automated entry passes, rather than trusted to each strategy's loop.
     if zero_dte or clock.is_same_day(expiration):
-        if clock.past_zero_dte_cutoff():
+        auto = str(strategy or "").startswith("Auto/")
+        if clock.past_zero_dte_cutoff() or (auto and clock.past_auto_zero_dte_cutoff()):
+            cutoff = clock.AUTO_ZERO_DTE_CUTOFF if auto else clock.ZERO_DTE_CUTOFF
             raise RiskRefused(
                 f"same-day contracts are only entered before "
-                f"{clock.ZERO_DTE_CUTOFF.strftime('%H:%M')} CST; it is now "
-                f"{clock.now().strftime('%H:%M')}"
+                f"{cutoff.strftime('%H:%M')} CST{' by the auto-trader' if auto else ''}; "
+                f"it is now {clock.now().strftime('%H:%M')}"
             )
 
     # Guard 7 — is anyone watching the stop? Returns the warning instead of

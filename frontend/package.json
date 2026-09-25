@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite --host",
     "build": "vite build",
-    "preview": "vite preview --host"
+    "preview": "vite preview --host",
+    "probe": "node probe/prepare.mjs && vite build --ssr probe/ssr-probe.jsx --outDir probe/dist --logLevel error && node probe/dist/ssr-probe.js"
   },
   "dependencies": {
     "react": "^18.3.1",

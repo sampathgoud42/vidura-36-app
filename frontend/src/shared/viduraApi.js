@@ -332,8 +332,20 @@ export const vidura = {
   // buy one named contract (the flow board already chose it)
   tradierBuyContract: (body) =>
     api.send('/tradier/positions/contract', body, { timeout: 60000 }),
-  tradierPositions: (userId, status, venue = 'all', marks = false) =>
-    api.get('/tradier/positions', { params: { status, venue, marks } }),
+  // The desks' filter chips, translated for the positions API, which filters on
+  // one exact status: "all" is no filter at all and "sl_sold" is the old name
+  // for a stop-out. "active" is TWO statuses (pending, open -- what the risk
+  // monitor watches), so it is picked out of the whole list here. Sent as-is,
+  // "all" and "active" matched no row, and every managed position -- auto-trade
+  // entries included -- vanished from both desks.
+  tradierPositions: async (userId, status, venue = 'all', marks = false) => {
+    const wire = status === 'all' || status === 'active' ? undefined
+      : status === 'sl_sold' ? 'sl_filled' : status;
+    const page = await api.get('/tradier/positions', { params: { status: wire, venue, marks } });
+    if (status !== 'active') return page;
+    const items = (page.items || []).filter((p) => p.status === 'pending' || p.status === 'open');
+    return { ...page, items, total: items.length };
+  },
   // A monitor pass. Safe to poll -- it reads the venue and updates state.
   tradierSweep: (userId) => api.send(`/tradier/positions/sweep`),
   // Closes EVERY open and pending position. Never poll this, never put it on

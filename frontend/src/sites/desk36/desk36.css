@@ -761,6 +761,16 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
   font-size: 9px; letter-spacing: 0.1em;
   color: var(--d36-faint);
 }
+/* the world, the reading guide, the credit -- stacked, with the link a full
+   44pt target rather than a word of 9px text */
+.d36-footer { display: flex; flex-direction: column; align-items: center; }
+.d36-footer > * + * { margin-top: 2px; }
+.d36-footer a {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px;
+  font-size: 11px; letter-spacing: 0.08em; color: var(--d36-green);
+  text-decoration: underline; text-underline-offset: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
 
 /* ── buy sheet ──────────────────────────────────────────────────────────── */
 .d36-scrim {

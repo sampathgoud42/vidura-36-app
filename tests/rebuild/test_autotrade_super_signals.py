@@ -270,8 +270,11 @@ def test_a_signal_already_acted_on_is_never_bought_twice(client, alice, feed, at
     assert any("already acted on" in e["message"] for e in second.events)
 
 
-@pytest.mark.parametrize("hh,mm,same_day", [(10, 32, True), (13, 5, False)])
+@pytest.mark.parametrize("hh,mm,same_day", [(10, 32, True), (11, 49, True), (11, 50, False),
+                                             (12, 30, False), (13, 5, False)])
 def test_zero_dte_is_bought_only_before_the_cutoff(client, alice, feed, at, hh, mm, same_day):
+    """The auto-trader's own cutoff is 11:50 CST, earlier than a person's 13:00:
+    from then on a signal buys the next expiry, never a same-day contract."""
     at(hh, mm)
     w = _watcher(alice, zero_dte=True)
     day = autotrade._super_tick(w, clock.now(), None)

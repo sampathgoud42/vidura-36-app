@@ -157,6 +157,10 @@ _LOCAL = ZoneInfo("America/Chicago")
 
 load_dotenv(_ROOT / "btc.env")                   # customer_folder / default_customer
 
+# The desk-wide sell guard, shared by every engine that sells.
+sys.path.insert(0, str(_HERE.parents[1]))        # .../kalshi
+import sell_guard                                # noqa: E402
+
 # ── secrets from the customer folder (same scheme as fable5) ─────────────────
 def _require_customer() -> str:
     """No silent default: another machine must never pick up a
@@ -537,13 +541,23 @@ async def cancel_all(c: KalshiClient) -> None:
 
 async def place_order(c: KalshiClient, ticker: str, action: str, side: str,
                       count: int, price_cents: int, tag: str) -> bool:
-    body = _mk_order(ticker, action, side, count, price_cents)
     _log(tag, f"{'[DRY] ' if DRY_RUN else ''}{action.upper()} {side.upper()} "
               f"x{count} @ {price_cents}c on {ticker}")
     if DRY_RUN:
         PAPER.resting.append({"ticker": ticker, "action": action, "side": side,
                               "price": price_cents, "count": count})
         return True
+    if action == "sell":
+        # This engine sold blind: no position check of any kind before the
+        # POST. A sell with nothing held does not fail on this venue -- it
+        # OPENS the opposite position -- so the desk-wide guard now runs here
+        # like it does everywhere else, and the size that goes out is the
+        # confirmed one rather than the intended one.
+        count = await sell_guard.confirm(c, ticker, side, want=count,
+                                         why=tag, log=lambda m: _log(tag, m))
+        if count <= 0:
+            return False
+    body = _mk_order(ticker, action, side, count, price_cents)
     try:
         await c.req("POST", ORDER_CREATE_PATH, body=body)
         return True

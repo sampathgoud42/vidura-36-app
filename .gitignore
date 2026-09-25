@@ -67,3 +67,7 @@ frontend/dist-v2/
 # is a .json.
 runtime/tunnel/*.json
 runtime/tunnel/cert.pem
+
+# the console render probe regenerates these on every run
+frontend/probe/_console_copy.jsx
+frontend/probe/dist/

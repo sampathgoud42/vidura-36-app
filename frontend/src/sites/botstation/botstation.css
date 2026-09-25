@@ -217,6 +217,9 @@
 .bs-meter .fill.rose { background: linear-gradient(90deg, #c1408a, var(--bs-rose)); }
 .bs-meter .fill.gold { background: linear-gradient(90deg, #b8960f, var(--bs-gold)); }
 .bs-meter .fill.silver { background: linear-gradient(90deg, #808080, var(--bs-silver)); }
+/* The monitor tile. Teal because it is the one bot on this board that
+   never places an order -- it should not read as another trader. */
+.bs-meter .fill.teal { background: linear-gradient(90deg, #147d72, #5eead4); }
 .bs-meter .fill.good { background: linear-gradient(90deg, #1c9e42, var(--bs-good)); }
 .bs-meter .fill.crit { background: linear-gradient(90deg, #b32222, var(--bs-crit)); }
 
@@ -609,6 +612,22 @@
 /* A checkbox set inside the auto-fit form grid. It spans the full row: six
    sport names wrapped into a 140px column would read as one word per line. */
 .bs-field-wide { grid-column: 1 / -1; }
+
+/* What the selected engine does. Sits directly under the version picker and
+   spans the row, because it is prose: squeezed into a 140px grid column it
+   would be one or two words per line and nobody would read it -- which for
+   the one control that decides the whole strategy is the failure worth
+   avoiding. */
+.bs-engine-brief {
+  grid-column: 1 / -1;
+  border-left: 2px solid color-mix(in srgb, var(--bot-accent, var(--bs-sun)) 55%, transparent);
+  padding: 2px 0 2px 10px;
+  margin-top: -2px;
+}
+.bs-engine-strategy { font-size: 11.5px; line-height: 1.55; color: var(--bs-ink-2); margin: 0; }
+.bs-engine-points { margin: 6px 0 0; padding-left: 14px; }
+.bs-engine-points li { font-size: 10.5px; line-height: 1.5; color: var(--bs-ink-3); margin-bottom: 3px; }
+.bs-engine-points li::marker { color: var(--bs-ink-4); }
 .bs-checks { display: flex; flex-wrap: wrap; gap: 6px 14px; padding: 2px 0; }
 .bs-check {
   display: inline-flex;
@@ -706,6 +725,29 @@
 .bs-err { color: var(--bs-crit); font-size: 11.5px; }
 .bs-note { color: var(--bs-ink-4); font-size: 10px; }
 .bs-note.warn { color: var(--bs-warn); }
+/* "Since launch", from the exchange. Its own block rather than another chip:
+   it is the figure the operator is actually watching, and a chip row is where
+   things go to be skimmed past. */
+.bs-since {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  margin: 8px 0 2px;
+  padding: 7px 10px;
+  border: 1px solid var(--bs-hair-2);
+  border-left: 2px solid color-mix(in srgb, var(--bot-accent, var(--bs-sun)) 70%, transparent);
+  background: rgba(255, 255, 255, 0.015);
+}
+.bs-since .k { font-size: 9px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--bs-ink-3); }
+.bs-since b { font-family: var(--bs-mono); font-size: 15px; letter-spacing: 0.02em; }
+.bs-since b.good { color: var(--bs-good, #4ade80); }
+.bs-since b.crit { color: var(--bs-crit); }
+.bs-since b.dim { color: var(--bs-ink-3); }
+.bs-since .v { font-size: 10.5px; color: var(--bs-ink-2); }
+.bs-since .v.dim { color: var(--bs-ink-4); }
+.bs-since .v.warn { color: var(--bs-warn); flex-basis: 100%; }
+
 .bs-runchips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
 .bs-runchip { font-size: 9.5px; letter-spacing: 0.08em; color: var(--bs-ink-2); border: 1px solid var(--bs-hair); padding: 2px 8px; }
 

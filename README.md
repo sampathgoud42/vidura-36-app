@@ -292,9 +292,23 @@ A LONG buys a CALL and a SHORT buys a PUT. Entries go through the same
 managed entry as the BUY ticket (`execution/entry.py`), with its guards,
 sizing and smart limit. Each ticker gets at most one entry per hour. Each
 signal is entered at most once per account, even across re-arms. It buys same-day
-contracts only before the 13:00 0DTE cutoff. Signals already on the desk when
+contracts only before 11:50 CST, the auto-trader's own 0DTE cutoff (a person's
+is 13:00), and the next expiry after it. The order itself refuses a same-day
+contract for any `Auto/` entry from 11:50 on. Signals already on the desk when
 you arm it are never entered. The watcher disarms itself at the 15:00 close,
 because the list was picked for that day.
+
+**best pairs** is the same watcher, but a signal must match a pair: the
+report's best ticker + signal pairs (`/super-signals/best-pairs`, 30
+sessions). A pair is one signal type on one ticker, so the watcher trades
+that type on that ticker and nowhere else. The form lists the desk's current
+pairs, all picked. You can narrow them by min win %, min edge and min net R,
+or untick any. The Tickers field is greyed out, because each pair names its
+own ticker. Arming re-checks every pick against the desk's list, which is
+rewritten after each report. It is refused if a pick has dropped off or the
+desk cannot answer. Every other rule is super signals' own, the per-signal
+idempotency key included. So a signal either strategy has bought is never
+bought again by the other.
 
 ---
 

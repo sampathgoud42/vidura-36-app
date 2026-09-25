@@ -107,16 +107,22 @@ def positions(cred: VenueCredential, *, limit: int = 200) -> list[dict]:
         client.close()
 
 
-def fills(cred: VenueCredential, *, limit: int = 500) -> list[dict]:
+def fills(cred: VenueCredential, *, limit: int = 500,
+          min_ts: int | None = None) -> list[dict]:
     """Individual executions. The last resort for reconstructing a round trip.
 
     Only consulted when neither the settlement feed nor the position feed
     knows about a ticker -- which happens for markets old enough to have
     aged out of both.
+
+    ``min_ts`` (UNIX seconds) narrows the read at the exchange. It is what
+    makes "since this bot launched" affordable to ask on a poll: without it
+    the whole paged history is walked to find the handful of fills that
+    happened in the last hour.
     """
     client = _client(cred)
     try:
-        return list(client.fills(limit=limit))
+        return list(client.fills(limit=limit, min_ts=min_ts))
     except Exception as exc:                            # noqa: BLE001
         logger.info("kalshi fills: %s", type(exc).__name__)
         raise KalshiUnavailable("Kalshi could not be reached") from exc

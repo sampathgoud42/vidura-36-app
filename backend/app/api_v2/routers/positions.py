@@ -22,6 +22,7 @@ from app.domains.trading.execution import entry, idempotency, leases, orders
 from app.domains.trading.execution import venue as venue_mod
 from app.domains.trading.execution.orders import ExecutionRefused
 from app.domains.trading.models import Position
+from app.domains.trading.risk.monitor import ACTIVE
 from app.domains.trading.risk.validation import RiskRefused, validate_entry
 from app.platform.security.envelope import Keyring
 from app.tenancy import repository as tenants
@@ -95,16 +96,58 @@ def _credential(db: DbSession, tenant: Tenant, kr: Keyring, *, live: bool):
 
 # ---- reads ----------------------------------------------------------------
 
+# The desks' filter chips, in the words they send. "all" is no filter at all,
+# "active" is what the risk monitor still watches, and "sl_sold" is the old
+# name for a stop-out. Taken literally, "all" and "active" matched no row and
+# every managed position -- auto-trade entries included -- vanished from view.
+_STATUS_WORDS: dict[str, tuple[str, ...] | None] = {
+    "all": None, "active": ACTIVE, "sl_sold": ("sl_filled",)}
+
+
+def _add_marks(db: DbSession, tenant: Tenant, kr: Keyring,
+               rows: list[Position], items: list[dict]) -> None:
+    """live_bid for every position still working, and live_pnl_usd for the
+    filled ones -- what the desks' MARK and P&L columns show before a position
+    closes, at the current bid. One quote call per venue. A venue that cannot
+    be reached leaves the marks empty: they are a courtesy, the list is not."""
+    by_venue: dict[bool, list[int]] = {}
+    for i, pos in enumerate(rows):
+        if pos.status in ACTIVE:
+            by_venue.setdefault(bool(pos.venue_sandbox), []).append(i)
+    for sandbox, idx in by_venue.items():
+        try:
+            cred = tenants.load_credential(
+                db, tenant.id, "tradier_sandbox" if sandbox else "tradier", kr)
+            quoted = venue_mod.quotes([rows[i].occ_symbol for i in idx],
+                                      cred=cred, sandbox=sandbox) or []
+        except Exception:                               # noqa: BLE001
+            logger.info("marks unavailable for %s (%s)", tenant.slug,
+                        "sandbox" if sandbox else "live")
+            continue
+        bids = {str(q.get("symbol") or "").upper(): q.get("bid") for q in quoted}
+        for i in idx:
+            pos, bid = rows[i], bids.get(rows[i].occ_symbol.upper())
+            if bid is None:
+                continue
+            items[i]["live_bid"] = float(bid)
+            if pos.status == "open" and pos.entry_price is not None and pos.contracts:
+                items[i]["live_pnl_usd"] = round(
+                    (float(bid) - pos.entry_price) * pos.contracts * 100, 2)
+
+
 @router.get("/positions", operation_id="listTradierPositions")
 @deps.tenant_scoped
 def list_positions(status: str | None = Query(default=None),
                    venue: str = Query(default="all"),
                    limit: int = Query(default=200, le=1000),
+                   marks: bool = Query(default=False),
                    tenant: Tenant = Depends(deps.current_tenant),
-                   db: DbSession = Depends(deps.get_db)) -> dict:
+                   db: DbSession = Depends(deps.get_db),
+                   kr: Keyring = Depends(deps.keyring)) -> dict:
     stmt = select(Position).where(Position.tenant_id == tenant.id)
-    if status:
-        stmt = stmt.where(Position.status == status)
+    wanted = _STATUS_WORDS.get(status, (status,)) if status else None
+    if wanted:
+        stmt = stmt.where(Position.status.in_(wanted))
     if venue in ("sandbox", "live"):
         stmt = stmt.where(Position.venue_sandbox.is_(venue == "sandbox"))
 
@@ -113,7 +156,10 @@ def list_positions(status: str | None = Query(default=None),
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = list(db.scalars(
         stmt.order_by(Position.id.desc()).limit(limit)).all())
-    return {"items": [_serialise(p) for p in rows], "total": total}
+    items = [_serialise(p) for p in rows]
+    if marks:
+        _add_marks(db, tenant, kr, rows, items)
+    return {"items": items, "total": total}
 
 
 @router.get("/positions/{position_id}", operation_id="getTradierPosition")

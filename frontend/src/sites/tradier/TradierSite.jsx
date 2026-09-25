@@ -2359,7 +2359,7 @@ function TargetCell({ pos, busy, onSave }) {
 // Exported with the rest, so another board arms the auto-trader through
 // the SAME form and the same knobs rather than a second one that drifts.
 const AUTO_DISCOUNT_OPTIONS = [10, 20, 40];
-const STRATEGY_LABELS = { super_signals: 'super signals' };
+const STRATEGY_LABELS = { super_signals: 'super signals', best_pairs: 'best pairs' };
 const SIGNALS_SHOWN = 8;
 
 const signedR = (r) => (r == null ? '—' : `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r).toFixed(2)}R`);
@@ -2472,6 +2472,145 @@ function SignalPicker({ tickers, value, onChange }) {
   );
 }
 
+/* best_pairs: which of the report's best ticker + signal pairs to trade. The
+   list is the signal desk's own (/super-signals/best-pairs: the latest daily
+   report's pairs over 30 sessions, best first), narrowed by the same minimums
+   as the pairs table. A pair is a signal type on ONE ticker, so the watcher
+   trades that type there and nowhere else. Every listed pair starts picked --
+   the strategy is "trade the best pairs" -- and any can be unticked. */
+const PAIR_MINS = [
+  // param, label, lowest, highest: the API's own bounds
+  ['min_win_pct', 'min win %', 0, 100],
+  ['min_edge', 'min edge', 0, 100],
+  ['min_net_r', 'min net R', -1000, 1000],
+];
+const pairId = (p) => `${p.type_key}@${p.ticker}`;
+
+function PairPicker({ value, onChange }) {
+  const [mins, setMins] = useState({ min_win_pct: '', min_edge: '', min_net_r: '' });
+  const [res, setRes] = useState(null);
+  const [err, setErr] = useState(null);
+  const [off, setOff] = useState(() => new Set());   // pairs the operator unticked
+  const [all, setAll] = useState(false);
+  const loaded = useRef(false);
+
+  const bad = PAIR_MINS.filter(([k, , lo, hi]) => {
+    const v = mins[k].trim();
+    if (!v) return false;
+    const n = Number(v);
+    return !Number.isFinite(n) || n < lo || n > hi;
+  }).map(([k]) => k);
+  const asked = JSON.stringify(Object.fromEntries(PAIR_MINS
+    .map(([k]) => [k, mins[k].trim()])
+    .filter(([, v]) => v !== '')
+    .map(([k, v]) => [k, Number(v)])));
+
+  useEffect(() => {
+    if (bad.length) return undefined;
+    let alive = true;
+    const t = setTimeout(() => {
+      vidura.superSignalsBestPairs(JSON.parse(asked))
+        .then((r) => { if (alive) { setRes(r); setErr(null); } })
+        .catch((e) => { if (alive) setErr(errText(e)); })
+        .finally(() => { loaded.current = true; });
+    }, loaded.current ? 350 : 0);
+    return () => { alive = false; clearTimeout(t); };
+  }, [asked, bad.length]);
+
+  const listed = res?.pairs || [];
+  const picked = listed.filter((p) => !off.has(pairId(p)));
+  const pickedKey = picked.map(pairId).join(',');
+  // the form holds exactly what is ticked on screen
+  useEffect(() => {
+    onChange(picked.map(({ type_key: k, ticker }) => ({ type_key: k, ticker })));
+  }, [pickedKey]);                                   // eslint-disable-line react-hooks/exhaustive-deps
+
+  const toggle = (id) => setOff((s) => {
+    const n = new Set(s);
+    if (n.has(id)) n.delete(id); else n.add(id);
+    return n;
+  });
+  const shown = all ? listed : listed.slice(0, SIGNALS_SHOWN);
+  const day = res?.session ? new Date(`${res.session}T12:00:00`)
+    .toLocaleDateString('en-US', { weekday: 'short' }) : '';
+
+  return (
+    <div className="tr-sigpick" style={{ gridColumn: '1 / -1' }}>
+      <span className="tr-label">
+        Best pairs{listed.length ? ` · ${value.length} of ${listed.length} picked` : ''}
+        {value.length > 0 && (
+          <button type="button" className="tr-sigpick-clear"
+            onClick={() => setOff(new Set(listed.map(pairId)))}>clear</button>
+        )}
+        {value.length < listed.length && (
+          <button type="button" className="tr-sigpick-clear" onClick={() => setOff(new Set())}>all</button>
+        )}
+      </span>
+      <div className="tr-pairmins">
+        {PAIR_MINS.map(([k, text, lo, hi]) => (
+          <label key={k}>
+            <span className="tr-note">{text}</span>
+            <input className={`tr-input${bad.includes(k) ? ' bad' : ''}`} type="number"
+              inputMode="decimal" step="any" min={lo} max={hi} placeholder="any"
+              value={mins[k]} aria-invalid={bad.includes(k)}
+              onWheel={(e) => e.currentTarget.blur()}
+              onChange={(e) => setMins((m) => ({ ...m, [k]: e.target.value }))} />
+          </label>
+        ))}
+      </div>
+      {bad.length > 0 && <p className="tr-note">Win % and edge run 0 to 100; net R runs −1000 to 1000.</p>}
+      {err && <p className="tr-err" style={{ margin: '4px 0' }}>⚠ the best pairs are unavailable — {err}</p>}
+      {!err && !res && <p className="tr-note">loading the best pairs…</p>}
+      {res && (
+        <p className="tr-note tr-sigpick-basis">
+          {res.session
+            ? <>From the <b>{day} {res.session.slice(5)}</b> report · {res.window?.sessions ?? 30} sessions
+              {res.window && ` (${res.window.from.slice(5)} → ${res.window.to.slice(5)})`}
+              {' '}· {Object.keys(JSON.parse(asked)).length ? `${res.count} of ${res.total} meet the minimums` : `${res.total} pairs`}
+              {' '}· each trades its own signal type on its own ticker</>
+            : 'No best pairs yet — the desk writes them with its 15:00 CST report.'}
+        </p>
+      )}
+      {res?.session && listed.length === 0 && <p className="tr-note">No pair meets these minimums.</p>}
+      {shown.length > 0 && (
+        <div className="tr-sigpick-list" role="group" aria-label="best pairs to trade">
+          {shown.map((p) => {
+            const id = pairId(p);
+            const on = !off.has(id);
+            const [agent, setup, grade, direction] = String(p.type_key).split('|');
+            return (
+              <label key={id} className={`tr-sigpick-row${on ? ' on' : ''}`}>
+                <input type="checkbox" checked={on} onChange={() => toggle(id)} />
+                <span className="tr-sigpick-body">
+                  <span className="tr-sigpick-name">
+                    <span className="tr-sigpick-rank">#{p.rank}</span>{' '}
+                    <b>{p.ticker}</b>{' '}
+                    <span className="tr-sigpick-agent">{agent}</span>{' '}
+                    {setup.replace(/_/g, ' ').replace(/\+/g, ' + ')}
+                    {grade && <span className="tr-sigpick-agent"> [{grade}]</span>}{' '}
+                    <b className={direction === 'SHORT' ? 'short' : 'long'}>
+                      {direction === 'SHORT' ? '▼ SHORT' : '▲ LONG'}</b>
+                  </span>
+                  <span className="tr-sigpick-stats">
+                    {p.wins}–{p.losses}–{p.timeouts}
+                    {p.win_pct != null && ` · ${Math.round(p.win_pct)}%`} · {signedR(p.net_r)}
+                    {' '}· edge {p.edge ?? '—'} · fired today {p.fired_today}, past week {p.fired_past_week}
+                  </span>
+                </span>
+              </label>
+            );
+          })}
+        </div>
+      )}
+      {listed.length > SIGNALS_SHOWN && (
+        <button type="button" className="tr-sigpick-more" onClick={() => setAll((v) => !v)}>
+          {all ? 'show the top 8' : `show all ${listed.length}`}
+        </button>
+      )}
+    </div>
+  );
+}
+
 export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
   const [f, setF] = useState({
     strategy: defaults?.strategy || '10min_intraday_move',
@@ -2484,10 +2623,11 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
     delta: seed.delta || '0.12-0.30',
     books: defaults?.books || 'A,B',
     dte_max: String(defaults?.dte_max ?? 6),
-    zero_dte_cutoff: defaults?.zero_dte_cutoff || '13:00',
+    zero_dte_cutoff: defaults?.zero_dte_cutoff || '11:50',
     cooldown_min: String(defaults?.cooldown_min ?? 60),
     top_n: String(defaults?.top_n ?? 3),
     signals: [],
+    pairs: [],
   });
   const [market, setMarket] = useState(true);
   const [discount, setDiscount] = useState(10);
@@ -2497,6 +2637,8 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
   const isSuperHot = f.strategy === 'super_hot_tickers';
   const isAutoScan = isHot || isSuperHot;
   const isSuper = f.strategy === 'super_signals';
+  const isPairs = f.strategy === 'best_pairs';
+  const onDesk = isSuper || isPairs;        // trades the signal desk's live signals
   const confirmS = defaults?.confirm_s ?? 300;
 
   useEffect(() => {
@@ -2509,8 +2651,8 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
       setF((p) => ({ ...p, buy_pct: 30, delta: '0.30-0.50' }));
     }
     // Each strategy opens on its own window: the level cross is an opening-
-    // range play, super signals fire all session.
-    if (isSuper) {
+    // range play, the desk's signals fire all session.
+    if (onDesk) {
       setF((p) => ({ ...p,
         tickers: p.tickers && !p.tickers.startsWith('(') ? p.tickers : (defaults?.tickers || 'SPY,QQQ,SPX'),
         window_open: defaults?.super_window_open || '08:30',
@@ -2542,11 +2684,13 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
             </select></div>
           <div><span className="tr-label">Tickers</span>
             <input className="tr-input"
-              value={isHot ? '(auto from HOT scan)' : isSuperHot ? '(auto from SUPERHOT scan)' : f.tickers}
+              value={isHot ? '(auto from HOT scan)' : isSuperHot ? '(auto from SUPERHOT scan)'
+                : isPairs ? '(each pair’s own ticker)' : f.tickers}
               onChange={set('tickers')} placeholder="SPY,QQQ,SPX"
-              disabled={isAutoScan} style={isAutoScan ? { opacity: 0.45 } : undefined}
+              disabled={isAutoScan || isPairs} style={isAutoScan || isPairs ? { opacity: 0.45 } : undefined}
               title={isHot ? 'HOT tickers strategy auto-picks from 5min+15min scan intersection'
                 : isSuperHot ? 'SUPERHOT strategy auto-picks top N from the superhot scan'
+                : isPairs ? 'a best pair is a signal type on one ticker, so the pairs name the tickers'
                 : undefined} /></div>
           {isSuperHot && (
             <div><span className="tr-label">Top N tickers</span>
@@ -2565,6 +2709,9 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
           {isSuper && (
             <SignalPicker tickers={f.tickers} value={f.signals}
               onChange={(v) => setF((p) => ({ ...p, signals: v }))} />
+          )}
+          {isPairs && (
+            <PairPicker value={f.pairs} onChange={(v) => setF((p) => ({ ...p, pairs: v }))} />
           )}
           <div><span className="tr-label">Delta range</span>
             <input className="tr-input" value={f.delta}
@@ -2588,7 +2735,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
             <input className="tr-input" type="number" min="1" max="1000" value={f.min_contracts}
               onWheel={(e) => e.currentTarget.blur()} onChange={set('min_contracts')}
               title="the Buy % sizing must reach this many contracts, or the trade is skipped" /></div>
-          {isSuper ? (
+          {onDesk ? (
             // The watcher buys through the desk's own BUY, which bids a smart
             // limit; a MKT / discount toggle here would promise what it ignores.
             <div><span className="tr-label">Order type</span>
@@ -2622,19 +2769,33 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
           <div><span className="tr-label">Expiration</span>
             <button type="button" className={`tr-chip tr-0dte ${zeroDte ? 'on' : ''}`}
               aria-pressed={zeroDte} onClick={() => setZeroDte((v) => !v)}
-              title={isSuper
+              title={onDesk
                 ? (zeroDte
-                  ? `same-day contracts until ${defaults?.zero_dte_cutoff || '13:00'} CST, then the next expiry`
+                  ? `same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry`
                   : 'the nearest expiry after today')
                 : zeroDte
-                  ? "same-day expiries allowed — the nearest expiry, today included"
+                  ? `same-day expiries allowed until ${defaults?.zero_dte_cutoff || '11:50'} CST — the nearest expiry, today included`
                   : "same-day expiries skipped — the nearest expiry after today"}>
               0DTE {zeroDte ? 'ON' : 'OFF'}
             </button>
           </div>
         </div>
         <p className="tr-note mt-3">
-          {isSuper ? (
+          {isPairs ? (
+            <>
+              Watches the signal desk live: a new signal that is one of the picked best pairs —
+              that signal type on that ticker — buys a CALL for a LONG and a PUT for a SHORT. Only
+              signals fired live inside {f.window_open}–{f.window_close} CST, at most{' '}
+              {defaults?.super_max_age_min ?? 6} min old and still open, and at most one entry per
+              ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}
+              {zeroDte
+                ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
+                : 'The nearest expiry after today.'}{' '}
+              Sized by Buy % through the desk&rsquo;s own BUY (delta {f.delta}, TP {f.tp_pct}% / SL{' '}
+              {f.sl_pct}%); below min contracts the trade is skipped. Disarms itself at the 15:00
+              close — today&rsquo;s report re-ranks the pairs.
+            </>
+          ) : isSuper ? (
             <>
               Watches the signal desk live: a new signal of a picked type on{' '}
               {f.tickers || 'your tickers'} buys a CALL for a LONG and a PUT for a SHORT — only
@@ -2642,7 +2803,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
               {defaults?.super_max_age_min ?? 6} min old and still open, and at most one entry per
               ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}
               {zeroDte
-                ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '13:00'} CST, then the next expiry.`
+                ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
                 : 'The nearest expiry after today.'}{' '}
               Sized by Buy % through the desk&rsquo;s own BUY (delta {f.delta}, TP {f.tp_pct}% / SL{' '}
               {f.sl_pct}%); below min contracts the trade is skipped. Disarms itself at the 15:00
@@ -2671,7 +2832,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
               New above_10min_high → CALL / below_10min_low → PUT crosses inside the window,
               confirmed after {confirmS < 60 ? `${confirmS}s` : `${Math.round(confirmS / 60)} min`},
               open a managed 0DTE position sized by Buy % — sized below min contracts, the trade
-              is skipped.
+              is skipped. No same-day contract is bought from {defaults?.zero_dte_cutoff || '11:50'} CST on.
             </>
           )}{' '}
           {paper === false ? 'LIVE account — this spends real money on its own.'
@@ -2679,9 +2840,16 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose }) {
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button type="button" className="tr-btn sm auto"
-            disabled={busy || (isSuper && f.signals.length === 0)}
-            title={isSuper && f.signals.length === 0 ? 'pick at least one signal type to trade' : undefined}
-            onClick={() => onArm({ ...f, discount_pct: market ? 0 : discount, zero_dte: zeroDte })}>{busy ? '…' : '🤖 Arm auto-trade'}</button>
+            disabled={busy || (isSuper && f.signals.length === 0) || (isPairs && f.pairs.length === 0)}
+            title={isSuper && f.signals.length === 0 ? 'pick at least one signal type to trade'
+              : isPairs && f.pairs.length === 0 ? 'pick at least one best pair to trade' : undefined}
+            onClick={() => {
+              // delta_min/max ride along so a board that forwards the form as it
+              // stands (36 Trades) arms with the band on screen, not the default
+              const [dMin, dMax] = parseDeltaRange(f.delta);
+              onArm({ ...f, discount_pct: market ? 0 : discount, zero_dte: zeroDte,
+                delta_min: dMin, delta_max: dMax });
+            }}>{busy ? '…' : '🤖 Arm auto-trade'}</button>
           <button type="button" className="tr-btn sm" onClick={onClose}>Cancel</button>
         </div>
       </div>
@@ -3105,6 +3273,7 @@ export default function TradierSite() {
         top_n: parseInt(f.top_n, 10) || 3,
         zero_dte: f.zero_dte !== false,
         signals: f.signals || [],
+        pairs: f.pairs || [],
         live,
       }));
       setAutoFormOpen(false);

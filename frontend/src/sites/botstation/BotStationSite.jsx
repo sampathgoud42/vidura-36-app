@@ -22,6 +22,7 @@ const BOTS = [
   { key: 'gold15', label: 'GOLD-15', sub: '15 min gold breakout', accent: '#ffd700', chip: 'g15', meter: 'gold' },
   { key: 'silver15', label: 'SILVER-15', sub: '15 min silver breakout', accent: '#c0c0c0', chip: 's15', meter: 'silver' },
   { key: 'oil15', label: 'OIL-15', sub: '15 min WTI oil breakout', accent: '#8b5e3c', chip: 'o15', meter: 'brown' },
+  { key: 'monitor15', label: 'MONITOR-15', sub: 'records both bids · no trading', accent: '#5eead4', chip: 'm15', meter: 'teal' },
 ];
 const BOT_BY_KEY = Object.fromEntries(BOTS.map((b) => [b.key, b]));
 
@@ -114,6 +115,20 @@ function usd(v) {
 }
 
 // run-time counter: naive-UTC start -> zero-padded HH:MM:SS elapsed
+// A percentage with its sign kept. Null is an em dash, never 0%: "we could
+// not work it out" and "it has made nothing" are different news, and only one
+// of them is a reason to go and look at the bot.
+function fmtPct(v) {
+  if (v === null || v === undefined || Number.isNaN(Number(v))) return '—';
+  const n = Number(v);
+  return `${n > 0 ? '+' : n < 0 ? '−' : ''}${Math.abs(n).toFixed(2)}%`;
+}
+
+function sinceClass(v) {
+  if (v === null || v === undefined) return 'dim';
+  return v > 0 ? 'good' : v < 0 ? 'crit' : '';
+}
+
 function fmtElapsed(iso, nowMs) {
   if (!iso) return null;
   const t = new Date(/Z$|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`).getTime();
@@ -130,6 +145,28 @@ function utcTs(iso) {
   const d = new Date(/Z$|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
   return Number.isNaN(d.getTime()) ? iso
     : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// A launch time as the DESK reads it: CST, day first, 12-hour.
+//
+// Not the browser's local zone. Every schedule this station takes — the
+// curfew, the blackout windows, the commodity session — is written in CST,
+// and a launch stamped in some other zone cannot be compared against any of
+// them. An operator abroad reading "11:55 AM" against a 16:00 CST curfew
+// would be reading two different clocks and could not tell.
+//
+// The zone is named explicitly rather than assumed: the desk runs on a
+// machine in CST today, and that is exactly the sort of thing that stops
+// being true without anyone editing this file.
+function cstTs(iso) {
+  if (!iso) return '—';
+  const d = new Date(/Z$|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/Chicago', day: '2-digit', month: '2-digit',
+    year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
+  }).formatToParts(d).reduce((a, x) => ({ ...a, [x.type]: x.value }), {});
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute} ${p.dayPeriod}`;
 }
 
 // ── the helios core: canvas sun + three orbiting bot nodes ─────────────────
@@ -1541,15 +1578,38 @@ function BotLogsOverlay({ botKey, user, onClose }) {
 // ── launch console modal (sci-fi pop-out) ──────────────────────────────────
 function num(v) { const n = parseFloat(v); return Number.isFinite(n) ? n : undefined; }
 
-function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose, onChanged, onLogs }) {
+function BotConsole({ botKey, meta, schema, status, versions, cfg, onCfg, user, onClose, onChanged, onLogs }) {
   const bot = BOT_BY_KEY[botKey];
   const running = !!status?.running;
   const activeRun = (status?.runs || []).find((r) => r.status === 'running') || status?.runs?.[0];
   const isSports = botKey === 'sports';
   const isParley = botKey === 'parley';
   const isCommodity = botKey === 'gold15' || botKey === 'silver15' || botKey === 'oil15';
-  const isBtc = !isSports && !isParley && !isCommodity;
+  // The monitor records prices and cannot trade. It is called out here so it
+  // never falls into the btc-shaped branch below, which would post a bankroll
+  // and a contract count at a bot whose schema refuses both.
+  const isMonitor = botKey === 'monitor15';
+  const isBtc = !isSports && !isParley && !isCommodity && !isMonitor;
   const f = cfg || {};
+
+  // Which 15-minute markets this launch may pick, straight off the bot's own
+  // option schema. Hard-coding them here would mean a market added to the
+  // backend catalogue is invisible until somebody remembers this file too.
+  //
+  // DECLARED AFTER `f`, and that is not a style choice: these read f.marketsSel
+  // in their initialiser, and a const read above its own declaration is a
+  // ReferenceError at render time, not a compile error -- it built cleanly and
+  // blanked every bot console on the desk.
+  const marketChoices = (schema?.markets?.choices) || [];
+  const marketDefault = (schema?.markets?.default) || ['btc-15'];
+  const marketsSel = f.marketsSel ?? marketDefault;
+  const marketOn = (key) => marketsSel.includes(key);
+  const toggleMarket = (key) => () => onCfg(botKey, {
+    ...f,
+    marketsSel: marketsSel.includes(key)
+      ? marketsSel.filter((m) => m !== key)
+      : [...marketsSel, key],
+  });
   const [mode, setMode] = useState('paper');   // NEVER persisted — safety
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
@@ -1558,6 +1618,11 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
 
   const vlist = versions || [];
   const defVersion = vlist.find((v) => v.default)?.version || vlist[0]?.version || '';
+  // The engine this launch will actually run. An empty selection means "the
+  // default", which is a real choice rather than an absence -- so it resolves
+  // to the same version the backend would pick, and the panel describes the
+  // engine the operator is about to start rather than nothing at all.
+  const selected = vlist.find((v) => v.version === (f.version || defVersion));
   const version = f.version ?? '';
   const set = (k) => (e) => onCfg(botKey, { ...f, [k]: e.target.value });
   const setSport = (sport, k) => (e) => onCfg(botKey, {
@@ -1586,7 +1651,14 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
     // No user_id. The session decides whose bot this is; sending an operator
     // in the body would be a cross-tenant selector, and the server strips it.
     const body = { mode, version: (version || undefined) };
-    if (isBtc || isCommodity) {
+    if (isMonitor) {
+      // Only what monitor15 declares. Everything else on this form belongs to
+      // a trading bot, and its schema refuses anything it does not know --
+      // which is the check working, not a bug to route around.
+      body.markets = marketsSel;
+      const poll = parseInt(f.poll_s, 10);
+      if (Number.isFinite(poll) && poll >= 5) body.poll_s = poll;
+    } else if (isBtc || isCommodity) {
       const contracts = parseInt(f.contracts, 10);
       if (contracts >= 1) body.contracts = contracts;
       if (num(f.bank) > 0) body.bankroll = num(f.bank);
@@ -1674,23 +1746,44 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
     if (isSports && (f.sportsSel ?? ['tennis', 'baseball']).length === 0) {
       setErr('pick at least one sport'); return;
     }
+    if (isMonitor && marketsSel.length === 0) {
+      setErr('pick at least one market'); return;
+    }
     setErr(null);
+    // WHAT the operator is actually launching, in the engine's own words.
+    // A version number says nothing on its own -- "v2" and "v7" are entirely
+    // different strategies with different entry rules, price bands and exits
+    // -- so the confirmation reads the selected engine's description out
+    // before anyone commits money to it. The text comes from the registry
+    // with the rest of the version, so a new engine describes itself here
+    // with no change to this file.
+    const picked = selected;
+    const engineBlock = picked
+      ? `Engine ${picked.version}${picked.default ? ' (default)' : ''}`
+        + (picked.strategy ? `\n${picked.strategy}` : '')
+      : '';
+    const modeBlock = mode === 'live'
+      ? 'This bot will place REAL-MONEY Kalshi orders on its own. The server '
+        + 'is unlocked (VIDURA_PAPER_ONLY=false) and the launch config below applies.'
+      : 'Simulated fills, real signals — no money moves. The launch config below applies.';
     const ok = await confirmDialog({
       title: mode === 'live'
-        ? `LAUNCH ${bot.label} — LIVE, real money?`
-        : `Launch ${bot.label} in PAPER mode?`,
-      body: mode === 'live'
-        ? 'This bot will place REAL-MONEY Kalshi orders on its own. The server '
-          + 'is unlocked (VIDURA_PAPER_ONLY=false) and the launch config below applies.'
-        : 'Simulated fills, real signals — no money moves. The launch config below applies.',
+        ? `LAUNCH ${bot.label}${picked ? ` ${picked.version}` : ''} — LIVE, real money?`
+        : `Launch ${bot.label}${picked ? ` ${picked.version}` : ''} in PAPER mode?`,
+      body: [engineBlock, modeBlock].filter(Boolean).join('\n\n'),
+      notes: picked?.highlights?.length ? picked.highlights : undefined,
       confirmText: mode === 'live' ? 'Launch LIVE' : 'Launch',
       cancelText: 'Cancel',
     });
     if (!ok) return;
     setBusy(true);
     const body = buildBody();
+    // btcStart/btcStop are the GENERIC /bots/{key}/start|stop routes despite
+    // their names -- every bot that is not sports or parley rides them, the
+    // monitor included. Named explicitly rather than left to the final `else`,
+    // which used to mean "sports" and would have posted this launch there.
     const startWith = (b) => (isCommodity ? vidura.commodityStart(botKey, b)
-      : isBtc ? vidura.btcStart(botKey, b)
+      : (isBtc || isMonitor) ? vidura.btcStart(botKey, b)
       : isParley ? vidura.parleyStart(b) : vidura.sportsStart(b));
     const call = () => startWith(body);
     try {
@@ -1710,7 +1803,7 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
             // accepted, so this retry was refused as an unknown option and
             // "Kill it and start fresh" could not work at all.
             const stopIt = isCommodity ? vidura.commodityStop(botKey, {})
-              : isBtc ? vidura.btcStop(botKey, {})
+              : (isBtc || isMonitor) ? vidura.btcStop(botKey, {})
                 : isParley ? vidura.parleyStop({}) : vidura.sportsStop({});
             await stopIt.catch(() => { /* already gone is the outcome we want */ });
             await call();
@@ -1735,7 +1828,7 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
     setErr(null);
     try {
       await (isCommodity ? vidura.commodityStop(botKey, { user_id: user.user_id })
-        : isBtc ? vidura.btcStop(botKey, { user_id: user.user_id })
+        : (isBtc || isMonitor) ? vidura.btcStop(botKey, { user_id: user.user_id })
         : isParley ? vidura.parleyStop({ user_id: user.user_id })
           : vidura.sportsStop({ user_id: user.user_id }));
       onChanged();
@@ -1762,15 +1855,58 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
               <span className="bs-runchip">RUNNING · {activeRun.mode?.toUpperCase()}</span>
               <span className="bs-runchip">engine {activeRun.bot_version || '?'}</span>
               <span className="bs-runchip">pid {activeRun.pid ?? '—'}</span>
-              <span className="bs-runchip">since {utcTs(activeRun.started_at)}</span>
+              <span className="bs-runchip" title="launch time (CST)">
+                since {cstTs(activeRun.started_at)} CST
+              </span>
               {status?.session && (
                 <span className="bs-runchip">
-                  session {usd(status.session.pnl_usd)} · {status.session.trades_closed} closed
-                  {status.session.bankroll_pct !== null && status.session.bankroll_pct !== undefined
-                    ? ` · bank ${status.session.bankroll_pct >= 0 ? '+' : ''}${status.session.bankroll_pct}%` : ''}
+                  ledger {usd(status.session.pnl_usd)} · {status.session.trades_closed} closed
                 </span>
               )}
             </div>
+            {/* Since launch, from the EXCHANGE. Its own row rather than a
+                chip: this is the number the operator is watching, and the
+                one that decides whether the bot is working. */}
+            {status?.since_launch && (
+              <div className="bs-since">
+                <span className="k">since launch</span>
+                {status.since_launch.available ? (
+                  <>
+                    <b className={sinceClass(status.since_launch.pct)}>
+                      {fmtPct(status.since_launch.pct)}
+                    </b>
+                    <span className="v">
+                      {usd(status.since_launch.pnl_usd)}
+                      {status.since_launch.bankroll
+                        ? ` of $${status.since_launch.bankroll} bank` : ' · no bank set'}
+                    </span>
+                    <span className="v dim">
+                      {status.since_launch.series.join(', ')} ·{' '}
+                      {status.since_launch.markets} market
+                      {status.since_launch.markets === 1 ? '' : 's'}
+                      {status.since_launch.markets_open
+                        ? ` (${status.since_launch.markets_open} open)` : ''}
+                      {status.since_launch.staked_usd
+                        ? ` · ${usd(status.since_launch.staked_usd)} staked` : ''}
+                    </span>
+                    {/* Said out loud rather than folded in: this figure may
+                        include a previous run's result on a market both runs
+                        touched. */}
+                    {status.since_launch.mixed_tickers > 0 && (
+                      <span className="v warn">
+                        {status.since_launch.mixed_tickers} market
+                        {status.since_launch.mixed_tickers === 1 ? '' : 's'} also
+                        traded before this launch — may include an earlier run
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="v dim">
+                    {status.since_launch.detail || 'not available'}
+                  </span>
+                )}
+              </div>
+            )}
             <div className="bs-actions">
               <button type="button" className="bs-stopbtn" onClick={stop} disabled={busy}>
                 {busy ? '…' : '■ STOP BOT'}
@@ -1802,7 +1938,66 @@ function BotConsole({ botKey, meta, status, versions, cfg, onCfg, user, onClose,
             </select>
           </div>
 
-          {(isBtc || isCommodity) ? (
+          {/* What the selected engine does, in its own words. The launch
+              confirmation says the same thing, but reading it only at the
+              point of no return is late: this is where an operator is still
+              choosing. Text comes from the registry with the version, so a
+              new engine describes itself here with no change to this file. */}
+          {selected?.strategy && (
+            <div className="bs-engine-brief">
+              <p className="bs-engine-strategy">{selected.strategy}</p>
+              {selected.highlights?.length > 0 && (
+                <ul className="bs-engine-points">
+                  {selected.highlights.map((h) => <li key={h}>{h}</li>)}
+                </ul>
+              )}
+            </div>
+          )}
+
+          {isMonitor ? (
+            <>
+              <div className="bs-field bs-field-wide">
+                <span className="lbl">
+                  Markets to monitor · {marketsSel.length} selected
+                </span>
+                {/* Grouped the way the desk already thinks about them, and
+                    built from the bot's own schema so a market added to the
+                    backend catalogue appears here on its own. */}
+                {['crypto', 'commodities'].map((group) => {
+                  const inGroup = marketChoices.filter((c) => c.group === group);
+                  if (!inGroup.length) return null;
+                  return (
+                    <div key={group} style={{ marginTop: 6 }}>
+                      <span className="bs-note" style={{ letterSpacing: '0.16em' }}>
+                        {group.toUpperCase()}
+                      </span>
+                      <div className="bs-checks">
+                        {inGroup.map((c) => (
+                          <label key={c.value} className="bs-check" title={c.series}>
+                            <input type="checkbox" checked={marketOn(c.value)}
+                              onChange={toggleMarket(c.value)} />
+                            {c.label}
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+                <p className="bs-note" style={{ marginTop: 6 }}>
+                  Each market gets its own table in the monitor schema — one row
+                  every {parseInt(f.poll_s, 10) >= 5 ? parseInt(f.poll_s, 10) : 15}s
+                  with the ticker, CST time and both bids in cents. It places no
+                  orders.
+                </p>
+              </div>
+              <div className="bs-field">
+                <span className="lbl">Seconds between quotes</span>
+                <input className="bs-input" type="number" min="5" max="300"
+                  value={f.poll_s ?? ''} placeholder="15"
+                  onChange={set('poll_s')} />
+              </div>
+            </>
+          ) : (isBtc || isCommodity) ? (
             <>
               <div className="bs-field">
                 <span className="lbl">Contracts</span>
@@ -2174,7 +2369,8 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
     const results = { ok: [], fail: [] };
     const stops = alreadyRunning.map(async (bot) => {
       const isCommodity = bot.key === 'gold15' || bot.key === 'silver15' || bot.key === 'oil15';
-      const isBtc = bot.key === 'btc15' || bot.key === 'btc60';
+      const isBtc = (bot.key === 'btc15' || bot.key === 'btc60'
+                     || bot.key === 'monitor15');
       const isParley = bot.key === 'parley';
       const body = {};
       try {
@@ -2246,6 +2442,11 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
       const isCommodity = bot.key === 'gold15' || bot.key === 'silver15' || bot.key === 'oil15';
       const isBtc = bot.key === 'btc15' || bot.key === 'btc60';
       const isParley = bot.key === 'parley';
+      // The monitor takes no bank, no contracts and no target. Without this it
+      // falls off the end of every chain below and is launched as the SPORTS
+      // bot -- wrong body at the wrong endpoint. It needs no body of its own:
+      // the registry fills in its default market.
+      const isMonitor = bot.key === 'monitor15';
       // The numbers the operator actually typed. This sent a hardcoded 0 for
       // the target and never sent the stop-loss at all: both went only to the
       // station-level guard, so a form that validated "Target % must be > 0"
@@ -2278,7 +2479,7 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
         body.tp_ceiling_c = parseInt(pd.tp_ceiling_c, 10);
         body.stop_loss_c = parseInt(pd.stop_loss_c, 10);
       }
-      if (!isParley && !isBtc && !isCommodity) {
+      if (!isParley && !isBtc && !isCommodity && !isMonitor) {
         body.sport_settings = {};
         for (const sp of Object.keys(BOT_DEFAULTS.sports.sports)) {
           body.sport_settings[sp] = {
@@ -2289,7 +2490,7 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
       }
       try {
         const startFn = isCommodity ? () => vidura.commodityStart(bot.key, body)
-          : isBtc ? () => vidura.btcStart(bot.key, body)
+          : (isBtc || isMonitor) ? () => vidura.btcStart(bot.key, body)
           : isParley ? () => vidura.parleyStart(body)
           : () => vidura.sportsStart(body);
         await startFn();
@@ -2668,12 +2869,26 @@ export default function BotStationSite() {
     const st = statuses[b.key];
     if (!st || !st.running) return { ...b, status: 'IDLE', pct: null, profit: idleProfit };
     const run = (st.runs || []).find((r) => r.status === 'running') || st.runs?.[0];
-    // bank % of the session; a bank-less launch (bankroll_pct null) falls
-    // back to % of portfolio value at launch — the bots' own PV baseline
-    let pct = st.session?.bankroll_pct ?? null;
-    if (pct === null && st.session?.pnl_usd !== null && st.session?.pnl_usd !== undefined) {
-      const pv0 = run?.extra?.config?.pv_at_start?.total_usd;
-      if (pv0 > 0) pct = Math.round((st.session.pnl_usd / pv0) * 10000) / 100;
+    // % since launch, against the bank this run was started with.
+    //
+    // THE EXCHANGE FIRST. st.since_launch is computed from Kalshi's own fills
+    // and realized P&L for this bot's series since its start time, which is
+    // the only source that knows what actually happened. The ledger below it
+    // is what the bot wrote down, and most engines write nothing — two of the
+    // four bots with runs on this account had never recorded a single trade,
+    // so their tiles read a confident 0.00% while they traded all morning.
+    const ex = st.since_launch;
+    let pct = (ex && ex.available && ex.pct !== null && ex.pct !== undefined)
+      ? ex.pct : null;
+    let pnl = (ex && ex.available) ? ex.pnl_usd : null;
+    if (pct === null) {
+      // Fall back to the ledger, then to % of portfolio value at launch.
+      pct = st.session?.bankroll_pct ?? null;
+      if (pnl === null || pnl === undefined) pnl = st.session?.pnl_usd ?? null;
+      if (pct === null && st.session?.pnl_usd !== null && st.session?.pnl_usd !== undefined) {
+        const pv0 = run?.extra?.config?.pv_at_start?.total_usd;
+        if (pv0 > 0) pct = Math.round((st.session.pnl_usd / pv0) * 10000) / 100;
+      }
     }
     // bank halt detection: session bank % vs the launch's target / bank-SL
     const targetPct = st.session?.target_pct ?? run?.extra?.config?.target_pct ?? null;
@@ -2689,8 +2904,7 @@ export default function BotStationSite() {
       pct,
       bankEvent,
       startedAt: run?.started_at || null,
-      profit: st.session?.pnl_usd !== null && st.session?.pnl_usd !== undefined
-        ? st.session.pnl_usd > 0 : idleProfit,
+      profit: (pnl !== null && pnl !== undefined) ? pnl > 0 : idleProfit,
     };
   }), [user, statuses, perf]);
 
@@ -2774,6 +2988,9 @@ export default function BotStationSite() {
   const pvTotal = pv ? (Number(pv.cash_usd) || 0) + (Number(pv.positions_usd) || 0) : null;
 
   const versionsFor = (key) => (bots.find((b) => b.key === key)?.versions) || [];
+  // The bot's own option schema, as the API declares it. The launch form
+  // draws itself from this, so a new option appears without a UI edit.
+  const schemaFor = (key) => (bots.find((b) => b.key === key)?.options_schema) || {};
 
   const chipFor = (k) => BOT_BY_KEY[k]?.chip || 'sp';
 
@@ -2878,7 +3095,10 @@ export default function BotStationSite() {
                     <span className="st">
                       <span className={`bs-st-${b.status}`}>{b.status}</span>
                       {(b.status === 'LIVE' || b.status === 'PAPER') && b.startedAt && (
-                        <span className="pct uptime" title="run time">⏱ {fmtElapsed(b.startedAt, clock.getTime())}</span>
+                        <span className="pct uptime"
+                          title={`launched ${cstTs(b.startedAt)} CST · % is against the launch bank, from Kalshi`}>
+                          ⏱ {fmtElapsed(b.startedAt, clock.getTime())}
+                        </span>
                       )}
                     </span>
                   </button>
@@ -3094,6 +3314,7 @@ export default function BotStationSite() {
           <BotConsole
             botKey={console_}
             meta={BOT_BY_KEY[console_]}
+            schema={schemaFor(console_)}
             status={statuses[console_]}
             versions={versionsFor(console_)}
             cfg={cfg[console_]}

@@ -154,6 +154,42 @@ def bot_config(bot_key: str,
 
 # ---- state ----------------------------------------------------------------
 
+def _since_launch_for_running(db: DbSession, tenant: Tenant) -> dict:
+    """Each running bot's EXCHANGE-side result since it was launched.
+
+    Read here rather than inside lifecycle.status because this is the layer
+    that holds a credential -- and read ONCE for every bot rather than per
+    bot, because seven tiles asking Kalshi the same two questions on a
+    ten-second poll is fourteen round trips for two answers.
+
+    Best-effort throughout: an operator with no Kalshi credential, or an
+    exchange having a bad minute, gets a station that still renders. The
+    figure goes missing; nothing else does.
+    """
+    from app.domains.botstation import since_launch
+
+    try:
+        cred = tenants.load_credential(db, tenant.id, "kalshi",
+                                       deps.keyring())
+    except Exception:                                   # noqa: BLE001
+        return {}
+
+    runs = {}
+    for config in registry.all_bots():
+        run = lifecycle.running_run(db, tenant.id, config.key)
+        if run is not None:
+            runs[config.key] = (config, run.started_at, run.bankroll)
+    if not runs:
+        return {}
+    try:
+        return since_launch.for_running_bots(cred, cache_key=str(tenant.id),
+                                             runs=runs)
+    except Exception as exc:                            # noqa: BLE001
+        logger.info("since-launch unavailable: %s: %s",
+                    type(exc).__name__, exc)
+        return {}
+
+
 @router.get("/statuses", operation_id="getAllBotStatuses")
 @deps.tenant_scoped
 def all_statuses(tenant: Tenant = Depends(deps.current_tenant),
@@ -168,9 +204,13 @@ def all_statuses(tenant: Tenant = Depends(deps.current_tenant),
     Declared BEFORE /{bot_key}/status so the literal path matches first and is
     never read as a bot named "statuses".
     """
-    return {config.key: lifecycle.status(db, tenant_id=tenant.id,
-                                         bot_key=config.key)
-            for config in registry.all_bots()}
+    out = {config.key: lifecycle.status(db, tenant_id=tenant.id,
+                                        bot_key=config.key)
+           for config in registry.all_bots()}
+    for bot_key, figure in _since_launch_for_running(db, tenant).items():
+        if bot_key in out:
+            out[bot_key]["since_launch"] = figure
+    return out
 
 
 @router.get("/{bot_key}/status", operation_id="getBotStatus")
@@ -178,7 +218,13 @@ def all_statuses(tenant: Tenant = Depends(deps.current_tenant),
 def bot_status(bot_key: str, tenant: Tenant = Depends(deps.current_tenant),
                db: DbSession = Depends(deps.get_db)) -> dict:
     _config_or_404(bot_key)
-    return lifecycle.status(db, tenant_id=tenant.id, bot_key=bot_key)
+    out = lifecycle.status(db, tenant_id=tenant.id, bot_key=bot_key)
+    # The same figure the station's combined poll carries, so a single-bot
+    # request and the all-bots request never disagree about a percentage.
+    figure = _since_launch_for_running(db, tenant).get(bot_key)
+    if figure is not None:
+        out["since_launch"] = figure
+    return out
 
 
 @router.get("/{bot_key}/logs", operation_id="getBotLogs")

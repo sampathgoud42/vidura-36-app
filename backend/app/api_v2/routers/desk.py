@@ -809,6 +809,12 @@ def stream_session(tenant: Tenant = Depends(deps.current_tenant),
 
 # ---- auto-trade -----------------------------------------------------------
 
+class PairPick(BaseModel):
+    """One best ticker + signal pair (/super-signals/best-pairs)."""
+    type_key: str = Field(max_length=120)
+    ticker: str = Field(max_length=12)
+
+
 class AutoTradeStart(BaseModel):
     strategy: str = "10min_intraday_move"
     tickers: str = "SPY,QQQ"
@@ -824,6 +830,8 @@ class AutoTradeStart(BaseModel):
     # the CST window their signals must fire in, and whether same-day
     # contracts may be bought (only before the 0DTE cutoff either way).
     signals: list[str] = Field(default_factory=list, max_length=60)
+    # best_pairs: the pairs to trade, each a signal type on one ticker
+    pairs: list[PairPick] = Field(default_factory=list, max_length=60)
     window_open: str | None = Field(default=None, max_length=5)
     window_close: str | None = Field(default=None, max_length=5)
     zero_dte: bool = False
@@ -860,6 +868,7 @@ def autotrade_start(payload: AutoTradeStart,
             sl_pct=payload.sl_pct, tolerance_pct=payload.tolerance_pct,
             min_contracts=payload.min_contracts, delta_min=payload.delta_min,
             delta_max=payload.delta_max, signals=payload.signals,
+            pairs=[p.model_dump() for p in payload.pairs],
             window_open=payload.window_open, window_close=payload.window_close,
             zero_dte=payload.zero_dte)
     except autotrade.AutoTradeRefused as exc:

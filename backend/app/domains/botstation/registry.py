@@ -30,6 +30,18 @@ class BotVersion:
     # different risk profiles, so "take-profit 15%" is not one number shared
     # across them. A version that says nothing inherits the bot defaults.
     option_defaults: dict = field(default_factory=dict)
+    # What this engine actually DOES, in one line, and the two or three facts
+    # an operator needs before committing money to it. Both are shown in the
+    # launch confirmation, so the person clicking "Launch" is reading a
+    # description of the engine they picked rather than trusting a version
+    # number.
+    #
+    # It lives HERE, beside the registration, rather than in the UI: a version
+    # whose description is in the frontend is a version that ships wrong the
+    # first time somebody adds an engine and forgets the other file. The
+    # onboarding contract is one config entry, and this is part of it.
+    strategy: str = ""
+    highlights: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -144,11 +156,22 @@ def report() -> list[dict]:
             "name": config.name,
             "category": config.category,
             "cadence": config.cadence,
+            # The launch form renders itself from this. Sent with the registry
+            # rather than fetched per bot, because the station already asks
+            # for every bot at once and a second round trip per panel buys
+            # nothing -- and because a form built from anything OTHER than the
+            # bot's own schema is a form that drifts from what the API will
+            # accept.
+            "options_schema": config.options_schema,
             "versions": [
                 {"version": v.version,
                  "script": str(script_path(config, v)),
                  "exists": script_path(config, v).is_file(),
-                 "default": v.default}
+                 "default": v.default,
+                 # What the launch confirmation reads out before anyone
+                 # commits money to this engine.
+                 "strategy": v.strategy,
+                 "highlights": list(v.highlights)}
                 for v in config.versions
             ],
         })

@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { api, auth, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
 import SuperSignals from '../../shared/SuperSignals.jsx';
+import { READING_GUIDE_URL } from '../../config.js';
 import {
   AutoTradeForm, CommoditiesPanel, HotScan, MiniChart, OptionsFlow, useMovers,
 } from '../tradier/TradierSite.jsx';
@@ -756,6 +757,7 @@ const STATUS = {
   pending: ['PENDING', 'pending'],
   open: ['OPEN', 'open'],
   tp_filled: ['CLOSED', 'closed'],
+  sl_filled: ['CLOSED', 'closed'],           // the ledger's name for a stop-out
   sl_sold: ['CLOSED', 'closed'],
   closed: ['CLOSED', 'closed'],
   failed: ['CANCELLED', 'cancelled'],
@@ -1641,7 +1643,11 @@ export default function Desk36Site() {
       )}
 
       <footer className="d36-footer">
-        © {new Date().getFullYear()} Vidura World - 36 Trade Desk — by Sampath
+        <span>Vidura World - 36 Trade Desk</span>
+        <a href={READING_GUIDE_URL} target="_blank" rel="noopener noreferrer"
+          title="How to read the Super Signals, Best pairs and SUPERHOT panels (PDF)">
+          Reading guide ↗</a>
+        <span>Designed by Sampath · Copyright 2026</span>
       </footer>
 
       {buy && user && (
