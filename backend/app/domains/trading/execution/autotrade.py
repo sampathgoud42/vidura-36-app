@@ -23,6 +23,13 @@ every symbol it fires on. Every other rule is super_signals' own, the
 idempotency key included, so a signal either strategy has acted on is never
 bought again by the other.
 
+The desk is shared with one more trader: the standalone best-pairs bot
+(backend/bot_best_pair), a separate process running the same tick. Only one of
+them owns the signal desk per operator at a time (signal_owner): arming a
+signal strategy here is refused while the bot holds it, and the bot stands by
+while a watcher armed here holds it. Both read the per-ticker cooldown from
+the positions table, so it holds across the two.
+
 
 Built on the rebuild's own execution path rather than ported from the old
 engine, and that is the whole point of the module. The legacy auto-trader
@@ -47,6 +54,8 @@ it is the "wait a few seconds and re-check" the operator asked for.
 
 from __future__ import annotations
 
+import contextlib
+import itertools
 import logging
 import re
 import threading
@@ -131,6 +140,8 @@ class Watcher:
     last_entry: dict[str, datetime] = field(default_factory=dict)
     trades: list[dict] = field(default_factory=list)
     feed: str = "starting"
+    # This watcher's claim on the signal desk (signal_owner), "" for none.
+    desk_holder: str = ""
 
     def log(self, message: str) -> None:
         stamp = clock.now().strftime("%H:%M:%S")
@@ -189,6 +200,10 @@ class Watcher:
 
 _WATCHERS: dict[str, Watcher] = {}
 _LOCK = threading.Lock()
+# Numbers each watcher's claim on the signal desk. Per arm, not per process: a
+# disarmed watcher's thread releasing on its way out must never release the
+# claim of the watcher armed right after it.
+_INSTANCES = itertools.count(1)
 
 
 class AutoTradeRefused(RuntimeError):
@@ -501,6 +516,47 @@ def _restore(watcher: Watcher, ticker: str, before: datetime | None) -> None:
         watcher.last_entry[ticker] = before
 
 
+def _hold_desk(watcher: Watcher) -> bool:
+    """Renew this watcher's claim on the signal desk before a pass.
+
+    False when the pass must not trade: another owner has the desk -- the
+    standalone bot took it after this claim lapsed -- and the watcher stands
+    down for good, or the claim could not be confirmed and this one pass is
+    skipped. No confirmed claim, no entry.
+    """
+    from app.domains.trading.execution import signal_owner
+
+    if not watcher.desk_holder:
+        return True
+    if watcher.stop_flag.is_set():
+        return False                # disarmed: renewing would take the desk back
+    try:
+        other = signal_owner.claim(watcher.tenant_id, watcher.desk_holder)
+    except Exception as exc:                            # noqa: BLE001
+        _feed(watcher, f"cannot confirm this watcher's claim on the desk -- "
+                       f"{type(exc).__name__}")
+        return False
+    if other is not None:
+        watcher.log(f"{other.describe()} holds the signal desk now -- disarming")
+        watcher.stop_flag.set()
+        return False
+    return True
+
+
+def _release_desk(watcher: Watcher) -> None:
+    """Give the desk up. Only ever this watcher's own claim, and never fatal:
+    an unreleased claim expires by itself."""
+    from app.domains.trading.execution import signal_owner
+
+    if not watcher.desk_holder:
+        return
+    try:
+        signal_owner.release(watcher.tenant_id, watcher.desk_holder)
+    except Exception as exc:                            # noqa: BLE001
+        logger.warning("autotrade[%s] could not release the signal desk: %s",
+                       watcher.tenant_id[:8], exc)
+
+
 def _run_super(watcher: Watcher) -> None:
     what = (f"{len(watcher.pairs)} best pair(s) on" if watcher.strategy == "best_pairs"
             else f"{len(watcher.signals)} signal type(s) for")
@@ -512,7 +568,9 @@ def _run_super(watcher: Watcher) -> None:
     while not watcher.stop_flag.is_set():
         try:
             now = clock.now()
-            if clock.is_regular_session(now):
+            if not _hold_desk(watcher):
+                pass                                    # said why; wait, then look again
+            elif clock.is_regular_session(now):
                 saw_session = True
                 baseline_day = _super_tick(watcher, now, baseline_day)
             elif saw_session and now.timetz().replace(tzinfo=None) >= clock.SESSION_CLOSE:
@@ -531,6 +589,7 @@ def _run_super(watcher: Watcher) -> None:
     with _LOCK:
         if _WATCHERS.get(watcher.tenant_id) is watcher:
             _WATCHERS.pop(watcher.tenant_id, None)
+    _release_desk(watcher)
     watcher.log("disarmed")
 
 
@@ -607,6 +666,31 @@ def _check_window_and_risk(window_open: str, window_close: str, *, buy_pct: floa
         raise AutoTradeRefused("min contracts must be at least 1")
 
 
+def _claim_desk(tenant_id: str, strategy: str,
+                tickers: list[str]) -> tuple[str, dict[str, datetime]]:
+    """Take the signal desk for a watcher about to arm, and read the cooldown
+    it inherits. Refused, not queued, while another trader has the desk: two
+    owners is the duplicate this exists to prevent."""
+    from app.domains.trading.execution import signal_owner
+
+    holder = signal_owner.holder_name("desk", strategy, instance=next(_INSTANCES))
+    try:
+        other = signal_owner.claim(tenant_id, holder)
+        if other is None:
+            recent = signal_owner.recent_entries(tenant_id, tickers,
+                                                 within_s=SUPER_COOLDOWN_S)
+    except Exception as exc:                            # noqa: BLE001
+        with contextlib.suppress(Exception):
+            signal_owner.release(tenant_id, holder)
+        raise AutoTradeRefused(f"cannot confirm who is trading the signal desk -- "
+                               f"{type(exc).__name__}") from None
+    if other is not None:
+        raise AutoTradeRefused(
+            f"{other.describe()} is already trading the signal desk for this operator "
+            f"-- stop it before arming a signal strategy here")
+    return holder, recent
+
+
 def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
           buy_pct: float, tp_pct: float, sl_pct: float, tolerance_pct: float,
           min_contracts: int, delta_min: float, delta_max: float,
@@ -664,13 +748,19 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
         if existing is not None and not existing.stop_flag.is_set():
             raise AutoTradeRefused("a watcher is already armed for this "
                                    "operator; stop it before arming another")
+        holder, recent = "", {}
+        if strategy in SIGNAL_STRATEGIES:
+            holder, recent = _claim_desk(tenant_id, strategy, wanted)
         watcher = Watcher(
             tenant_id=tenant_id, tickers=wanted, strategy=strategy, live=live,
             buy_pct=buy_pct, tp_pct=tp_pct, sl_pct=sl_pct,
             tolerance_pct=tolerance_pct, min_contracts=min_contracts,
             delta_min=delta_min, delta_max=delta_max, armed_at=clock.now(),
             signals=picked, pairs=chosen, window_open=w_open, window_close=w_close,
-            zero_dte=bool(zero_dte))
+            zero_dte=bool(zero_dte), desk_holder=holder)
+        # The cooldown carries over: a ticker the bot -- or an earlier arm --
+        # entered twenty minutes ago is still inside its hour.
+        watcher.last_entry.update(recent)
         _WATCHERS[tenant_id] = watcher
 
     # Warm the modules the loop imports lazily, on THIS thread: two threads
@@ -704,30 +794,50 @@ def defaults() -> dict:
     }
 
 
-def _answer(body: dict, *, active: bool) -> dict:
+def _answer(body: dict, *, active: bool, tenant_id: str | None = None,
+            own_holder: str = "") -> dict:
     """Every answer carries the form's defaults and ``active``, which is what both
     desks read -- without them the 36 Trades sheet waited forever for settings
-    and neither desk could show an armed watcher, or disarm one."""
-    return {**body, "active": active, "strategies": list(STRATEGIES),
-            "defaults": defaults()}
+    and neither desk could show an armed watcher, or disarm one.
+
+    And ``signal_desk_owner`` when some other trader -- the standalone bot --
+    holds the signal desk for this operator, so both desks can say why arming
+    a signal strategy here would be refused before the operator tries."""
+    out = {**body, "active": active, "strategies": list(STRATEGIES),
+           "defaults": defaults()}
+    if tenant_id:
+        from app.domains.trading.execution import signal_owner
+
+        try:
+            owner = signal_owner.current(tenant_id)
+        except Exception:                               # noqa: BLE001
+            owner = None                                # informational; never fail status
+        if owner is not None and owner.holder != own_holder:
+            out["signal_desk_owner"] = owner.public()
+    return out
 
 
 def stop(tenant_id: str) -> dict:
     with _LOCK:
         watcher = _WATCHERS.pop(tenant_id, None)
     if watcher is None:
-        return _answer({"running": False, "was_running": False}, active=False)
+        return _answer({"running": False, "was_running": False}, active=False,
+                       tenant_id=tenant_id)
     watcher.stop_flag.set()
+    # Released now rather than when the thread next wakes, so the desk reads
+    # free at once -- the thread's own release on the way out is then a no-op.
+    _release_desk(watcher)
     return _answer({"running": False, "was_running": True, "placed": watcher.placed},
-                   active=False)
+                   active=False, tenant_id=tenant_id)
 
 
 def status(tenant_id: str) -> dict:
     with _LOCK:
         watcher = _WATCHERS.get(tenant_id)
     if watcher is None or watcher.stop_flag.is_set():
-        return _answer({"running": False}, active=False)
-    return _answer(watcher.public(), active=True)
+        return _answer({"running": False}, active=False, tenant_id=tenant_id)
+    return _answer(watcher.public(), active=True, tenant_id=tenant_id,
+                   own_holder=watcher.desk_holder)
 
 
 def quiesce(timeout: float = 10.0) -> None:
@@ -742,6 +852,7 @@ def quiesce(timeout: float = 10.0) -> None:
         _WATCHERS.clear()
     for watcher in watchers:
         watcher.stop_flag.set()
+        _release_desk(watcher)
     for watcher in watchers:
         if watcher.thread is not None:
             watcher.thread.join(timeout=timeout)

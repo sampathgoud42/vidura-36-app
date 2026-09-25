@@ -310,6 +310,52 @@ desk cannot answer. Every other rule is super signals' own, the per-signal
 idempotency key included. So a signal either strategy has bought is never
 bought again by the other.
 
+### The best-pairs bot (runs on its own)
+
+`backend/bot_best_pair/` is the **best pairs** strategy as a process of its
+own. It needs no browser, no sign-in and no arm button. It keeps trading day
+after day until you stop it, and it keeps going through a desk restart.
+
+```bash
+backend\bot_best_pair\bot_best_pair.bat --check   # check the setup, trade nothing
+backend\bot_best_pair\bot_best_pair.bat           # trade until Ctrl-C
+```
+
+(`./backend/bot_best_pair/bot_best_pair.sh` on Linux/macOS.)
+
+Its settings live in `backend/bot_best_pair/bot_best_pair.env`, beside the
+scripts. They ship as: min edge 57, delta 0.25-0.45, no 0DTE, TP 10%, SL 30%,
+40% of buying power ±10%, min 1 contract, smart limit, 08:30-14:30 CST, on
+the sandbox. Set `BOT_BEST_PAIR_OPERATOR` to your sign-in before the first
+run. The bot will not guess whose account to trade. The database, the master
+key and paper-only come from the project `.env`, so the bot and the desk use
+the same database.
+
+It trades through the desk's own code, not a copy. That means the watcher's
+own tick, the BUY ticket's own entry, and every guard. So it never duplicates
+the desk:
+
+- **One signal, one entry.** It uses the same per-signal idempotency key as
+  the desk's watcher, so whichever of them gets to a signal first is the
+  only one that buys it.
+- **One entry per ticker per hour, across both.** The cooldown is read from
+  the positions table, so it covers the desk's watcher, the bot, and a
+  restart of either.
+- **One trader per operator.** Whoever trades the signal desk holds a claim on
+  it (`execution/signal_owner.py`). While the bot runs, both worlds say so in
+  the arm form and refuse **super signals** and **best pairs** there. The
+  level-cross strategy is unaffected. The bot stands by while an armed desk
+  watcher holds the claim, and takes over when that watcher disarms. A
+  second bot for the same operator exits (code 3). A crashed bot's claim
+  expires within two minutes.
+
+Its positions say `Auto/bot_best_pair` in the positions list. Exits are
+armed by the risk monitor after the fill. While the desk is up (its
+`/readiness` shows `risk-monitor` running), the desk does this. While the
+desk is down, the bot sweeps its own operator's positions, so nothing it
+opened goes unwatched. It re-reads the pairs at the first pass of each
+session, because the report re-ranks them overnight.
+
 ---
 
 ## The Bot Station
@@ -452,6 +498,7 @@ reading the result back, touching nothing real.
 | `test_sensitive_data.py` | credentials absent from responses, logs, errors and `repr` |
 | `test_stop_loss_durability.py` | both exit legs resting; one filling cancels the other |
 | `test_migration.py` | migrate from empty, rollback, no model drift, one head |
+| `test_bot_best_pair.py` | the best-pairs bot never buys what the desk's watcher bought; one trader per signal desk; its settings are the form's |
 
 ---
 
@@ -473,6 +520,9 @@ Before stopping the app or deploying:
    holds both legs. Anything `monitored_only` loses its stop when the process
    stops.
 4. Bots do **not** auto-resume on startup. Restarting them is explicit.
+5. The best-pairs bot is its own process, and stopping the desk does not
+   stop it. While the desk is down it watches its own positions' stops. Stop
+   it with Ctrl-C in its window.
 
 ---
 
@@ -488,6 +538,7 @@ backend/app/
   platform/        db, security, migrations — no domain knowledge
   core/            settings
 backend/migrations/  Alembic
+backend/bot_best_pair/  the best-pairs bot: its own process, settings and launchers
 frontend/src/      the three worlds
 runtime/           vendored signal engines and bot scripts
 customers/<name>/  per-operator credentials (gitignored, never committed)

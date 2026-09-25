@@ -7,7 +7,7 @@ import QuotePopup from '../../shared/QuotePopup.jsx';
 import SuperSignals from '../../shared/SuperSignals.jsx';
 import { READING_GUIDE_URL } from '../../config.js';
 import {
-  AutoTradeForm, CommoditiesPanel, HotScan, MiniChart, OptionsFlow, useMovers,
+  AutoTradeForm, CommoditiesPanel, deskOwnerNote, HotScan, MiniChart, OptionsFlow, useMovers,
 } from '../tradier/TradierSite.jsx';
 import '../../shared/quotePopup.css';
 import './desk36.css';
@@ -1329,7 +1329,9 @@ export default function Desk36Site() {
           <button type="button" className={`d36-act auto ${autoOn ? 'on' : ''}`}
             onClick={() => setAutoOpen(true)}
             aria-label={autoOn ? 'auto-trader armed' : 'arm the auto-trader'}
-            title={autoOn ? 'auto-trader ARMED on this venue' : 'arm the auto-trader'}>
+            title={autoOn ? 'auto-trader ARMED on this venue'
+              : autoST?.signal_desk_owner ? deskOwnerNote(autoST.signal_desk_owner)
+              : 'arm the auto-trader'}>
             <span aria-hidden="true">🤖</span>
           </button>
           {/* Paper shows the paper-trading mark: a sheet of candles and the
@@ -1761,6 +1763,7 @@ export default function Desk36Site() {
                   || `${autoST.defaults.delta_min ?? 0.25}-${autoST.defaults.delta_max ?? 0.5}`,
               }}
               paper={!live} busy={autoBusy}
+              deskOwner={autoST.signal_desk_owner}
               onClose={() => setAutoOpen(false)}
               onArm={async (body) => {
                 setAutoBusy(true);
