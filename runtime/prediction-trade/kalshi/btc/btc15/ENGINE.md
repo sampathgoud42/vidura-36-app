@@ -1,25 +1,74 @@
-# BTC-15 — default engine (v2)
+# BTC-15 — default engine (v7, the V7 DMI-stack engine)
 
-Default version per `app/services/bot_registry.py`: **v2**
-(`v2_bot_kalshi_btc15.py`). v3/v4/v5 (`v3_bot_kalshi_btc15.py`,
-`v4_bot_kalshi_btc15.py`, `v5_bot_btc_15_2.py`) are still selectable but
-not the default.
+Default version per `app/domains/botstation/builtin.py`: **v7**
+(`v7_bot_kalshi_btc15.py`). That file is ~20 lines: the engine itself is
+[`runtime/prediction-trade/kalshi/v7_engine.py`](../../../v7_engine.py),
+shared with the other three V7 bots, and the entry rule is
+`app/domains/botstation/dmi_stack.py`.
 
-## A naming trap worth knowing before reading the source
+## The rule
+
+Read BTC's own row on the desk's **CRYPTO** board — the same module the
+panel renders from, so the bot and the screen cannot disagree — and require
+all four timeframes to point the same way:
+
+```
+BTC 79381.00  1m 15↑  2m 37↑  5m 50↑  10m 34↑   ->  buy YES
+BTC 79381.00  1m 15↓  2m 37↓  5m 50↓  10m 34↓   ->  buy NO
+anything else                                       ->  stand aside
+```
+
+Three gates, all of which must pass:
+
+| Gate | Rule |
+|---|---|
+| DMI stack | 1m, 2m, 5m and 10m all `call`, or all `put`. A blank or flat column blocks — an unknown is not agreement. |
+| Timing | strictly **5–300 s** after the market opened (`entry_open_s` / `entry_close_s`). |
+| Price | **30–65 c** on the side being bought (`min_price_c` / `max_price_c`). Refused, never clamped. |
+
+Take-profit +20%, stop −40% of the entry, both configurable per launch.
+
+## Order lifecycle
+
+The buy rests at best-bid + 1c, so it usually does **not** fill immediately.
+Nothing is monitored until it does: the resting order is remembered, each pass
+asks whether it has become a position, and only a real fill opens the ledger
+row, rests the take-profit and arms the stop. A market that already has an
+order working never receives a second one.
+
+Every sell — take-profit and stop alike — goes through
+[`sell_guard.confirm`](../../../sell_guard.py), the desk-wide check shared
+by every bot on this desk: there **is** a position on the side being sold, and
+there is **no** pending or resting order on the ticker, each read twice ten
+seconds apart. The stop cancels its own resting take-profit first, since that
+order would otherwise block it.
+
+## Older versions
+
+v2, v3, v4, v5 and v6 remain selectable. Everything below this line documents them and is
+unchanged.
+
+---
+
+## A naming note (v2/v3/v4 only)
 
 `v2_bot_kalshi_btc15.py` does `import bot_kalshi_btc15 as v1` and reuses
 that module's Kalshi client, `compute_signal`, `determine_direction`,
-bankroll/halt logic, and constants (`CONTRACTS`, `DRY_RUN`,
-`MIN_ENTRY_CENTS`, etc.). **There is no `bot_kalshi_btc15.py` file on
-disk** — it was renamed to `v4_bot_kalshi_btc15.py`. `bot_launcher.py`
-(the launcher every bot runs under) installs a lazy meta-path finder
-(`_LegacyAliasFinder`) that satisfies `import bot_kalshi_btc15` by
-loading `v4_bot_kalshi_btc15.py` under that legacy name. So despite the
-local alias name `v1`, **v2's base engine is actually v4's code** — the
-`v1` name in v2's source is stale, not a separate real "v1" version.
-Everything below reflects v4's actual implementation.
+bankroll/halt logic and constants. `bot_kalshi_btc15.py` **does** exist on
+disk: it is a ~50-line shim that re-exports twelve names from
+`v4_bot_kalshi_btc15.py`, which is where the real implementation lives. So
+despite the local alias name `v1`, **v2's base engine is v4's code** — the
+`v1` name in v2's source is stale, not a separate real "v1" version. The
+sports bots and the V7 engine import the same shim for the same reason: it is
+the desk's shared Kalshi client and order helpers, not anything BTC-specific.
 
-## Signal source
+(An earlier revision of this file claimed that shim did not exist and that a
+meta-path finder in `bot_launcher.py` stood in for it. The launcher does
+install such a finder, but it is a fallback — the file is present, and the
+bot station launches these scripts directly rather than through the launcher,
+so the file is what actually satisfies the import.)
+
+## Signal source (v2/v4)
 
 No CSV or external ML API — computed locally from two sources:
 

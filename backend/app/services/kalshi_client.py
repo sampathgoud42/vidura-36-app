@@ -189,10 +189,22 @@ class KalshiClient:
             params["ticker"] = ticker
         return self._paged("/portfolio/positions", "market_positions", params)
 
-    def fills(self, ticker: str | None = None, limit: int = 100) -> list[dict]:
+    def fills(self, ticker: str | None = None, limit: int = 100,
+              min_ts: int | None = None) -> list[dict]:
+        """Executions, newest first.
+
+        ``min_ts`` is a UNIX SECOND and is asked of the exchange rather than
+        filtered here. It matters: this feed is cursor-paged and an account
+        with a long history costs one round trip per page to walk. Asking for
+        "since this bot launched" turns ten pages into one, which is the
+        difference between a figure the desk can refresh every few seconds and
+        one it cannot afford to show at all.
+        """
         params: dict[str, Any] = {"limit": limit}
         if ticker:
             params["ticker"] = ticker
+        if min_ts is not None:
+            params["min_ts"] = int(min_ts)
         return self._paged("/portfolio/fills", "fills", params)
 
     def settlements(self, limit: int = 100) -> list[dict]:

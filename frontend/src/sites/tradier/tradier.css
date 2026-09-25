@@ -202,19 +202,6 @@
 }
 .tr-chip.on { color: var(--tr-accent-hi); border-color: var(--tr-accent); background: rgba(91, 106, 240, 0.1); }
 
-/* the live signal-watcher chip doubles as its power-down control: green while
-   running, and reddening on hover so the click reads as a stop before it is
-   made, not after */
-.tr-power .tr-powerglyph {
-  width: 11px; height: 11px; fill: none;
-  stroke: currentColor; stroke-width: 11; stroke-linecap: round;
-}
-.tr-chip.on.tr-power { color: var(--tr-green); border-color: var(--tr-green); background: rgba(52, 211, 153, 0.1); }
-.tr-chip.on.tr-power:hover:not(:disabled) {
-  color: var(--tr-red); border-color: var(--tr-red); background: rgba(248, 113, 113, 0.12);
-}
-.tr-chip.on.tr-power:disabled { opacity: 0.55; cursor: default; }
-
 .tr-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .tr-table th {
   font-family: ui-monospace, Consolas, monospace;
@@ -736,33 +723,6 @@
 
 .tr-tick-add { display: flex; gap: 6px; margin-top: 8px; align-items: center; }
 .tr-tick-add .tr-input { flex: 1; min-width: 0; font-size: 11px; padding: 4px 8px; }
-
-/* right rail rows */
-.tr-sighead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.tr-sigstats { display: inline-flex; gap: 10px; font-size: 10px; cursor: help; }
-
-.tr-siglist { font-size: 11.5px; }
-.tr-sig {
-  padding: 6px 2px;
-  border-bottom: 1px solid rgba(91, 106, 240, 0.09);
-  line-height: 1.45;
-}
-.tr-sig:last-of-type { border-bottom: 0; }
-.tr-sig .ts { display: block; color: var(--tr-faint); font-size: 10px; }
-.tr-sig .line { color: var(--tr-ink); overflow-wrap: anywhere; }
-.tr-sig .bk.a { color: var(--tr-accent-hi); }
-.tr-sig .bk.b { color: var(--tr-amber); }
-.tr-sig .hot { letter-spacing: 0.05em; }
-.tr-sig .oc { font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; }
-.tr-sig .oc.target { color: var(--tr-green); }
-.tr-sig .oc.stop { color: var(--tr-red); }
-.tr-sig .oc.timeout { color: var(--tr-faint); }
 
 .tr-banner {
   display: flex; gap: 10px; align-items: center;
@@ -1303,22 +1263,6 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
 .tr-flowbuy:hover:not(:disabled) { background: rgba(52, 211, 153, 0.24); }
 .tr-flowbuy:disabled { opacity: 1; cursor: wait; }
 
-/* buy straight off a signal */
-.tr-sigbuy {
-  border: 1px solid rgba(52, 211, 153, 0.45);
-  background: rgba(52, 211, 153, 0.12);
-  color: var(--tr-green);
-  border-radius: 999px;
-  font-family: ui-monospace, Consolas, monospace;
-  font-size: 9px; letter-spacing: 0.06em;
-  padding: 0 7px; margin-top: 3px; cursor: pointer;
-  opacity: 0; transition: opacity 130ms, background 130ms;
-}
-.tr-sig:hover .tr-sigbuy { opacity: 1; }
-.tr-sigbuy:focus-visible { opacity: 1; }
-.tr-sigbuy:hover:not(:disabled) { background: rgba(52, 211, 153, 0.24); }
-.tr-sigbuy:disabled { opacity: 1; cursor: wait; }
-
 /* 0DTE opt-in: amber when on, because it changes what gets bought */
 .tr-0dte.on {
   color: var(--tr-amber); border-color: rgba(251, 191, 36, 0.55);
@@ -1328,6 +1272,60 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
 .tr-market-toggle .tr-chip { padding: 2px 8px; font-size: 10px; cursor: pointer; }
 .tr-discount-row { display: flex; gap: 4px; margin-top: 4px; }
 .tr-discount-row .tr-chip { padding: 2px 7px; font-size: 9px; cursor: pointer; }
+
+/* super_signals: the signal types to trade, as the signal desk ranks them.
+   Margins, not flex gap, for the older iPhone Safari 36 Trades still serves. */
+.tr-sigpick { min-width: 0; }
+.tr-sigpick-clear {
+  margin-left: 8px; border: 0; padding: 0; background: none; cursor: pointer;
+  font: inherit; color: var(--tr-accent-hi); text-decoration: underline; text-underline-offset: 2px;
+}
+.tr-sigpick-basis { margin: 2px 0 6px; line-height: 1.45; }
+.tr-sigpick-basis b { color: var(--tr-ink); font-weight: 600; }
+.tr-sigpick-list {
+  display: flex; flex-direction: column;
+  border: 1px solid var(--tr-line); border-radius: 10px; overflow: hidden;
+}
+.tr-sigpick-row {
+  display: flex; align-items: flex-start; padding: 7px 10px; cursor: pointer;
+  border-top: 1px solid var(--tr-line); -webkit-tap-highlight-color: transparent;
+}
+.tr-sigpick-row:first-child { border-top: 0; }
+.tr-sigpick-row.on {
+  background: rgba(91, 106, 240, 0.1);
+  background: color-mix(in srgb, var(--tr-accent) 12%, transparent);
+}
+.tr-sigpick-row input {
+  flex: 0 0 auto; width: 15px; height: 15px; margin: 2px 9px 0 0; accent-color: var(--tr-accent);
+}
+.tr-sigpick-body { display: flex; flex-direction: column; min-width: 0; }
+.tr-sigpick-name {
+  font-family: ui-monospace, Consolas, monospace; font-size: 11.5px; color: var(--tr-ink);
+  overflow-wrap: anywhere;
+}
+.tr-sigpick-rank, .tr-sigpick-agent { color: var(--tr-faint); }
+.tr-sigpick-name b.long { color: var(--tr-green); font-weight: 600; }
+.tr-sigpick-name b.short { color: var(--tr-red); font-weight: 600; }
+.tr-sigpick-stats {
+  margin-top: 2px; font-family: ui-monospace, Consolas, monospace; font-size: 10.5px;
+  color: var(--tr-dim);
+}
+.tr-sigpick-stats .agrees { color: var(--tr-green); }
+.tr-sigpick-stats .new { color: var(--tr-amber); }
+.tr-sigpick-more {
+  margin-top: 6px; padding: 5px 10px; border: 1px dashed var(--tr-line); border-radius: 8px;
+  background: transparent; color: var(--tr-dim); cursor: pointer;
+  font-family: ui-monospace, Consolas, monospace; font-size: 10.5px;
+}
+/* phones: 44pt rows and a checkbox a thumb can hit */
+@media (max-width: 720px), (pointer: coarse) {
+  .tr-sigpick-row { min-height: 44px; padding: 9px 10px; }
+  .tr-sigpick-row input { width: 20px; height: 20px; }
+  .tr-sigpick-name { font-size: 12.5px; }
+  .tr-sigpick-stats { font-size: 11.5px; }
+  .tr-sigpick-more, .tr-sigpick-clear { min-height: 44px; }
+  .tr-pairmins .tr-input { min-height: 44px; }
+}
 
 /* a chart tile is a section too, but its grip lives inside — there is no
    outside margin to hang it in */
@@ -1475,16 +1473,6 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
   .tr-flowrange { font-size: 11px; }
   .tr-flowhot { font-size: 13px; }
 
-  /* ── Signals: bigger text, readable entries ────────────────────── */
-  .tr-sighead { gap: 6px; }
-  .tr-sigstats { font-size: 11px; }
-  .tr-siglist { font-size: 13px; }
-  .tr-sig { padding: 8px 4px; line-height: 1.55; }
-  .tr-sig .ts { font-size: 11px; }
-  .tr-sig .line { font-size: 13px; }
-  .tr-sig .oc { font-size: 11px; }
-  .tr-sigbuy { opacity: 1; pointer-events: auto; font-size: 10px; padding: 1px 8px; }
-
   /* ── GEX panel ─────────────────────────────────────────────────── */
   .tr-gex { padding: 8px 10px; font-size: 12px; border-radius: 10px; }
   .tr-gex-big { font-size: 22px; }
@@ -1501,3 +1489,10 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
   .tr-offline-banner { font-size: 12px; padding: 10px 16px; }
   .tr-offline-banner button { font-size: 11px; padding: 4px 12px; }
 }
+
+/* best_pairs: the pairs table's own minimums, above the pair list */
+.tr-pairmins { display: flex; flex-wrap: wrap; margin: 2px 0 4px; }
+.tr-pairmins label { display: flex; flex-direction: column; margin: 0 10px 4px 0; }
+.tr-pairmins .tr-note { font-size: 10px; margin-bottom: 2px; }
+.tr-pairmins .tr-input { width: 96px; }
+.tr-pairmins .tr-input.bad { border-color: var(--tr-amber); }

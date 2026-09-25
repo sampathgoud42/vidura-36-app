@@ -259,6 +259,10 @@ load_dotenv(_ROOT / "btc.env")                    # customer_folder / default_cu
 from btc import BtcVidyaMonitor                  # noqa: E402  Coinbase spot, 15s (local btc/ pkg)
 from btc.liquidity_sr import LiquiditySR, run as lsr_run   # noqa: E402  POC (local btc/ pkg)
 
+# The desk-wide sell guard, shared by every engine that sells.
+sys.path.insert(0, str(_HERE.parents[1]))        # .../kalshi
+import sell_guard                                # noqa: E402
+
 # ══════════════════════════════════════════════════════════════════════════
 #  SECRETS - the ONLY thing not self-contained under kalshi/btc/.
 #  btc.env (tracked in git, no secrets) names a customer folder; that
@@ -660,7 +664,12 @@ async def place_order(c: KalshiClient, ticker: str, action: str, side: str,
                               "price": price_cents, "count": count})
         return True
     if action == "sell":
-        count = await sellable_contracts(c, ticker, side, count, tag)
+        # The desk-wide guard rather than the local one: it makes the same
+        # position check TWICE ten seconds apart and adds the one this engine
+        # never made -- that no order of ours is still live on the ticker.
+        # Selling over a resting order sells the same contracts twice.
+        count = await sell_guard.confirm(c, ticker, side, want=count,
+                                         why=tag, log=lambda m: _log(tag, m))
         if count <= 0:
             return False
     body = _mk_order(ticker, action, side, count, price_cents)

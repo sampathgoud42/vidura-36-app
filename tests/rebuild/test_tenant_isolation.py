@@ -396,6 +396,11 @@ MARKET_DATA_PATHS = [
     "/api/v1/super/signals",
     "/api/v1/super/snapshots",
     "/api/v1/super/sync/status",
+    "/api/v1/super-signals/session",
+    "/api/v1/super-signals/rank",
+    "/api/v1/super-signals/best-pairs",
+    "/api/v1/super-signals/reports",
+    "/api/v1/super-signals/reports/{report_date}",
 ]
 
 COVERED_BY_NAMED_TESTS.update(
@@ -463,7 +468,8 @@ def test_market_data_endpoints_still_require_a_session(app, path):
     """
     with TestClient(app) as client:
         response = client.get(path.replace("{ticker}", "SPY")
-                                  .replace("{ticker_id}", "spy"))
+                                  .replace("{ticker_id}", "spy")
+                                  .replace("{report_date}", "2026-09-23"))
     assert response.status_code == 401, (
         f"{path} answered {response.status_code} with no session; market data "
         "is shared between operators, not open to anonymous callers"

@@ -307,9 +307,12 @@ def _daily_ticket(cred, args, customer_dir: Path) -> None:
         return
 
     for leg in picked:
+        # The price of the SIDE this leg takes -- a no-side soccer leg costs
+        # what the no side costs, and printing the yes bid beside it would
+        # log a 6c number for a 94c leg.
         log.info("    leg %-34s %3dc  vol $%.0f",
                  leg.market.outcome[:34] or leg.ticker,
-                 leg.market.yes_bid_c or 0, leg.market.volume_usd)
+                 leg.market.bid_c or 0, leg.market.volume_usd)
 
     # Build, and let the EXCHANGE prune. Kalshi refuses a combo holding two
     # legs that say the same thing and names the offending pair; we drop the
@@ -395,10 +398,41 @@ def _combo_outcome(outcome: dict) -> str:
     legs = [str(t) for t in (outcome.get("tickers") or [])]
     if not legs:
         return ""
-    # The trailing segment of a Kalshi ticker is the side: ...-FED -> FED.
-    sides = [t.rsplit("-", 1)[-1] for t in legs]
-    head = ", ".join(sides[:4])
-    return head if len(sides) <= 4 else f"{head} +{len(sides) - 4}"
+    # The trailing segment of a Kalshi ticker is the market: ...-FED -> FED.
+    # Which WAY the leg backs it is not in the ticker at all, so a leg bought
+    # on the no side is written "not FED" -- the row would otherwise name the
+    # opposite of the bet.
+    sides = list(outcome.get("sides") or [])
+    names = []
+    for i, ticker in enumerate(legs):
+        name = ticker.rsplit("-", 1)[-1]
+        side = sides[i] if i < len(sides) else "yes"
+        names.append(f"not {name}" if side == "no" else name)
+    head = ", ".join(names[:4])
+    return head if len(names) <= 4 else f"{head} +{len(names) - 4}"
+
+
+def _escalation_pct(stake: float, ceiling: float, fallback: float) -> float:
+    """How far the stake may be raised, from a dollar ceiling when given.
+
+    The engine escalates by a PERCENTAGE, but nobody sizing a bet thinks in
+    "30% more than twelve" -- they think "between twelve and fifteen-sixty".
+    So the form asks for two dollar figures and the percentage is derived
+    here, which keeps one source of truth: the numbers the operator typed.
+
+    A ceiling below the stake is not an error, it is "do not escalate" -- the
+    stake is a floor and a smaller ceiling cannot lower it.
+    """
+    try:
+        stake = float(stake)
+        ceiling = float(ceiling or 0)
+    except (TypeError, ValueError):
+        return float(fallback)
+    if stake <= 0 or ceiling <= 0:
+        return float(fallback)
+    if ceiling <= stake:
+        return 0.0
+    return round((ceiling / stake - 1.0) * 100.0, 2)
 
 
 def _redundant_legs(message: str) -> list[str]:
@@ -612,7 +646,10 @@ def run_once(cred, args) -> int:
         # regular engine's problem, and vice versa.
         ignore_tickers=set(
             (_load_daily(Path(args.customer_dir)).get("tickers") or [])),
-        escalation_pct=_env("escalation_pct", 30.0, float),
+        escalation_pct=_escalation_pct(
+            _env("stake_usd", args.stake_usd, float),
+            _env("max_usd", 0.0, float),
+            _env("escalation_pct", 30.0, float)),
         fill_wait_s=_env("fill_wait_s", 60, int),
         max_combos=_env("max_combos", args.max_combos, int),
         min_legs=_env("min_legs", args.min_legs, int),

@@ -80,6 +80,15 @@ class Settings(BaseSettings):
     def super_dir(self) -> Path:
         return self.source_repo / "super_research"
 
+    # --- super signals desk (vidura-super-signals) -------------------------
+    # The signal-agent desk is its own project with its own scheduled tasks;
+    # it publishes today's signals, its health and the daily reports on a
+    # read-only loopback service, which /super-signals proxies behind the
+    # sign-in. A URL rather than a folder on purpose: reading that project's
+    # files would tie this one to where it happens to live on disk.
+    super_signals_url: str = "http://127.0.0.1:8792"
+    super_signals_timeout_s: float = 5.0
+
     # Folder holding levels_watcher.py (SPY/QQQ/SPX level crosses), which
     # the opening-range auto-trader reads. Vendored under runtime/ like
     # everything else. OPTIONAL: when the folder is absent the desk degrades
@@ -272,6 +281,17 @@ class Settings(BaseSettings):
     # default stays True so a fresh deployment can never go live by surprise;
     # unlock per machine via TBOT_PAPER_ONLY=false in its .env.
     paper_only: bool = True
+
+    # Guard 7: refuse a new entry while the risk monitor has not completed a
+    # recent sweep. ON in the CODE default, because opening a position whose
+    # stop nobody is watching keeps its upside and silently loses its floor.
+    #
+    # Turned off per machine with TBOT_ENFORCE_STOP_WATCHDOG=false, which is
+    # an operator saying "I will watch this one myself". The refusal becomes
+    # a warning: the entry goes through, the desk still says the stop is
+    # unwatched, and the position carries that sentence in its note so it is
+    # visible later, when the reason it was disabled has been forgotten.
+    enforce_stop_watchdog: bool = True
 
     # Optional shared API key. When set, a request may authenticate with it
     # in the X-API-Key header INSTEAD of logging in — for scripts and cron,

@@ -40,6 +40,15 @@ from dotenv import load_dotenv
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from btc import BtcVidyaMonitor   # shared BTC meta-monitor (CUSUM + 4-vote)
 
+# The desk-wide sell guard. Every engine that sells goes through the same two
+# preconditions, each read twice ten seconds apart: there IS a position, and
+# there is NO live order on the ticker. It lives one level up because the
+# commodity and sports families use it too -- this file is simply where the
+# most-shared order helpers happen to live.
+# parents[2]: btc15 -> btc -> kalshi
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
+import sell_guard                                       # noqa: E402
+
 # ╔════════════════════════════════════════════════════════════════════════════╗
 # ║  CONFIGURATION                                                           ║
 # ╚════════════════════════════════════════════════════════════════════════════╝
@@ -1499,7 +1508,12 @@ async def place_tp_sell(
     print(f"  {tag}[TP] Sell {side.upper()} ×{contracts} @ {tp_cents}¢")
     if DRY_RUN:
         return
-    contracts = await sellable_contracts(c, ticker, side, contracts, tag="TP")
+    # The desk-wide guard, not the local one: it makes the same position check
+    # sellable_contracts made, TWICE ten seconds apart, and adds the one this
+    # function never made -- that no order of ours is still live on this
+    # ticker. Selling over a resting order sells the same contracts twice.
+    contracts = await sell_guard.confirm(c, ticker, side, want=contracts,
+                                         why="TP")
     if contracts <= 0:
         return
     order = _mk_order(ticker, "sell", side, contracts, tp_cents)
@@ -1544,7 +1558,14 @@ async def _fire_sale(
     print(f"  {tag}[EXIT] Fire-sale {contracts} × {side} @ {FIRE_SALE_CENTS}¢")
     if DRY_RUN:
         return
-    contracts = await sellable_contracts(c, ticker, side, contracts, tag="EXIT")
+    # This is the STOP side of the same guard. Our own take-profit is normally
+    # resting on this ticker, and the guard refuses to sell over a live order
+    # -- so it comes off first. Without this the take-profit would block the
+    # stop that is meant to override it, which is the guard defeating the very
+    # thing it exists to protect.
+    await sell_guard.cancel_live(c, ticker)
+    contracts = await sell_guard.confirm(c, ticker, side, want=contracts,
+                                         why="EXIT")
     if contracts <= 0:
         return
     order = _mk_order(ticker, "sell", side, contracts, FIRE_SALE_CENTS)

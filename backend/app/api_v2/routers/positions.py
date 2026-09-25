@@ -18,10 +18,11 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from app.api_v2 import deps
-from app.domains.trading.execution import idempotency, leases, orders, selection
+from app.domains.trading.execution import entry, idempotency, leases, orders
 from app.domains.trading.execution import venue as venue_mod
 from app.domains.trading.execution.orders import ExecutionRefused
 from app.domains.trading.models import Position
+from app.domains.trading.risk.monitor import ACTIVE
 from app.domains.trading.risk.validation import RiskRefused, validate_entry
 from app.platform.security.envelope import Keyring
 from app.tenancy import repository as tenants
@@ -95,16 +96,58 @@ def _credential(db: DbSession, tenant: Tenant, kr: Keyring, *, live: bool):
 
 # ---- reads ----------------------------------------------------------------
 
+# The desks' filter chips, in the words they send. "all" is no filter at all,
+# "active" is what the risk monitor still watches, and "sl_sold" is the old
+# name for a stop-out. Taken literally, "all" and "active" matched no row and
+# every managed position -- auto-trade entries included -- vanished from view.
+_STATUS_WORDS: dict[str, tuple[str, ...] | None] = {
+    "all": None, "active": ACTIVE, "sl_sold": ("sl_filled",)}
+
+
+def _add_marks(db: DbSession, tenant: Tenant, kr: Keyring,
+               rows: list[Position], items: list[dict]) -> None:
+    """live_bid for every position still working, and live_pnl_usd for the
+    filled ones -- what the desks' MARK and P&L columns show before a position
+    closes, at the current bid. One quote call per venue. A venue that cannot
+    be reached leaves the marks empty: they are a courtesy, the list is not."""
+    by_venue: dict[bool, list[int]] = {}
+    for i, pos in enumerate(rows):
+        if pos.status in ACTIVE:
+            by_venue.setdefault(bool(pos.venue_sandbox), []).append(i)
+    for sandbox, idx in by_venue.items():
+        try:
+            cred = tenants.load_credential(
+                db, tenant.id, "tradier_sandbox" if sandbox else "tradier", kr)
+            quoted = venue_mod.quotes([rows[i].occ_symbol for i in idx],
+                                      cred=cred, sandbox=sandbox) or []
+        except Exception:                               # noqa: BLE001
+            logger.info("marks unavailable for %s (%s)", tenant.slug,
+                        "sandbox" if sandbox else "live")
+            continue
+        bids = {str(q.get("symbol") or "").upper(): q.get("bid") for q in quoted}
+        for i in idx:
+            pos, bid = rows[i], bids.get(rows[i].occ_symbol.upper())
+            if bid is None:
+                continue
+            items[i]["live_bid"] = float(bid)
+            if pos.status == "open" and pos.entry_price is not None and pos.contracts:
+                items[i]["live_pnl_usd"] = round(
+                    (float(bid) - pos.entry_price) * pos.contracts * 100, 2)
+
+
 @router.get("/positions", operation_id="listTradierPositions")
 @deps.tenant_scoped
 def list_positions(status: str | None = Query(default=None),
                    venue: str = Query(default="all"),
                    limit: int = Query(default=200, le=1000),
+                   marks: bool = Query(default=False),
                    tenant: Tenant = Depends(deps.current_tenant),
-                   db: DbSession = Depends(deps.get_db)) -> dict:
+                   db: DbSession = Depends(deps.get_db),
+                   kr: Keyring = Depends(deps.keyring)) -> dict:
     stmt = select(Position).where(Position.tenant_id == tenant.id)
-    if status:
-        stmt = stmt.where(Position.status == status)
+    wanted = _STATUS_WORDS.get(status, (status,)) if status else None
+    if wanted:
+        stmt = stmt.where(Position.status.in_(wanted))
     if venue in ("sandbox", "live"):
         stmt = stmt.where(Position.venue_sandbox.is_(venue == "sandbox"))
 
@@ -113,7 +156,10 @@ def list_positions(status: str | None = Query(default=None),
     total = db.scalar(select(func.count()).select_from(stmt.subquery())) or 0
     rows = list(db.scalars(
         stmt.order_by(Position.id.desc()).limit(limit)).all())
-    return {"items": [_serialise(p) for p in rows], "total": total}
+    items = [_serialise(p) for p in rows]
+    if marks:
+        _add_marks(db, tenant, kr, rows, items)
+    return {"items": items, "total": total}
 
 
 @router.get("/positions/{position_id}", operation_id="getTradierPosition")
@@ -175,39 +221,15 @@ def open_position(payload: OpenRequest,
     sandbox = not payload.live
 
     try:
-        chain, expiration = _load_chain(cred, payload, sandbox=sandbox)
-        opt = selection.pick_contract(chain, payload.side,
-                                      payload.delta_min, payload.delta_max)
-        if opt is None:
-            lo, hi = selection.delta_band(payload.side, payload.delta_min,
-                                          payload.delta_max)
-            raise ExecutionRefused(
-                f"no {payload.side} on {payload.symbol} {expiration} with a "
-                f"delta in {lo:+g}..{hi:+g} and a two-sided quote",
-                status_code=404)
-
-        limit_price = selection.smart_limit(float(opt.get("bid") or 0),
-                                            float(opt["ask"]))
-        buying_power = float(
-            (venue_mod.balance(cred=cred, sandbox=sandbox) or {})
-            .get("option_buying_power") or 0)
-        sizing = selection.size_contracts(
-            buying_power, payload.buy_pct, limit_price,
-            tolerance_pct=payload.tolerance_pct)
-        if sizing.contracts < 1:
-            raise ExecutionRefused(f"sized to zero: {sizing.explain()}",
-                                   status_code=409)
-
-        pos = orders.open_position(
+        # The same pick / price / size / guarded order the auto-trader uses.
+        pos = entry.open_managed(
             db, tenant_id=tenant.id, cred=cred, symbol=payload.symbol,
-            side=payload.side, occ_symbol=opt["symbol"],
-            underlying=payload.symbol, strike=float(opt.get("strike") or 0),
-            expiration=expiration, delta=opt.get("_delta"),
-            contracts=sizing.contracts, limit_price=limit_price,
-            buy_pct=payload.buy_pct, tolerance_pct=payload.tolerance_pct,
-            tp_pct=payload.tp_pct, sl_pct=payload.sl_pct, sandbox=sandbox,
-            strategy=payload.strategy, allow_add=payload.allow_add,
-            zero_dte=payload.zero_dte,
+            side=payload.side, buy_pct=payload.buy_pct, tp_pct=payload.tp_pct,
+            sl_pct=payload.sl_pct, delta_min=payload.delta_min,
+            delta_max=payload.delta_max, tolerance_pct=payload.tolerance_pct,
+            sandbox=sandbox, strategy=payload.strategy,
+            expiration=payload.expiration, zero_dte=payload.zero_dte,
+            allow_add=payload.allow_add,
         )
         result = _serialise(pos)
         idempotency.succeed(db, attempt, result=result, position_id=pos.id,
@@ -232,40 +254,6 @@ def open_position(payload: OpenRequest,
         logger.exception("open_position failed for tenant %s", tenant.id)
         raise HTTPException(status_code=502,
                             detail="the venue could not be reached") from None
-
-
-def _load_chain(cred, payload: OpenRequest, *, sandbox: bool):
-    """The chain to pick from, and the expiration it belongs to.
-
-    Goes through the venue seam like every other broker call. It used to build
-    its own client here, which meant substituting the venue substituted only
-    half of the outbound calls -- the half that was easy to notice.
-    """
-    listed = venue_mod.expirations(payload.symbol, cred=cred, sandbox=sandbox)
-    if not listed:
-        raise ExecutionRefused(f"no listed expirations for {payload.symbol}",
-                               status_code=404)
-    expiration = payload.expiration or _choose_expiration(
-        listed, zero_dte=payload.zero_dte)
-    return venue_mod.option_chain(payload.symbol, expiration,
-                                  cred=cred, sandbox=sandbox), expiration
-
-
-def _choose_expiration(expirations: list[str], *, zero_dte: bool) -> str:
-    """Nearest listed expiry, skipping today unless 0DTE was asked for.
-
-    A same-day contract with hours left is a different trade from the one a
-    delta band describes, so it has to be requested rather than fallen into.
-    """
-    from app.domains.trading.risk import clock
-
-    today = clock.today().isoformat()
-    for exp in sorted(expirations):
-        if exp == today and not zero_dte:
-            continue
-        if exp >= today:
-            return exp
-    return sorted(expirations)[-1]
 
 
 # ---- the exit -------------------------------------------------------------
@@ -401,15 +389,42 @@ def _expiration_from(occ_symbol: str) -> str:
 
 @router.post("/positions/sweep", operation_id="sweepTradierPositions")
 @deps.tenant_scoped
-def sweep(idempotency_key: str | None = Header(default=None,
-                                               alias="Idempotency-Key"),
-          tenant: Tenant = Depends(deps.current_tenant),
-          db: DbSession = Depends(deps.get_db),
-          kr: Keyring = Depends(deps.keyring)) -> dict:
-    """Flatten everything.
+def sweep(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """Run one monitor pass now -- the same pass the background loop runs.
+
+    THIS ROUTE USED TO FLATTEN THE ACCOUNT, and that was not a difference of
+    opinion about a name, it was live money. v1's /positions/sweep ran a
+    monitor pass; the rebuild gave the same path, and the same operation_id,
+    the opposite meaning. Both desks kept calling it as a refresh -- on a 30s
+    poll and on every re-render -- so every order placed was closed within
+    seconds of being opened, under the note "closed by the operator". The
+    operator it named had not touched anything.
+
+    A refresh is what every caller believed this was, so a refresh is what it
+    is. Flattening moved to /positions/flatten, which nothing polls.
+    """
+    from app.domains.trading.risk import monitor
+
+    try:
+        return monitor.run_pass(tenant_id=tenant.id)
+    except monitor.MonitorPassIncomplete as exc:
+        # Some position could not be checked. That is the operator's business
+        # -- it is what the desk shows in its event feed -- and it is not a
+        # server error, so it comes back as an outcome rather than a 500.
+        return {"checked": 0, "events": [str(exc)], "incomplete": True}
+
+
+@router.post("/positions/flatten", operation_id="flattenTradierPositions")
+@deps.tenant_scoped
+def flatten(idempotency_key: str | None = Header(default=None,
+                                                 alias="Idempotency-Key"),
+            tenant: Tenant = Depends(deps.current_tenant),
+            db: DbSession = Depends(deps.get_db),
+            kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Close every open and pending position. Deliberate, never polled.
 
     Each position is closed independently and a failure on one does not
-    abandon the rest -- a sweep that stops halfway leaves the operator worse
+    abandon the rest -- a flatten that stops halfway leaves the operator worse
     off than one that never started, because they now believe they are flat.
     """
     rows = list(db.scalars(select(Position).where(
@@ -424,7 +439,7 @@ def sweep(idempotency_key: str | None = Header(default=None,
             orders.close_position(db, tenant_id=tenant.id, cred=cred, pos=pos)
             closed.append(pos.id)
         except Exception as exc:                        # noqa: BLE001
-            logger.warning("sweep: position %s: %s", pos.id, exc)
+            logger.warning("flatten: position %s: %s", pos.id, exc)
             failed.append({"id": pos.id, "detail": str(exc)})
     db.commit()
     return {"closed": closed, "failed": failed, "considered": len(rows)}

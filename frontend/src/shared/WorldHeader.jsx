@@ -27,6 +27,7 @@ export function externalApps() {
     { label: 'G-Finance', icon: '📉', href: 'https://www.google.com/finance/beta/', blurb: 'google finance' },
     { label: 'Robin Hood', icon: '🏹', href: 'https://robinhood.com/us/en/legend/', blurb: 'legend desk' },
     { label: 'Kalshi', icon: '🎯', href: 'https://kalshi.com/portfolio', blurb: 'portfolio' },
+    { label: 'Vidura Life', icon: '🌿', href: 'https://vidura-life-app.web.app/', blurb: 'wellness companion' },
   ];
 }
 

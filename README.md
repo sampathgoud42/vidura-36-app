@@ -229,6 +229,89 @@ comparing, so hashing keeps the master key out of its blast radius entirely.
 
 ---
 
+## Super Signals
+
+The signal-agent desk -- eight strategy agents on one 5-minute feed, a
+watchlist tracker, and a daily report at 15:00 CST -- is its own project
+(vidura-super-signals) with its own scheduled tasks. Both trading worlds show
+it through one shared panel, `frontend/src/shared/SuperSignals.jsx`:
+
+| world | where |
+| --- | --- |
+| Tradier Platform | right rail, first panel (draggable like the others) |
+| 36 Trade Desk | the **signals** section and tab, laid out for a phone |
+
+What it shows: today's signals newest first with their live outcome (target,
+stop, timeout, or still open), the day's W-L-T and net R, filters for open
+signals, one agent, or the **watchlist** tracker's hits, desk health (live,
+pre-open, closed, desk offline), and pills for today's and every earlier daily
+report. A report opens in a sandboxed viewer -- full-screen on a phone -- that
+can step between days and save the page. The **Best ticker + signal pairs**
+link opens the report's 30-session pairs as a table (full-screen on a phone).
+Every column sorts, click again to reverse, and the win %, edge and net R
+minimums filter it through the API below. "call" / "put" on an open signal
+opens the desk's own buy ticket, prefilled; nothing is placed until you
+confirm it.
+
+The data comes through `/api/v1/super-signals/{session,rank,best-pairs,reports,reports/<date>}`,
+which proxies the desk's read-only loopback service at `TBOT_SUPER_SIGNALS_URL`
+(default `http://127.0.0.1:8792`). A URL rather than a folder, so this project
+still reads nothing outside itself. Any signed-in operator may read it --
+a signal is the same fact for everybody on the desk. If that service is down
+the panel says so rather than showing an empty day.
+
+This replaces the A/B-book signal rail that read `runtime/super_research`
+directly. That runtime, its supervisors and the `ab_signal_options`
+auto-trade strategy are untouched.
+
+`GET /api/v1/super-signals/best-pairs` returns the daily report's **best ticker + signal pairs**
+over the last 30 sessions, best first. The desk rewrites that list after every report, in its
+`best_ticker_signal_pairs` table. Each pair carries edge, W-L-T, win %, net R, first and last
+fired, and how often it fired today, yesterday and over the past week. The optional minimums
+`min_win_pct`, `min_edge` and `min_net_r` are inclusive. A win % or edge outside 0-100, or a net
+R outside +/-1000, is a 422 before the desk is asked; that also covers NaN and infinity.
+
+### Auto-trading the signals
+
+ARM AUTO TRADE (in both worlds) has a **super signals** strategy. You choose
+the tickers (default SPY, QQQ, SPX) and tick the signal types to trade from a
+list ranked by today's results (edge score, 2+ settled trades). If no type
+has settled that many trades yet, the list ranks the previous session. Types
+whose 30-session history disagrees are left out. So are types whose agent
+never fires on the chosen tickers. `/super-signals/rank` supplies the list.
+
+Once armed, the watcher (`domains/trading/execution/autotrade.py`) reads the
+desk every 15 s. It enters when a new signal fires live that matches a picked
+type and a picked ticker, if the signal is:
+
+- inside the window (08:30-14:30 CST by default),
+- at most 6 minutes old,
+- and still open.
+
+A LONG buys a CALL and a SHORT buys a PUT. Entries go through the same
+managed entry as the BUY ticket (`execution/entry.py`), with its guards,
+sizing and smart limit. Each ticker gets at most one entry per hour. Each
+signal is entered at most once per account, even across re-arms. It buys same-day
+contracts only before 11:50 CST, the auto-trader's own 0DTE cutoff (a person's
+is 13:00), and the next expiry after it. The order itself refuses a same-day
+contract for any `Auto/` entry from 11:50 on. Signals already on the desk when
+you arm it are never entered. The watcher disarms itself at the 15:00 close,
+because the list was picked for that day.
+
+**best pairs** is the same watcher, but a signal must match a pair: the
+report's best ticker + signal pairs (`/super-signals/best-pairs`, 30
+sessions). A pair is one signal type on one ticker, so the watcher trades
+that type on that ticker and nowhere else. The form lists the desk's current
+pairs, all picked. You can narrow them by min win %, min edge and min net R,
+or untick any. The Tickers field is greyed out, because each pair names its
+own ticker. Arming re-checks every pick against the desk's list, which is
+rewritten after each report. It is refused if a pick has dropped off or the
+desk cannot answer. Every other rule is super signals' own, the per-signal
+idempotency key included. So a signal either strategy has bought is never
+bought again by the other.
+
+---
+
 ## The Bot Station
 
 `/bot-station` is mission control for the **Kalshi** bots. Seven families,

@@ -121,6 +121,15 @@ CONTRACT: list[tuple[str, str]] = [
     ("GET", f"{V1}/super/snapshots"),
     ("POST", f"{V1}/super/sync"),
     ("GET", f"{V1}/super/sync/status"),
+    # super signals — the signal-agent desk (a separate project) read through
+    # its own loopback service: today's signals, desk health, daily reports.
+    # Read-only, same answer for every operator, recorded like every other
+    # post-freeze addition.
+    ("GET", f"{V1}/super-signals/session"),
+    ("GET", f"{V1}/super-signals/rank"),
+    ("GET", f"{V1}/super-signals/best-pairs"),
+    ("GET", f"{V1}/super-signals/reports"),
+    ("GET", f"{V1}/super-signals/reports/{{report_date}}"),
     # system
     ("GET", "/health"),
     ("GET", "/readiness"),

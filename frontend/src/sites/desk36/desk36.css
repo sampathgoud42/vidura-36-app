@@ -579,6 +579,11 @@
    than widening the page. */
 .d36-hot > * { max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 
+/* Super signals (shared/SuperSignals.jsx): dense rows, so the card hands the
+   width back, and nothing in it may scroll sideways -- its chip rows and
+   report pills scroll on their own. */
+.d36-signals > .ss { padding: 12px 10px; overflow-x: visible; }
+
 /* The desk's chart carries its own panel chrome; this only has to host it. */
 .d36-chartcell .tr-chart {
   border-radius: 10px;
@@ -745,6 +750,8 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
   --tr-green: var(--d36-green); --tr-red: var(--d36-red);
   --tr-amber: var(--d36-amber);
 }
+.d36-autosheet .tr-input,
+.d36-autosheet .tr-select { font-size: 16px; }   /* see .d36-syminput */
 
 /* ── footer ─────────────────────────────────────────────────────────────── */
 .d36-footer {
@@ -753,6 +760,16 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
   text-align: center;
   font-size: 9px; letter-spacing: 0.1em;
   color: var(--d36-faint);
+}
+/* the world, the reading guide, the credit -- stacked, with the link a full
+   44pt target rather than a word of 9px text */
+.d36-footer { display: flex; flex-direction: column; align-items: center; }
+.d36-footer > * + * { margin-top: 2px; }
+.d36-footer a {
+  display: inline-flex; align-items: center; min-height: 44px; padding: 0 12px;
+  font-size: 11px; letter-spacing: 0.08em; color: var(--d36-green);
+  text-decoration: underline; text-underline-offset: 3px;
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ── buy sheet ──────────────────────────────────────────────────────────── */
