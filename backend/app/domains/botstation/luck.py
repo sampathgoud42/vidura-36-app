@@ -66,8 +66,10 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
             min_volume_usd: float = 0.0,
             max_spread_c: int | None = None,
             max_hours: int | None = None,
-            sports: list[str] | None = None) -> dict:
+            sports: list[str] | None = None, owner: str = "") -> dict:
     """Choose the legs and describe them. Buys nothing, creates nothing.
+
+    ``owner`` is the operator the preview is for: only they can place it.
 
     Returns a token the caller passes back to `place`. Nothing is created on
     the exchange here -- not even the combined market -- so a preview nobody
@@ -163,6 +165,7 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         # they were shown and approved.
         "max_spread_c": spread_c,
         "max_hours": hours,
+        "owner": owner,
     }
     return {
         "ok": True,
@@ -235,7 +238,7 @@ def _funnel(markets, eligible: dict, volume: dict, hosted: dict,
 def place(cred, token: str, *, tenant_slug: str = "",
           tickers: list[str] | None = None,
           min_usd: float = 5.0, max_usd: float = 7.5,
-          min_legs: int = 5) -> dict:
+          min_legs: int = 5, owner: str = "") -> dict:
     """Buy the previewed combo. Real money.
 
     Re-reads the board rather than trusting the preview's prices: a minute has
@@ -248,7 +251,9 @@ def place(cred, token: str, *, tenant_slug: str = "",
 
     _sweep()
     held = _PREVIEWS.get(token)
-    if held is None:
+    # Another operator's preview reads exactly like an expired one: a token is
+    # not a way to buy what someone else was shown, nor to learn it exists.
+    if held is None or held.get("owner", "") != owner:
         return {"placed": False,
                 "detail": "that preview has expired -- take a fresh one"}
 
@@ -379,14 +384,17 @@ def _run_job(job_id: str, fn, *args, **kwargs) -> None:
                              done_at=time.time())
 
 
-def start(fn, *args, **kwargs) -> str:
-    """Run one luck-bot call in the background. Returns its id."""
+def start(fn, *args, job_owner: str = "", **kwargs) -> str:
+    """Run one luck-bot call in the background. Returns its id.
+
+    ``job_owner`` is the operator who started it; `job` answers only them."""
     import threading
 
     _sweep_jobs()
     job_id = uuid.uuid4().hex
     _JOBS[job_id] = {"status": "running", "started": time.time(),
-                     "result": None, "error": None, "done_at": None}
+                     "result": None, "error": None, "done_at": None,
+                     "owner": job_owner}
     thread = threading.Thread(target=_run_job,
                               args=(job_id, fn, *args), kwargs=kwargs,
                               daemon=True)
@@ -394,9 +402,11 @@ def start(fn, *args, **kwargs) -> str:
     return job_id
 
 
-def job(job_id: str) -> dict | None:
+def job(job_id: str, owner: str = "") -> dict | None:
+    """A job's progress, for the operator who started it. Anyone else gets
+    None -- the same answer as a job that does not exist."""
     held = _JOBS.get(job_id)
-    if held is None:
+    if held is None or held.get("owner", "") != owner:
         return None
     out = {"status": held["status"],
            "elapsed_s": round(time.time() - held["started"], 1)}

@@ -15,6 +15,7 @@ boundary it is unambiguous, because only the ids differ.
 
 from __future__ import annotations
 
+import time
 import uuid
 
 import pytest
@@ -33,6 +34,7 @@ TENANT_READ_PATHS = [
     "/api/v1/trades",
     "/api/v1/portfolio",
     "/api/v1/portfolio/history",
+    "/api/v1/trade-history",
     "/api/v1/bots/btc15/status",
     "/api/v1/bots/btc15/trades",
     "/api/v1/bots/btc15/logs",
@@ -71,6 +73,43 @@ REQUIRED_PARAMS = {
 # The parameter that must no longer exist
 # --------------------------------------------------------------------------
 
+def _refreshing(r) -> bool:
+    body = r.json() if r.status_code == 200 else None
+    if not isinstance(body, dict):
+        return False
+    return bool(body.get("refreshing") or (body.get("meta") or {}).get("refreshing"))
+
+
+def _settled(client, path, params, headers, timeout_s: float = 10.0):
+    """One answer from ``path``, taken once any background snapshot behind it
+    has finished.
+
+    The options-flow and HOT boards answer their first call with "the first
+    sweep is running" and start that sweep behind the response, so the very
+    next call can find it finished. Two answers that differ for THAT reason
+    say nothing about tenancy -- /tradier/flow failed this test exactly so,
+    with both answers Alice's own -- so the comparison starts from a board
+    that has stopped refreshing.
+    """
+    deadline = time.monotonic() + timeout_s
+    r = client.get(path, params=params, headers=headers)
+    while _refreshing(r) and time.monotonic() < deadline:
+        time.sleep(0.05)
+        r = client.get(path, params=params, headers=headers)
+    return r
+
+
+def _without_clock(body):
+    """The answer less its ``age_s`` fields: the seconds since a snapshot was
+    taken, which differ between any two calls made one after the other and
+    carry nothing about whose data it is."""
+    if isinstance(body, dict):
+        return {k: _without_clock(v) for k, v in body.items() if k != "age_s"}
+    if isinstance(body, list):
+        return [_without_clock(v) for v in body]
+    return body
+
+
 @pytest.mark.parametrize("path", TENANT_READ_PATHS)
 def test_naming_another_tenant_is_ignored_not_honoured(
     client, two_operators_with_lookalike_data, path
@@ -87,7 +126,7 @@ def test_naming_another_tenant_is_ignored_not_honoured(
     bob = two_operators_with_lookalike_data["bob"]
 
     required = REQUIRED_PARAMS.get(path, {})
-    honest = client.get(path, params=required, headers=alice.headers)
+    honest = _settled(client, path, required, alice.headers)
     spoofed = client.get(
         path,
         params={**required,
@@ -97,7 +136,7 @@ def test_naming_another_tenant_is_ignored_not_honoured(
     )
 
     assert spoofed.status_code == honest.status_code
-    assert spoofed.json() == honest.json(), (
+    assert _without_clock(spoofed.json()) == _without_clock(honest.json()), (
         f"{path} changed its answer when handed another tenant's id — "
         "the request is still choosing the tenant"
     )
@@ -150,6 +189,73 @@ def test_reading_another_tenants_position_by_id_returns_not_found(
         f"expected 404 for another tenant's record, got {r.status_code} — "
         "403 tells the caller the record exists"
     )
+
+
+def test_flattening_closes_only_the_operators_own_positions(
+    client, two_operators_with_lookalike_data
+):
+    """Given Alice and Bob each hold the same SPY call,
+    when Alice flattens,
+    then only Alice's position is considered, and Bob's is untouched.
+
+    Flatten names no position, so the session is the only thing that can say
+    whose positions it closes -- and it closes every one of them.
+    """
+    d = two_operators_with_lookalike_data
+    alice, bob = d["alice"], d["bob"]
+    alices = d["made"][alice.slug]["position_id"]
+    bobs = d["made"][bob.slug]["position_id"]
+
+    r = client.post("/api/v1/tradier/positions/flatten",
+                    headers={**alice.headers, "Idempotency-Key": uuid.uuid4().hex})
+    assert r.status_code == 200, r.text
+    out = r.json()
+    assert out["considered"] == 1
+    touched = set(out["closed"]) | {f["id"] for f in out["failed"]}
+    assert touched == {alices}
+
+    still_there = client.get(f"/api/v1/tradier/positions/{bobs}", headers=bob.headers)
+    assert still_there.status_code == 200
+    assert still_there.json()["status"] in ("pending", "open")
+
+
+def test_a_luck_job_and_preview_belong_to_the_operator_who_made_them(client, alice, bob):
+    """A luck job's result can hold a ticket's legs, stake and fills, and a
+    preview token buys the legs it was shown. Both belong to the operator who
+    made them; to anyone else they read exactly as if they did not exist.
+
+    Set up through the module because a real preview scans Kalshi's live
+    board. The job is read back through the API, which is what is under test.
+    """
+    from app.domains.botstation import luck
+
+    job_id = luck.start(lambda: {"legs": ["KXNBA-G1-LAL"], "stake_usd": 5.0},
+                        job_owner=alice.tenant_id)
+    deadline = time.monotonic() + 5
+    while (luck.job(job_id, owner=alice.tenant_id)["status"] == "running"
+           and time.monotonic() < deadline):
+        time.sleep(0.01)
+
+    mine = client.get(f"/api/v1/bots/luck/job/{job_id}", headers=alice.headers)
+    assert mine.status_code == 200, mine.text
+    assert mine.json()["result"] == {"legs": ["KXNBA-G1-LAL"], "stake_usd": 5.0}
+
+    theirs = client.get(f"/api/v1/bots/luck/job/{job_id}", headers=bob.headers)
+    nothing = client.get(f"/api/v1/bots/luck/job/{uuid.uuid4().hex}", headers=bob.headers)
+    assert theirs.status_code == nothing.status_code == 404
+    assert theirs.json() == nothing.json()
+
+    token = uuid.uuid4().hex
+    luck._PREVIEWS[token] = {"expires": time.time() + 60, "tickers": ["KXNBA-G1-LAL"],
+                             "collection": {}, "max_spread_c": 3, "max_hours": 72,
+                             "owner": alice.tenant_id}
+    try:
+        refused = luck.place(None, token, owner=bob.tenant_id)
+        assert refused == {"placed": False,
+                           "detail": "that preview has expired -- take a fresh one"}
+        assert token in luck._PREVIEWS          # Bob's attempt did not spend it
+    finally:
+        luck._PREVIEWS.pop(token, None)
 
 
 def test_writing_to_another_tenants_position_returns_not_found(
@@ -351,6 +457,14 @@ COVERED_BY_NAMED_TESTS = {
         "test_writing_to_another_tenants_position_by_id_is_not_found",
     "/api/v1/tradier/positions/{position_id}/carryover":
         "test_writing_to_another_tenants_position_by_id_is_not_found",
+    "/api/v1/tradier/positions/flatten":
+        "test_flattening_closes_only_the_operators_own_positions",
+    "/api/v1/bots/luck/preview":
+        "test_a_luck_job_and_preview_belong_to_the_operator_who_made_them",
+    "/api/v1/bots/luck/place":
+        "test_a_luck_job_and_preview_belong_to_the_operator_who_made_them",
+    "/api/v1/bots/luck/job/{job_id}":
+        "test_a_luck_job_and_preview_belong_to_the_operator_who_made_them",
 
     # These carry NO tenant-addressable identifier. There is no parameter to
     # point at another operator, so the session is the only thing that can

@@ -47,6 +47,11 @@ CONTRACT: list[tuple[str, str]] = [
     ("GET", f"{V1}/tradier/positions/{{position_id}}"),
     ("POST", f"{V1}/tradier/positions/contract"),
     ("POST", f"{V1}/tradier/positions/sweep"),
+    # Closing every open and pending position. It used to BE /positions/sweep
+    # until both desks, which poll sweep as a refresh, flattened live orders
+    # seconds after placing them (9800aa1): sweep is a monitor pass again and
+    # flattening is this deliberate, never-polled route.
+    ("POST", f"{V1}/tradier/positions/flatten"),
     ("POST", f"{V1}/tradier/positions/{{position_id}}/close"),
     ("POST", f"{V1}/tradier/positions/{{position_id}}/target"),
     ("POST", f"{V1}/tradier/positions/{{position_id}}/carryover"),
@@ -67,6 +72,9 @@ CONTRACT: list[tuple[str, str]] = [
     ("POST", f"{V1}/trades"),
     ("GET", f"{V1}/portfolio"),
     ("GET", f"{V1}/portfolio/history"),
+    # The operator's Kalshi fills, newest first -- the trade history that
+    # leads the Bot Station's right column. Added after the freeze.
+    ("GET", f"{V1}/trade-history"),
     # bots
     ("GET", f"{V1}/bots"),
     ("POST", f"{V1}/bots/reconcile"),
@@ -78,6 +86,16 @@ CONTRACT: list[tuple[str, str]] = [
     ("GET", f"{V1}/bots/commodities/signals"),
     ("GET", f"{V1}/bots/crypto/signals"),
     ("GET", f"{V1}/bots/statuses"),
+    # Every run of every bot, and one event log across them -- what the Bot
+    # Station shows under its launch console. Added after the freeze.
+    ("GET", f"{V1}/bots/runs"),
+    ("GET", f"{V1}/bots/event-log"),
+    # The luck ticket (the daily long-shot parlay): preview the legs, then
+    # place exactly what was previewed, both as background jobs because a
+    # board scan outlasts the tunnel's request ceiling. Added after the freeze.
+    ("POST", f"{V1}/bots/luck/preview"),
+    ("POST", f"{V1}/bots/luck/place"),
+    ("GET", f"{V1}/bots/luck/job/{{job_id}}"),
     # desk + wellness + worlds
     ("GET", f"{V1}/levels/status"),
     ("POST", f"{V1}/levels/start"),
@@ -228,9 +246,11 @@ def test_the_shared_api_key_cannot_reach_tenant_data(client, monkeypatch):
 def test_execution_endpoints_advertise_idempotency(app):
     """Every money-moving endpoint must accept an Idempotency-Key header, or
     the guarantee is optional in practice."""
+    # Flatten, not sweep: sweep is a monitor pass that both desks poll as a
+    # refresh, and closing everything moved to /positions/flatten (9800aa1).
     money = {f"{V1}/tradier/positions", f"{V1}/tradier/positions/contract",
              f"{V1}/tradier/positions/{{position_id}}/close",
-             f"{V1}/tradier/positions/sweep"}
+             f"{V1}/tradier/positions/flatten"}
     missing = []
     for route in api_routes(app):
         if route.path in money and "POST" in route.methods:

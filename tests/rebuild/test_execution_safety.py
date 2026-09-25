@@ -258,8 +258,16 @@ def test_entries_are_refused_when_the_risk_monitor_is_stale(
     trading. This is the guard that would have made Phase 3's alarm visible
     instead of silent.
     """
+    from app.core.config import get_settings
     from app.domains.trading.risk import heartbeat
 
+    # Guard 7 refuses by default and can be turned into a warning with
+    # TBOT_ENFORCE_STOP_WATCHDOG=false (b8d29a2). This test is about the
+    # refusal, so it asks for it, rather than inheriting whatever the
+    # machine's .env says -- a developer .env with the warning on made it fail
+    # on that machine alone.
+    monkeypatch.setenv("TBOT_ENFORCE_STOP_WATCHDOG", "true")
+    get_settings.cache_clear()
     monkeypatch.setattr(heartbeat, "seconds_since_last_pass",
                         lambda tenant_id: 3600)
     r = _buy(client, alice)

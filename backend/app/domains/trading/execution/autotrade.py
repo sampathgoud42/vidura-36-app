@@ -204,6 +204,19 @@ _LOCK = threading.Lock()
 # disarmed watcher's thread releasing on its way out must never release the
 # claim of the watcher armed right after it.
 _INSTANCES = itertools.count(1)
+# Every watcher thread that has not finished, armed or not. stop() takes a
+# watcher out of _WATCHERS at once, but its thread still has a last database
+# write to make on its way out -- releasing its claim on the signal desk -- so
+# quiesce() waits for these, not only for the watchers still armed.
+_THREADS: set[threading.Thread] = set()
+
+
+def _thread_main(loop, watcher: Watcher) -> None:
+    try:
+        loop(watcher)
+    finally:
+        with _LOCK:
+            _THREADS.discard(threading.current_thread())
 
 
 class AutoTradeRefused(RuntimeError):
@@ -770,9 +783,11 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
     from app.services import super_signals as _desk  # noqa: F401
 
     loop = _run_super if strategy in SIGNAL_STRATEGIES else _run
-    thread = threading.Thread(target=loop, args=(watcher,),
+    thread = threading.Thread(target=_thread_main, args=(loop, watcher),
                               name=f"autotrade-{tenant_id[:8]}", daemon=True)
     watcher.thread = thread
+    with _LOCK:
+        _THREADS.add(thread)
     thread.start()
     return _answer(watcher.public(), active=True)
 
@@ -841,18 +856,22 @@ def status(tenant_id: str) -> dict:
 
 
 def quiesce(timeout: float = 10.0) -> None:
-    """Disarm every watcher and wait for its loop to leave the database alone.
+    """Disarm every watcher and wait for every watcher thread -- armed, or
+    disarmed and still on its way out -- to leave the database alone.
 
-    An armed watcher opens a session on each pass. Tearing the process state
-    down underneath one is how a test ends up unable to delete its own
-    database file, and how a shutdown ends up interrupting an order.
+    An armed watcher opens a session on each pass, and a disarmed one writes
+    once more as it goes (releasing its claim on the signal desk). Tearing the
+    process state down underneath either is how a test ends up unable to
+    delete its own database file, and how a shutdown ends up interrupting an
+    order.
     """
     with _LOCK:
         watchers = list(_WATCHERS.values())
         _WATCHERS.clear()
+        threads = list(_THREADS)
     for watcher in watchers:
         watcher.stop_flag.set()
         _release_desk(watcher)
-    for watcher in watchers:
-        if watcher.thread is not None:
-            watcher.thread.join(timeout=timeout)
+    for thread in threads:
+        if thread.is_alive():
+            thread.join(timeout=timeout)

@@ -594,6 +594,7 @@ def _kalshi_cred(db: DbSession, tenant: Tenant):
 
 
 @router.post("/luck/preview", operation_id="previewLuckTicket")
+@deps.tenant_scoped
 def luck_preview(payload: LuckPreviewRequest,
                  tenant: Tenant = Depends(deps.current_tenant),
                  db: DbSession = Depends(deps.get_db)) -> dict:
@@ -613,6 +614,7 @@ def luck_preview(payload: LuckPreviewRequest,
     # a request that waits for it is killed by the proxy no matter what the
     # browser's timeout says.
     return {"job_id": luck.start(luck.preview, cred,
+                                 job_owner=tenant.id, owner=tenant.id,
                                  min_legs=payload.min_legs,
                                  max_legs=payload.max_legs,
                                  min_leg_c=payload.min_leg_c,
@@ -624,6 +626,7 @@ def luck_preview(payload: LuckPreviewRequest,
 
 
 @router.post("/luck/place", operation_id="placeLuckTicket")
+@deps.tenant_scoped
 def luck_place(payload: LuckPlaceRequest,
                tenant: Tenant = Depends(deps.current_tenant),
                db: DbSession = Depends(deps.get_db)) -> dict:
@@ -642,6 +645,7 @@ def luck_place(payload: LuckPlaceRequest,
     # Also a job: placing re-scans the board and may sit through a stake
     # escalation, which is longer than the preview, not shorter.
     return {"job_id": luck.start(luck.place, cred, payload.token,
+                                 job_owner=tenant.id, owner=tenant.id,
                                  tenant_slug=tenant.slug,
                                  tickers=payload.tickers,
                                  min_usd=payload.min_usd,
@@ -651,12 +655,15 @@ def luck_place(payload: LuckPlaceRequest,
 
 
 @router.get("/luck/job/{job_id}", operation_id="getLuckJob")
+@deps.tenant_scoped
 def luck_job(job_id: str,
-             _: Tenant = Depends(deps.current_tenant)) -> dict:
-    """How a preview or a placement is getting on."""
+             tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """How a preview or a placement is getting on -- for the operator who
+    started it. Another operator's job id is not found, exactly as a job that
+    never existed: a result can hold legs, stakes and fills."""
     from app.domains.botstation import luck
 
-    out = luck.job(job_id)
+    out = luck.job(job_id, owner=tenant.id)
     if out is None:
         raise HTTPException(status_code=404,
                             detail="no such job — it may have expired")

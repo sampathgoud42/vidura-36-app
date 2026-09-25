@@ -477,8 +477,11 @@ def eligible_legs(markets: list[MarketState],
                 if tennis_needs_score:
                     rejected.append({
                         "ticker": market.ticker,
-                        "reason": "tennis leg with no live score — the price "
-                                  "alone is not enough at the 90% bar"})
+                        "reason": "tennis leg with no live score — below the "
+                                  f"{tennis_lock_c}c lock the price alone is "
+                                  "not enough" if tennis_lock_c is not None else
+                                  "tennis leg with no live score — the price "
+                                  "alone is not enough"})
                     continue
             else:
                 ok, why = verify_tennis_conditions(score_state,
