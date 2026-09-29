@@ -432,6 +432,45 @@ def wait_healthy(port: int, timeout: float = 45.0) -> dict | None:
     return None
 
 
+def desk_sources_newer_than_build() -> bool:
+    """True when frontend/dist-v2 is missing or older than any desk source.
+
+    dist-v2 is gitignored, so a `git pull` brings new desk code without a new
+    build -- and the API goes on serving yesterday's bundle while reporting a
+    healthy start. A new world or panel is then simply absent from the UI,
+    with nothing anywhere saying why.
+    """
+    index = ROOT / "frontend" / "dist-v2" / "index.html"
+    if not index.is_file():
+        return True
+    built = index.stat().st_mtime
+    front = ROOT / "frontend"
+    sources = [front / "index.html", front / "package.json", front / "vite.config.js"]
+    sources += [p for p in (front / "src").rglob("*") if p.is_file()]
+    sources += [p for p in (front / "public").rglob("*") if p.is_file()]
+    return any(p.is_file() and p.stat().st_mtime > built for p in sources)
+
+
+def build_desk() -> bool:
+    """`npm run build` in frontend/ (vite writes dist-v2). True on success."""
+    front = ROOT / "frontend"
+    npm = "npm.cmd" if IS_WINDOWS else "npm"
+    if not (front / "node_modules").is_dir():
+        print("Desk     stale build, and frontend/node_modules is missing - "
+              "run setup, then `npm run build` in frontend/")
+        return False
+    print("Desk     sources are newer than the build - rebuilding (npm run build)...")
+    try:
+        rc = subprocess.call([npm, "run", "build"], cwd=str(front))
+    except OSError as exc:
+        print(f"Desk     build could not run: {exc}")
+        return False
+    if rc != 0:
+        print(f"Desk     build FAILED (exit {rc}) - the old build is still served")
+        return False
+    return True
+
+
 # --------------------------------------------------------------------------
 # commands
 # --------------------------------------------------------------------------
@@ -449,6 +488,10 @@ def cmd_start(args) -> int:
             return 1
         print(f"Tradier Bot API on http://127.0.0.1:{args.port}  (Ctrl-C to stop)")
         return subprocess.call(_api_cmd(args.port), cwd=str(ROOT), env=_api_env(args.port))
+
+    # Before the API comes up, so it serves this build from its first request.
+    if not args.dev and desk_sources_newer_than_build():
+        build_desk()
 
     pid = running_pid("api")
     if pid:
