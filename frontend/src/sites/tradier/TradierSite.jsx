@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'; // charts ungrouped
+import { Link } from 'react-router-dom';
 import { ApiError, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
 import SiteFooter from '../../shared/SiteFooter.jsx';
 import SuperSignals from '../../shared/SuperSignals.jsx';
+import BestBetsLink from '../../shared/BestBets.jsx';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
 import '../../shared/worldHeader.css';
@@ -3601,6 +3603,15 @@ export default function TradierSite() {
                 </span>
               )}
             </p>
+            {/* the screeners: Best Bets (the 4-hour 21 EMA, asks the venue
+                only when opened) and BreakoutRadar, a world of its own */}
+            <div className="tr-headlinks">
+              <BestBetsLink accent="#5b6af0" live={live} onPick={setQuoteTicker} />
+              <Link to="/breakout-radar" className="bb-link"
+                title="BreakoutRadar: eight-rule breakout scans of the US and Indian markets">
+                📡 BreakoutRadar<span className="d">· US + India breakouts ›</span>
+              </Link>
+            </div>
           </div>
 
           {/* balance — lives in the header's right half so the desk starts

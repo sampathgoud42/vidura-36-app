@@ -11,13 +11,14 @@ Prove that at any time:
 .venv\Scripts\python tools\check_self_contained.py
 ```
 
-It ships **three worlds**, one process, one port:
+It ships **four worlds**, one process, one port:
 
 | world | route | what it is |
 | --- | --- | --- |
 | Tradier Platform | `/tradier-platform` | the options executor, boards and charts |
 | 36 Trade Desk | `/36-trade-desk` | the same desk, laid out for a phone |
 | Bot Station | `/bot-station` | mission control for the Kalshi bots |
+| BreakoutRadar | `/breakout-radar` | eight-rule breakout scans of the US and Indian markets |
 
 Three worlds, **two domains**. Tradier Platform and 36 Trades share one
 backend: they call the same endpoints with the same parameters, and the only
@@ -358,6 +359,133 @@ session, because the report re-ranks them overnight.
 
 ---
 
+## Best Bets (a 21 EMA on 4-hour bars)
+
+**★ Best bets** is a link under the Tradier Platform's title and in 36 Trades'
+**screeners** section. It opens a sheet listing two setups across a watchlist
+(`TBOT_TRADIER_BEST_BETS_UNIVERSE`, 60 names that lean volatile):
+
+| setup | what must hold |
+| --- | --- |
+| **A** deep retracement | a 4-hour **low** fell more than 20% under the 21 EMA in the window, and the close is still under it but turning up: rising over the last 5 closes, the newest close above the one before, the gap narrower than at its worst |
+| **B** fresh cross | the close crossed above the EMA on one of the last 3 candles (1 = the newest), is still above it, and less than 20% above |
+
+Every column sorts, click again to reverse, and every column has its own filter:
+text matches anywhere; numbers take `>x`, `<x`, `a..b`, or a bare minimum
+(`>10B` works on market cap). "all scanned" lists every ticker, qualifying or
+not, with how close it came.
+
+**How the 4-hour bars are made.** Tradier serves no 4-hour bar:
+`/markets/timesales` stops at 15 minutes, and keeps 15-minute bars for 40 days
+when asked for the regular session only (`session_filter=open`), 18 once
+extended hours are included. So each symbol is one timesales call for 40 days of
+regular-session 15-minute bars, resampled in pandas into buckets anchored on the
+09:30 open (09:30–13:30, 13:30–16:00). That is the session-anchored 4H chart
+charting platforms draw by default. It is ~55 bars, and the first 20 only warm
+the EMA up, so "the recent past" for A means about the last 17 sessions. The EMA
+is the recursive one (`ewm(span=21, adjust=False)`), as charts draw it.
+
+**Days to catch** solves the EMA's own recurrence rather than dividing the gap by
+the price's velocity: each bar pulls the EMA `2/(span+1)` of the way toward the
+price, so the gap closes from both ends. A $20 gap closing at $1 a bar is 11.5
+bars, not 20. The velocity is a least-squares fit over the last 5 closes, bars
+become trading days at two a session, and it is a projection, not a forecast.
+
+Market cap and industry come from Yahoo (`domains/trading/market/fundamentals.py`),
+because Tradier's brokerage API carries neither. They are cached for a day, and
+the cap is re-marked at the screen's own price. The endpoint is
+`GET /api/v1/tradier/best-bets`, a snapshot like the HOT board: it answers at
+once, sweeps in the background (four workers, waiting out a 429), and says
+`refreshing` until the new rows land.
+
+The same screen runs in a terminal, with no server or sign-in, only a token:
+
+```bash
+set TRADIER_ACCESS_TOKEN=...
+.venv\Scripts\python tools\ema_screener.py              both tables
+.venv\Scripts\python tools\ema_screener.py --all        every symbol
+.venv\Scripts\python tools\ema_screener.py --symbols NVDA,COIN --sandbox
+```
+
+Its `CONFIG` dict at the top holds the headers, the symbols and the thresholds.
+It paces itself under the rate limit, obeys `X-Ratelimit-Available` /
+`X-Ratelimit-Expiry`, retries a 429 or 5xx with backoff, and lists the symbols it
+could not screen and why. It calls the same `ema_screen` module as the desk, so
+the two can never disagree.
+
+---
+
+## BreakoutRadar
+
+A world of its own (`/breakout-radar`, 📡 in the world switcher, and a link in
+both trading worlds). The **🇺🇸 USA Market** tab covers the S&P 500 + Nasdaq-100.
+The **🇮🇳 India Market** tab covers the Nifty 500. Each can be scanned on 5m, 15m,
+1h, 4h or daily candles, and a stock is listed only when all eight rules hold:
+
+| # | rule | as applied |
+| --- | --- | --- |
+| 1 | consolidation | the N=20 candles before the breakout sat in a channel of **bodies** (open/close) no wider than 12% |
+| 2 | range penetration | the breakout candle closed ≥ 2% above that channel's top, and the newest close is still above it |
+| 3 | candle conviction | a **green** body ≥ 5% of the open on 4h/1d, ≥ 2.5% on 5m/15m/1h |
+| 4 | market cap | > $50M (US), > ₹3 crore (India) |
+| 5 | RVOL | breakout volume ≥ 1.5× the mean of the 20 candles before it, no upper cap |
+| 6 | liquidity | 20-day average daily volume > 500,000 shares, over the last 20 *completed* sessions |
+| 7 | near a high | within 10% of the 20-day, 50-day or all-time high |
+| 8 | trend | above both the 20 and 50 EMA of the scan's own timeframe |
+
+The breakout candle is the newest of the last 3 on which rules 1, 2, 3 and 5 all
+hold. Where the specification left a choice, this build decides it as follows:
+
+- the breakout candle must be green;
+- a breakout that fell back into its range no longer counts;
+- ADV skips today's half-traded session;
+- a market cap Yahoo cannot answer is shown as unverified rather than failed.
+
+Every member of these universes is far above either floor. Rule 7's three highs
+are nested (20-day ≤ 50-day ≤ all-time), so "within 10% of any" is exactly
+"within 10% of the 20-day high". The all-time high cannot change the answer, and
+is not fetched for it.
+
+**Fetch once, judge many times.** Candles come only when asked: **Run Scan**, or
+the page's auto-refresh (15 min / 1 hour, while the page is open). A scan
+downloads the market from Yahoo in batches, in the background, with progress.
+Everything else re-judges the scan already on the server and downloads nothing.
+That covers the market tabs, the timeframe and every slider in the
+**Parameters** drawer. An empty table says which rule turned the most names
+away, and the **near misses** list the tickers one rule short. **View Chart**
+draws the candles with the 20/50 EMA, the consolidation channel as a shaded box,
+and an arrow at the breakout candle, over a checklist of the eight rules.
+
+Yahoo, not Tradier, supplies the candles. Tradier has no Indian listings, and
+for ~500 US names its 120 market requests a minute (60 on the sandbox) would make
+every scan four to nine minutes. Its 40 days of 15-minute history would also
+leave a 4-hour 50 EMA mostly seed. Yahoo is unofficial: a failed batch costs its
+own tickers and nothing else. 4-hour candles are hourly ones folded on each
+market's open (09:30 ET, 09:15 IST).
+
+The index lists are fetched live once a day: Wikipedia for the two US indices,
+NSE's CSV for the Nifty 500. The last good copy is kept under `var/universes/`,
+and a snapshot ships in `domains/trading/market/universe_snapshot.json` for a
+first start with no network. Every scan says which of the three it used.
+
+**Alerts.** 🔔 Alerts takes a Telegram bot token + chat ID and/or a Discord
+webhook, kept in this browser only. When a scan the page started lands, any
+breakout not alerted before is sent through `POST /api/v1/breakout/alerts/send`.
+That relay stores nothing. It sends only to `api.telegram.org` or a
+`discord.com/api/webhooks/` URL, so it cannot be pointed at an internal address.
+It never repeats a token in an answer or a log, and it allows 20 alerts a minute
+per operator. Alerts need the page open. A server-side watcher would need the
+tokens stored, and the credential table only admits Tradier and Kalshi keys, so
+that would be a migration.
+
+| endpoint | |
+| --- | --- |
+| `GET /api/v1/breakout/scan` | `market`, `timeframe`, `refresh`, and any threshold (`min_rvol`, `max_range_pct`, ...) |
+| `GET /api/v1/breakout/chart/{ticker}` | candles, `ema20`/`ema50`, `consolidation_high/low/start/end`, `breakout_candle_timestamp`, the verdict |
+| `POST /api/v1/breakout/alerts/send` | relay one message; nothing is kept |
+
+---
+
 ## The Bot Station
 
 `/bot-station` is mission control for the **Kalshi** bots. Seven families,
@@ -499,6 +627,8 @@ reading the result back, touching nothing real.
 | `test_stop_loss_durability.py` | both exit legs resting; one filling cancels the other |
 | `test_migration.py` | migrate from empty, rollback, no model drift, one head |
 | `test_bot_best_pair.py` | the best-pairs bot never buys what the desk's watcher bought; one trader per signal desk; its settings are the form's |
+| `test_ema_screen.py`, `test_best_bets.py`, `test_ema_screener_cli.py` | 4-hour bars on the 09:30 open; the catch-up estimate against a bar-by-bar simulation; setups A and B; the endpoint's venue calls and rate-limit waits; the terminal tables |
+| `test_breakout_rules.py`, `test_breakout_api.py`, `test_universes.py` | each of the eight rules failing alone; fetch once, judge many; India on `.NS` in rupees; the alert relay's fixed destinations, no token in any answer or log |
 
 ---
 

@@ -61,6 +61,10 @@ CONTRACT: list[tuple[str, str]] = [
     ("GET", f"{V1}/tradier/chain"),
     ("GET", f"{V1}/tradier/timesales"),
     ("GET", f"{V1}/tradier/hot"),
+    # Best Bets: a 21 EMA on 4-hour bars folded from Tradier's 15-minute
+    # bars, as a snapshot like /hot -- deep retracements turning up, and
+    # fresh crosses. Added after the freeze.
+    ("GET", f"{V1}/tradier/best-bets"),
     ("GET", f"{V1}/tradier/flow"),
     ("GET", f"{V1}/tradier/commodities"),
     ("POST", f"{V1}/tradier/stream/session"),
@@ -148,6 +152,13 @@ CONTRACT: list[tuple[str, str]] = [
     ("GET", f"{V1}/super-signals/best-pairs"),
     ("GET", f"{V1}/super-signals/reports"),
     ("GET", f"{V1}/super-signals/reports/{{report_date}}"),
+    # BreakoutRadar -- its own world: eight-rule breakout scans of the US
+    # (S&P 500 + Nasdaq-100) and Indian (Nifty 500) markets from Yahoo, a
+    # chart with the breakout overlay, and an alert relay that stores
+    # nothing. Added after the freeze.
+    ("GET", f"{V1}/breakout/scan"),
+    ("GET", f"{V1}/breakout/chart/{{ticker}}"),
+    ("POST", f"{V1}/breakout/alerts/send"),
     # system
     ("GET", "/health"),
     ("GET", "/readiness"),

@@ -5,7 +5,8 @@
     "worlds": {
       "tradier-platform": true,
       "36-trade-desk": true,
-      "bot-station": true
+      "bot-station": true,
+      "breakout-radar": true
     },
     "default": "tradier-platform"
   },
@@ -15,7 +16,8 @@
       "worlds": {
         "tradier-platform": true,
         "36-trade-desk": true,
-        "bot-station": true
+        "bot-station": true,
+        "breakout-radar": true
       },
       "default": "36-trade-desk"
     }

@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { api, auth, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
 import SuperSignals from '../../shared/SuperSignals.jsx';
+import BestBetsLink from '../../shared/BestBets.jsx';
 import { READING_GUIDE_URL } from '../../config.js';
 import {
   AutoTradeForm, CommoditiesPanel, deskOwnerNote, HotScan, MiniChart, OptionsFlow, useMovers,
@@ -160,6 +161,7 @@ const SECTIONS = [
   ['watch', 'watchlist'],
   ['positions', 'positions'],
   ['signals', 'signals'],
+  ['bets', 'screeners'],
   ['commodities', 'commodities'],
   ['hot', 'hot'],
   ['charts', 'charts'],
@@ -1531,6 +1533,26 @@ export default function Desk36Site() {
                   onPick={pickSym} onTrade={buySym} />
               </div>
             )}
+          </React.Fragment>
+        );
+
+        if (id === 'bets') return (
+          <React.Fragment key={id}>
+            {/* The Tradier Platform's two screener links, laid out for a
+                thumb: Best Bets (the 4-hour 21 EMA screen, full-screen, asks
+                the venue only when opened) and BreakoutRadar, its own world.
+                Nothing to collapse -- they are two links. */}
+            <div className="d36-secthd">
+              <span className="d36-charttoggle d36-sectname">screeners</span>
+              <span className="d36-charthint">best bets · breakout radar</span>
+            </div>
+            <div className="d36-hot d36-bets">
+              <BestBetsLink touch accent="#86efac" live={live} onPick={pickSym} />
+              <Link to="/breakout-radar" className="bb-link bb-link--touch"
+                title="BreakoutRadar: eight-rule breakout scans of the US and Indian markets">
+                📡 BreakoutRadar<span className="d">· US + India breakouts ›</span>
+              </Link>
+            </div>
           </React.Fragment>
         );
 

@@ -31,7 +31,8 @@ DEMO_SLUG = "demo"
 # Deliberately published. See the module docstring for why that is defensible.
 DEMO_PASSWORD = "BankF@t1M"
 
-WORLDS = {"tradier-platform": True, "36-trade-desk": True, "bot-station": True}
+WORLDS = {"tradier-platform": True, "36-trade-desk": True, "bot-station": True,
+          "breakout-radar": True}
 
 
 def main() -> int:

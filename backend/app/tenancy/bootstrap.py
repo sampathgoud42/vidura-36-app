@@ -26,6 +26,7 @@ DEFAULT_WORLDS = {
     "tradier-platform": True,
     "36-trade-desk": True,
     "bot-station": True,
+    "breakout-radar": True,
 }
 
 

@@ -308,6 +308,12 @@ export const vidura = {
   tradierCommodities: (userId, live, refresh) => api.get('/tradier/commodities', {
     params: { live, refresh: refresh || undefined },
   }),
+  // Best Bets: a 21 EMA on 4-hour bars across a watchlist -- A, deep
+  // retracements turning back up; B, fresh crosses. A snapshot like HOT: it
+  // answers at once and says `refreshing` while a sweep runs behind it.
+  tradierBestBets: (live, refresh) => api.get('/tradier/best-bets', {
+    params: { live, refresh: refresh || undefined },
+  }),
   // tradier options executor
   // `live` is never persisted anywhere: every call states its venue, so a
   // reload always comes back on the sandbox.
@@ -445,5 +451,15 @@ export const vidura = {
   // a report page is ~1 MB of HTML; give it longer than a board poll
   superSignalsReport: (date) =>
     api.get(`/super-signals/reports/${encodeURIComponent(date)}`, { timeout: 60000 }),
+
+  // ---- BreakoutRadar: eight-rule breakout scans, US + India (Yahoo) -------
+  // `params` carries market, timeframe and any thresholds. A read re-judges
+  // the cached scan; refresh=true starts a new download in the background.
+  breakoutScan: (params) => api.get('/breakout/scan', { params }),
+  // a chart outside the last scan is fetched on its own: give it a moment
+  breakoutChart: (ticker, params) =>
+    api.get(`/breakout/chart/${encodeURIComponent(ticker)}`, { params, timeout: 60000 }),
+  // relayed, never stored: the token rides in this one request
+  breakoutAlert: (body) => api.post('/breakout/alerts/send', body),
 
 };
