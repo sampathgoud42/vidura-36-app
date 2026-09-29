@@ -47,6 +47,7 @@ TENANT_READ_PATHS = [
     "/api/v1/tradier/quotes",
     "/api/v1/tradier/chain",
     "/api/v1/tradier/hot",
+    "/api/v1/tradier/best-bets",
     "/api/v1/tradier/flow",
     "/api/v1/tradier/commodities",
     "/api/v1/bots/crypto/signals",
@@ -478,6 +479,10 @@ COVERED_BY_NAMED_TESTS = {
     "/api/v1/levels/start": "no tenant-addressable identifier",
     "/api/v1/levels/stop": "no tenant-addressable identifier",
     "/api/v1/bots/launch": "no tenant-addressable identifier",
+    # Relays the caller's own message with the caller's own token and keeps
+    # nothing afterwards; its only per-operator state is the rate limit,
+    # keyed by the session's tenant.
+    "/api/v1/breakout/alerts/send": "no tenant-addressable identifier",
 }
 
 # MARKET DATA. These require a session but return the SAME answer to every
@@ -515,6 +520,8 @@ MARKET_DATA_PATHS = [
     "/api/v1/super-signals/best-pairs",
     "/api/v1/super-signals/reports",
     "/api/v1/super-signals/reports/{report_date}",
+    "/api/v1/breakout/scan",
+    "/api/v1/breakout/chart/{ticker}",
 ]
 
 COVERED_BY_NAMED_TESTS.update(

@@ -240,6 +240,8 @@
   gap: 16px 28px;
 }
 .tr-head-left { flex: 1 1 30rem; }
+.tr-headlinks { display: flex; flex-wrap: wrap; margin-top: 6px; }
+.tr-headlinks > * { margin-right: 18px; }
 .tr-head-right {
   flex: 1 1 34rem; max-width: 52rem;
   background: transparent; border: none; padding: 0;

@@ -12,6 +12,7 @@ export const WORLDS = [
   { path: '/tradier-platform', label: 'Tradier Platform', icon: '🎯', blurb: 'options executor' },
   { path: '/36-trade-desk', label: '36 Trades', icon: '⚡', blurb: 'mobile trade desk' },
   { path: '/bot-station', label: 'Bot Station', icon: '🤖', blurb: 'kalshi bot control' },
+  { path: '/breakout-radar', label: 'BreakoutRadar', icon: '📡', blurb: 'US + India breakout scans' },
 ];
 
 // Signed out there is no world yet, so the tab carries the app itself.

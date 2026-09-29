@@ -11,6 +11,7 @@ import { WorldGate, DefaultWorld } from './auth/WorldGate.jsx';
 const Tradier = lazy(() => import('./sites/tradier/TradierSite.jsx'));
 const Desk36 = lazy(() => import('./sites/desk36/Desk36Site.jsx'));
 const BotStation = lazy(() => import('./sites/botstation/BotStationSite.jsx'));
+const Breakout = lazy(() => import('./sites/breakout/BreakoutSite.jsx'));
 
 function Loader() {
   return (
@@ -56,6 +57,8 @@ export default function App() {
             <WorldGate id="36-trade-desk"><Desk36 /></WorldGate>} />
           <Route path="/bot-station/*" element={
             <WorldGate id="bot-station"><BotStation /></WorldGate>} />
+          <Route path="/breakout-radar/*" element={
+            <WorldGate id="breakout-radar"><Breakout /></WorldGate>} />
           <Route path="*" element={<DefaultWorld />} />
         </Routes>
       </Suspense>

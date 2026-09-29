@@ -83,10 +83,12 @@ def fresh_schema():
     # every later test erroring in setup with a PermissionError that named the
     # fixture instead of the thread.
     from app.domains.trading.execution import autotrade
-    from app.domains.trading.market import flow
+    from app.domains.trading.market import best_bets, breakout_scan, flow
 
     autotrade.quiesce()
     flow.quiesce()
+    best_bets.quiesce()
+    breakout_scan.quiesce()
 
     url = os.environ["TBOT_DATABASE_URL_OVERRIDE"]
     db_file = Path(url.replace("sqlite:///", ""))
@@ -104,6 +106,8 @@ def fresh_schema():
     yield
     autotrade.quiesce()
     flow.quiesce()
+    best_bets.quiesce()
+    breakout_scan.quiesce()
     session.reset_for_tests()
     session_store.revoke_all()
 
@@ -170,6 +174,43 @@ def fake_venue(monkeypatch):
     fakes.install(monkeypatch)
     yield fakes
     fakes.reset()
+
+
+@pytest.fixture(autouse=True)
+def no_outbound_data(monkeypatch):
+    """The screens' other outbound calls, silenced like the venue's.
+
+    Market cap and industry (Yahoo), BreakoutRadar's candles (Yahoo) and index
+    lists (Wikipedia, NSE), and its alerts (Telegram, Discord). Nothing answers
+    unless a test says what it answers; the index lists fall back to the
+    bundled snapshot, as they would offline.
+    """
+    from app.domains.trading.market import fundamentals
+
+    fundamentals.reset()
+    monkeypatch.setattr(fundamentals, "_fetch_one", lambda symbol: None)
+    import pandas as pd
+
+    from app.api_v2.routers import breakout as breakout_router
+    from app.core.config import get_settings
+    from app.domains.trading.market import universes, yahoo
+    from app.platform import notify
+
+    def offline(*args, **kwargs):
+        raise ConnectionError("no network in tests")
+
+    universes.reset()
+    breakout_router.reset_for_tests()
+    monkeypatch.setattr(yahoo, "_download", lambda *a, **k: pd.DataFrame())
+    monkeypatch.setattr(universes, "_fetch_live", offline)
+    monkeypatch.setattr(notify, "_post", offline)
+    # A saved live list on the machine running the tests must not decide
+    # what a test sees: the saved copies are read from a var/ of our own.
+    monkeypatch.setenv("TBOT_VAR_DIR", str(_TMP / "var"))
+    get_settings.cache_clear()
+    yield
+    fundamentals.reset()
+    universes.reset()
 
 
 @pytest.fixture(autouse=True)

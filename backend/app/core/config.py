@@ -239,6 +239,35 @@ class Settings(BaseSettings):
     tradier_superhot_min_pdi: float = 20.0
     tradier_superhot_di_ratio: float = 2.0
 
+    # --- Best Bets (a 21 EMA on 4-hour bars: deep retracements, fresh crosses)
+    # Tradier serves no 4-hour bar, so each symbol is ONE 15-minute timesales
+    # call over the regular session, folded into 09:30-anchored 4-hour bars
+    # (domains/trading/market/ema_screen.py). 40 days is all Tradier keeps of
+    # 15-minute bars for the regular session -- 18 once extended hours are
+    # included -- so it is also the whole window "the recent past" can mean.
+    # The universe leans volatile on purpose: a large cap almost never closes
+    # 20% under a two-week EMA, so a list of them would leave Strategy A empty.
+    tradier_best_bets_universe: str = (
+        "AAPL,MSFT,NVDA,AMZN,GOOGL,META,TSLA,AVGO,LLY,JPM,"
+        "V,UNH,XOM,MA,COST,HD,NFLX,BAC,CRM,AMD,"
+        "ADBE,ORCL,QCOM,INTC,MU,PLTR,COIN,SMCI,UBER,BA,"
+        "MSTR,HOOD,SOFI,RIVN,LCID,AFRM,UPST,RKLB,IONQ,QBTS,"
+        "RGTI,ONDS,SOUN,HIMS,CVNA,APP,SHOP,SNOW,NET,CRWD,"
+        "DDOG,ROKU,DKNG,MRNA,ENPH,FSLR,CELH,SMR,OKLO,ASTS"
+    )
+    tradier_best_bets_days: int = 40
+    tradier_best_bets_session: str = "regular"      # or "extended" (18 days)
+    tradier_best_bets_ema_span: int = 21
+    tradier_best_bets_deep_pct: float = 20.0        # A: a low this far under the EMA
+    tradier_best_bets_near_pct: float = 20.0        # B: now less than this above it
+    tradier_best_bets_cross_within: int = 3         # B: crossed on one of the last N candles
+    tradier_best_bets_velocity_bars: int = 5        # closes the rate of change is fitted on
+    # 4-hour bars change twice a session, so a quarter-hour old snapshot is
+    # current. Four workers keep a 60-name sweep inside Tradier's 120 req/min
+    # (60 on the sandbox) with room for the rest of the desk.
+    tradier_best_bets_ttl_s: int = 900
+    tradier_best_bets_workers: int = 4
+
     # --- commodities (API Ninjas, off-hours) --------------------------------
     # No default on purpose: this is a vendor credential, and a default in
     # source is a committed secret. Set TBOT_APININJAS_API_KEY in .env.

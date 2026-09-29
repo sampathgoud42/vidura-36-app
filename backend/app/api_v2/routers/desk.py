@@ -682,6 +682,29 @@ def hot(live: bool = Query(default=False), interval: str = Query(default="5min")
             "meta": _hot_meta(settings, interval, universe, live, held["at"])}
 
 
+@market_router.get("/best-bets", operation_id="getTradierBestBets")
+@deps.tenant_scoped
+def best_bets(live: bool = Query(default=False), refresh: bool = Query(default=False),
+              tenant: Tenant = Depends(deps.current_tenant),
+              db: DbSession = Depends(deps.get_db),
+              kr: Keyring = Depends(deps.keyring)) -> dict:
+    """The 4-hour 21-EMA screen: A, deep retracements turning back up (with
+    the trading days the gap would take to close at today's pace), and B,
+    fresh crosses above the EMA that are not yet extended.
+
+    Every symbol scanned comes back, qualifying or not, each with `setup` "A",
+    "B" or null -- the sheet filters, and a ticker that misses by a point is
+    worth seeing. Served from a snapshot that refreshes in the background;
+    `refresh` starts a sweep now and the answer says `refreshing` until it
+    lands.
+    """
+    from app.domains.trading.market import best_bets as screen
+
+    cred = _credential(db, tenant, kr, live=live)
+    return {"kind": "best_bets",
+            **screen.snapshot(tenant.id, cred, sandbox=not live, force=refresh)}
+
+
 @market_router.get("/flow", operation_id="getTradierOptionsFlow")
 @deps.tenant_scoped
 def flow(live: bool = Query(default=False), refresh: bool = Query(default=False),
