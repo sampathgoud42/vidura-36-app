@@ -29,7 +29,18 @@ TV_CHART_BASE = "https://www.tradingview.com/chart/OI0ZrHVM/?symbol="
 
 _CACHE: dict[str, tuple[float, dict]] = {}
 _CACHE_TTL = 60.0
-_LOCK = threading.Lock()
+# Older than _CACHE_TTL, a cached quote is still answered at once while a fresh
+# one is fetched behind it -- the pivots in it are the prior session's and do
+# not move all day, and a chart tile has no reason to wait a Yahoo round trip
+# (0.4-1.8 s, measured) for them. Past _STALE_MAX_S it is too old to show and
+# is fetched in line, as a miss is.
+_STALE_MAX_S = 300.0
+# One lock PER TICKER. It was one lock for every ticker, so a board of 18
+# charts fetched its pivots one after another -- the last tile waited for the
+# other seventeen, each holding a server thread while it did.
+_LOCKS: dict[str, threading.Lock] = {}
+_GUARD = threading.Lock()
+_REFRESHING: set[str] = set()
 
 
 class QuoteError(Exception):
@@ -211,24 +222,66 @@ def batch_quotes(tickers: list[str]) -> list[dict]:
     return out
 
 
+def _lock_for(key: str) -> threading.Lock:
+    with _GUARD:
+        lock = _LOCKS.get(key)
+        if lock is None:
+            lock = _LOCKS[key] = threading.Lock()
+        return lock
+
+
+def _fetch_into_cache(key: str) -> dict:
+    try:
+        data = _fetch(key)
+    except QuoteError:
+        raise
+    except Exception as exc:
+        raise QuoteError(f"quote fetch failed for {key}: {exc}") from exc
+    _CACHE[key] = (time.monotonic(), data)
+    return data
+
+
+def _refresh_behind(key: str) -> None:
+    """Fetch a fresh copy on a thread of its own, once per ticker at a time."""
+    with _GUARD:
+        if key in _REFRESHING:
+            return
+        _REFRESHING.add(key)
+
+    def run() -> None:
+        try:
+            with _lock_for(key):
+                _fetch_into_cache(key)
+        except Exception as exc:                         # noqa: BLE001
+            logger.debug("background quote refresh for %s failed: %s", key, exc)
+        finally:
+            with _GUARD:
+                _REFRESHING.discard(key)
+
+    threading.Thread(target=run, name=f"quote-{key}", daemon=True).start()
+
+
 def quote_for(ticker: str) -> dict:
-    """Cached quote+pivots for a desk ticker (single-flight per process)."""
+    """Cached quote+pivots for a desk ticker.
+
+    Fresh (under _CACHE_TTL): answered from cache. Stale but recent (under
+    _STALE_MAX_S): answered from cache at once, and refreshed behind the
+    answer. Missing or too old: fetched now -- once, however many ask for the
+    same ticker at the same moment, and without holding up other tickers.
+    """
     key = ticker.strip().upper()
     if not key or not key.replace("-", "").replace("^", "").isalnum():
         raise QuoteError(f"invalid ticker '{ticker}'")
-    now = time.monotonic()
     hit = _CACHE.get(key)
-    if hit and now - hit[0] < _CACHE_TTL:
-        return hit[1]
-    with _LOCK:
+    if hit:
+        age = time.monotonic() - hit[0]
+        if age < _CACHE_TTL:
+            return hit[1]
+        if age < _STALE_MAX_S:
+            _refresh_behind(key)
+            return hit[1]
+    with _lock_for(key):
         hit = _CACHE.get(key)
         if hit and time.monotonic() - hit[0] < _CACHE_TTL:
             return hit[1]
-        try:
-            data = _fetch(key)
-        except QuoteError:
-            raise
-        except Exception as exc:
-            raise QuoteError(f"quote fetch failed for {key}: {exc}") from exc
-        _CACHE[key] = (time.monotonic(), data)
-        return data
+        return _fetch_into_cache(key)

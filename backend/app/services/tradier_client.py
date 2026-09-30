@@ -20,11 +20,14 @@ symbol, a list for two). ``_as_list`` normalizes every such site.
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +87,41 @@ def normalize_base_url(uri: str | None, *, sandbox: bool) -> str:
     return f"{parsed.scheme}://{parsed.netloc}{path}"
 
 
+# ---- connections ------------------------------------------------------------
+# READS ride a kept-alive connection, one pool per thread and credential. A new
+# TLS handshake to Tradier costs about half a second from this desk: measured,
+# a timesales call took ~650 ms on a fresh connection and ~85 ms on a kept one,
+# a quote ~550 ms against ~55 ms. Every client used to open its own connection
+# and close it after one call, so every chart tile, mark and balance paid that
+# handshake -- twice for a chart. Per thread rather than one shared Session,
+# because requests does not promise a Session is safe across threads.
+#
+# A read may be retried once if the kept connection turns out to have been
+# dropped by the far end. WRITES -- orders, cancels, anything not a GET -- get
+# a fresh connection every time and are never retried: a reused socket can die
+# just as a request goes out, and for an order there is then no telling whether
+# it was received. Retrying could buy twice; a fresh connection cannot be stale.
+_READS = threading.local()
+_READ_RETRY = Retry(total=1, connect=1, read=1, status=0, other=0, redirect=0,
+                    allowed_methods=frozenset({"GET"}), raise_on_status=False)
+
+
+def _read_session(base: str, token: str) -> requests.Session:
+    pool = getattr(_READS, "pool", None)
+    if pool is None:
+        pool = _READS.pool = {}
+    s = pool.get((base, token))
+    if s is None:
+        s = requests.Session()
+        s.headers.update({"Authorization": f"Bearer {token}",
+                          "Accept": "application/json"})
+        adapter = HTTPAdapter(max_retries=_READ_RETRY, pool_connections=1, pool_maxsize=2)
+        s.mount("https://", adapter)
+        s.mount("http://", adapter)
+        pool[(base, token)] = s
+    return s
+
+
 @dataclass
 class TradierCredentials:
     access_token: str
@@ -100,19 +138,22 @@ class TradierClient:
         # Re-validated here, not just at load: every path that builds a client
         # goes through this constructor.
         self.base = normalize_base_url(creds.base_url, sandbox=creds.sandbox)
-        self._s = requests.Session()
-        self._s.headers.update({
-            "Authorization": f"Bearer {creds.access_token}",
-            "Accept": "application/json",
-        })
 
     # ── plumbing ────────────────────────────────────────────────────────────
     def _req(self, method: str, path: str, *, params: dict | None = None,
              data: dict | None = None) -> dict:
         url = f"{self.base}{path}"
         try:
-            r = self._s.request(method, url, params=params, data=data,
-                                timeout=TIMEOUT_S)
+            if method == "GET":
+                r = _read_session(self.base, self.creds.access_token).request(
+                    method, url, params=params, timeout=TIMEOUT_S)
+            else:
+                # A write: its own connection, used once (see _READS above).
+                with requests.Session() as s:
+                    s.headers.update({"Authorization": f"Bearer {self.creds.access_token}",
+                                      "Accept": "application/json"})
+                    r = s.request(method, url, params=params, data=data,
+                                  timeout=TIMEOUT_S)
         except requests.RequestException as exc:
             raise TradierError(f"Tradier unreachable: {exc}") from exc
         if r.status_code >= 400:
@@ -126,7 +167,8 @@ class TradierClient:
             raise TradierError(f"Tradier sent non-JSON: {r.text[:200]}") from exc
 
     def close(self) -> None:
-        self._s.close()
+        """Nothing to release: reads share this thread's kept-alive pool, and
+        each write closed its own connection when it was done."""
 
     # ── account ─────────────────────────────────────────────────────────────
     def profile(self) -> dict:

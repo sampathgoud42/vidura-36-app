@@ -102,6 +102,11 @@ def fresh_schema():
     session.reset_for_tests()
     session_store.revoke_all()
     deps.reset_keyring_for_tests()
+    # Market data shared across operators (the chart bars, the previous close)
+    # is cached for seconds in the router; a case must never read the last
+    # case's venue through it.
+    from app.api_v2.routers import desk as desk_router
+    desk_router.reset_market_caches()
     migrations.upgrade_to_head(url=url)
     yield
     autotrade.quiesce()

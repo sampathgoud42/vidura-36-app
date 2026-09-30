@@ -276,10 +276,30 @@ def _serve_desk(app: FastAPI) -> None:
                        "(run: npm run build -- --outDir dist-v2)", dist)
         return
 
-    for name in ("assets", "img"):
+    class _Cached(StaticFiles):
+        """StaticFiles that says how long a copy may be kept. It said nothing,
+        so Cloudflare applied its own 4-hour default and a browser re-asked
+        for every bundle after that -- and Cloudflare's edge did not keep them
+        at all (cf-cache-status: MISS)."""
+
+        def __init__(self, *args, cache_control: str, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._cache_control = cache_control
+
+        async def get_response(self, path, scope):
+            response = await super().get_response(path, scope)
+            if response.status_code == 200:
+                response.headers["Cache-Control"] = self._cache_control
+            return response
+
+    # /assets is vite's output: every file name carries a hash of its content,
+    # so a new build is a new name and a copy can be kept for a year untouched.
+    # /img is named by hand, so a day.
+    for name, cache in (("assets", "public, max-age=31536000, immutable"),
+                        ("img", "public, max-age=86400")):
         folder = dist / name
         if folder.is_dir():
-            app.mount(f"/{name}", StaticFiles(directory=folder), name=name)
+            app.mount(f"/{name}", _Cached(directory=folder, cache_control=cache), name=name)
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def desk(full_path: str):
@@ -300,7 +320,8 @@ def _serve_desk(app: FastAPI) -> None:
                                 content={"detail": f"no such endpoint: /{full_path}"})
         candidate = dist / full_path
         if full_path and candidate.is_file():
-            return FileResponse(candidate)
+            # the logo, the guides: named by hand, so an hour rather than a year
+            return FileResponse(candidate, headers={"Cache-Control": "public, max-age=3600"})
         # index.html is never cached. Its asset filenames carry a content hash
         # -- those are safe to cache forever -- but the HTML that NAMES them
         # is the one file that must never be stale, or a browser keeps loading
