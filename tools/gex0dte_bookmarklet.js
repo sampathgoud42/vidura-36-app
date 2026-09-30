@@ -16,9 +16,11 @@
 // CONFIG — the two values that change per machine.
 // ---------------------------------------------------------------------------
 
-// Where the desk is. 8791 on this machine (vidura-world still owns 8790).
-// A public tunnel URL works here too, which is how you push from a laptop
-// that is not the one running the desk.
+// Where the desk is: this machine's API (8791), or its public address
+// (python tools/make_bookmarklet.py --url https://vidura36.app). The public
+// one is the one to use from a browser -- Chrome asks before a public site
+// such as getgamma may call this machine's own address, and a call it has
+// not been allowed fails as "Failed to fetch".
 const API = 'http://127.0.0.1:8791';
 
 // Scoped push token from .env (TBOT_GEX_PUSH_TOKEN). It authorises the two
