@@ -17,8 +17,11 @@ tunnel, so the address does not change between restarts -- unlike the random
 ## Starting it
 
 ```bash
-start.bat --tunnel
+start.bat
 ```
+
+`start` opens the tunnel after the API, every time; `start.bat --no-tunnel`
+is the deliberate way to keep the desk local.
 
 The tunnel config lives in the project, not in your home directory:
 
@@ -108,7 +111,7 @@ ingress:
   - service: http_status:404
 ```
 
-`start.bat --tunnel` picks that up automatically — it looks for a named
+`start.bat` picks that up automatically — it looks for a named
 tunnel before falling back to a quick one — and `desk.yourdomain.com` stays
 yours. Override the name with `TBOT_TUNNEL_NAME` if you keep several.
 
@@ -141,9 +144,9 @@ back after a reboot at an address you cannot predict.
 python tools\autostart.py install
 ```
 
-Registers a Scheduled Task (`TradierBotDesk`) that runs `start.bat --tunnel`
-at logon, unelevated. `start` is idempotent, so it is harmless if the desk is
-already up.
+Registers a Scheduled Task (`TradierBotDesk`) that runs `start.bat` at logon,
+unelevated. `start` is idempotent, so it is harmless if the desk is already
+up, and a task never waits on a keypress the way a double-clicked window does.
 
 ```bash
 python tools\autostart.py status
@@ -179,5 +182,6 @@ desk while away, set the machine never to sleep.
 **Sessions end at restart.** They are in-memory, so a reboot signs you out
 everywhere — including whatever phone you left logged in.
 
-**Diagnosing.** `var/tunnel.out` is cloudflared's own log. `status.bat` says
-whether the process is alive and what URL it published.
+**Diagnosing.** `var/tunnel.out` is cloudflared's own log.
+`.venv\Scripts\python tools\appctl.py status` says whether the process is
+alive and what URL it published.

@@ -1,14 +1,26 @@
 #!/usr/bin/env sh
-# Start the desk (detached) and publish it at https://vidura36.app
+# Start Vidura - everything it needs, in order - and publish it at
+# https://vidura36.app
 #
-#   ./start.sh              API + built desk + the public tunnel
-#   ./start.sh --no-tunnel  keep it local on 127.0.0.1:8791 only
-#   ./start.sh --dev        also run the Vite dev server on 5199 (hot reload)
+#   ./start.sh               set up a fresh copy, install what changed, build
+#                            the web app if it is out of date, start the API,
+#                            and open the tunnel
+#   ./start.sh --restart     stop everything first, then start it again
+#   ./start.sh --no-tunnel   keep it on this machine only (127.0.0.1:8791)
+#   ./start.sh --dev         also run the Vite dev server on 5199 (hot reload)
 #
-# The tunnel is ON by default: this project has a NAMED Cloudflare tunnel on
-# its own domain, so publishing is how it normally runs. It used to be an
-# opt-in flag, which meant this script brought the desk up with no public
-# address while still reporting success.
+# ./stop.sh takes it all down. Status, the public URL and the audit are one
+# command each through tools/ - see README.md.
 cd "$(dirname "$0")" || exit 1
-[ -x .venv/bin/python ] || { echo "No .venv here yet - run ./setup.sh first."; exit 1; }
+
+if [ ! -x .venv/bin/python ]; then
+  echo
+  echo "  First start on this machine - setting Vidura up. This takes a few minutes."
+  echo
+  PY=$(command -v python3 || command -v python) || {
+    echo "  Python 3.12+ is required and was not found on PATH."; exit 1; }
+  # The system Python: this is the step that creates the virtualenv.
+  "$PY" tools/setup.py || exit 1
+fi
+
 exec .venv/bin/python tools/appctl.py start "$@"

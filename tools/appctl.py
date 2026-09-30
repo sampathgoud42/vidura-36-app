@@ -1,20 +1,21 @@
-"""Start, stop and inspect the Tradier Bot — one control surface, both OSes.
+"""Start, stop and inspect Vidura — one control surface, both OSes.
 
-The .bat and .sh files in the project root are two-line wrappers around this.
-Everything real happens here on purpose: the previous Windows launcher shelled
-out to PowerShell + CIM to find its own process, which has no Linux twin and
-could not be tested from the same place. This module does the same job with
-the standard library, so `start`/`stop`/`status` behave identically wherever
-the folder is copied.
+start.bat/start.sh and stop.bat/stop.sh in the project root are thin wrappers
+around this; they are the only launchers the root carries. Everything real
+happens here on purpose: the previous Windows launcher shelled out to
+PowerShell + CIM to find its own process, which has no Linux twin and could
+not be tested from the same place. This module does the same job with the
+standard library, so every command behaves identically wherever the folder is
+copied.
 
-    python tools/appctl.py start      # API (serves the built desk) detached
-    python tools/appctl.py start --dev    # + Vite dev server on 5199
+    python tools/appctl.py start      # everything: deps, web app, API, tunnel
+    python tools/appctl.py start --restart   # stop, then start
+    python tools/appctl.py start --no-tunnel # keep it on this machine
+    python tools/appctl.py start --dev       # + Vite dev server on 5199
     python tools/appctl.py start --foreground
     python tools/appctl.py stop
     python tools/appctl.py status
-    python tools/appctl.py restart
-    python tools/appctl.py url        # just the public tunnel URL
-    python tools/appctl.py launch     # start + tunnel, URL in a banner
+    python tools/appctl.py url        # just the public URL
 
 Processes are tracked by a pid file per service under var/. A pid file is
 never trusted on its own: the pid is verified to still be alive AND to still
@@ -71,8 +72,8 @@ def _load_dotenv() -> None:
 _load_dotenv()
 
 # 8791 and api_v2. The control scripts pointed at the old app on 8790 long
-# after the desk had been switched over, so `start.bat` started a server the
-# tunnel was not pointing at and `status.bat` reported the running desk as
+# after the desk had been switched over, so `start` started a server the
+# tunnel was not pointing at and `status` reported the running desk as
 # "stopped (port is in use by something else)".
 API_PORT = int(os.environ.get("TBOT_PORT", "8791"))
 DESK_PORT = int(os.environ.get("TBOT_DESK_PORT", "5199"))
@@ -433,26 +434,164 @@ def wait_healthy(port: int, timeout: float = 45.0) -> dict | None:
 
 
 # --------------------------------------------------------------------------
+# readiness: what `start` brings up to date before the API starts
+# --------------------------------------------------------------------------
+# Each step compares timestamps and does nothing when nothing changed, so an
+# ordinary start costs a few stat() calls. After a pull that moved a
+# dependency or the web app's source, the same `start` is what catches up --
+# which is the difference between "start" and "start whatever happens to be on
+# disk".
+
+FRONTEND = ROOT / "frontend"
+DIST = FRONTEND / "dist-v2"
+
+# Marks the last time requirements.txt was installed into THIS virtualenv. It
+# lives inside .venv so a rebuilt environment starts without one.
+REQUIREMENTS_STAMP = ROOT / ".venv" / ".requirements.stamp"
+
+# What a build is made from. Anything here newer than the build means the web
+# app the API is serving is not the one in the source tree.
+BUILD_INPUTS = (FRONTEND / "src", FRONTEND / "public", FRONTEND / "index.html",
+                FRONTEND / "package.json", FRONTEND / "package-lock.json",
+                FRONTEND / "vite.config.js", FRONTEND / "tailwind.config.js",
+                FRONTEND / "postcss.config.js")
+
+
+def _newest(paths) -> float:
+    newest = 0.0
+    for p in paths:
+        if p.is_file():
+            newest = max(newest, p.stat().st_mtime)
+        elif p.is_dir():
+            for f in p.rglob("*"):
+                if f.is_file():
+                    newest = max(newest, f.stat().st_mtime)
+    return newest
+
+
+def _npm() -> str | None:
+    from shutil import which
+
+    return which("npm.cmd" if IS_WINDOWS else "npm") or which("npm")
+
+
+def ensure_python_deps() -> str:
+    """pip install, if requirements.txt changed since it was last installed.
+
+    Never an upgrade: a requirement that is already satisfied is left alone,
+    so this is a no-op against a running API rather than files swapped out
+    from under it. Returns 'current', 'installed' or 'failed'.
+    """
+    req = ROOT / "requirements.txt"
+    if REQUIREMENTS_STAMP.is_file() and \
+            REQUIREMENTS_STAMP.stat().st_mtime >= req.stat().st_mtime:
+        return "current"
+    # flush: the child writes straight to the same output, and a buffered
+    # line would otherwise land after everything the child printed
+    print("Python   installing dependencies (requirements.txt changed)...", flush=True)
+    rc = subprocess.call([str(venv_python()), "-m", "pip", "install", "-r", str(req),
+                          "-q", "--disable-pip-version-check"], cwd=str(ROOT))
+    if rc != 0:
+        print("Python   dependency install FAILED - see the output above")
+        return "failed"
+    REQUIREMENTS_STAMP.touch()
+    return "installed"
+
+
+def _ensure_node_deps(npm: str) -> bool:
+    """npm install, if package-lock.json changed since node_modules was made.
+
+    npm leaves its own record of an install in node_modules/.package-lock.json;
+    it is touched after a successful run so an install that changed nothing
+    is not repeated on every start.
+    """
+    lock = FRONTEND / "package-lock.json"
+    marker = FRONTEND / "node_modules" / ".package-lock.json"
+    if marker.is_file() and (not lock.is_file()
+                             or marker.stat().st_mtime >= lock.stat().st_mtime):
+        return True
+    print("Web app  installing its dependencies (package-lock.json changed)...", flush=True)
+    rc = subprocess.call([npm, "install", "--prefix", str(FRONTEND),
+                          "--no-audit", "--no-fund"], cwd=str(ROOT))
+    if rc != 0:
+        print("Web app  dependency install FAILED - see the output above")
+        return False
+    if marker.is_file():
+        os.utime(marker)
+    return True
+
+
+def ensure_web_app() -> None:
+    """Build the web app into dist-v2, if the source is newer than the build.
+
+    Never fatal. A failed build leaves the previous one in service -- vite
+    writes nothing until the bundle compiles -- and with no build at all the
+    API still runs, still trades and still answers /docs. Losing the UI must
+    not cost the trading.
+    """
+    index = DIST / "index.html"
+    built_at = index.stat().st_mtime if index.is_file() else 0.0
+    if built_at and _newest(BUILD_INPUTS) <= built_at:
+        return
+    npm = _npm()
+    if npm is None:
+        print("Web app  npm not found - "
+              + ("serving the existing build" if built_at
+                 else "no web app until Node 18+ is installed"))
+        return
+    if not _ensure_node_deps(npm):
+        return
+    print("Web app  building "
+          + ("(its source is newer than the build)..." if built_at else "(first build)..."),
+          flush=True)
+    rc = subprocess.call([npm, "run", "build", "--prefix", str(FRONTEND)], cwd=str(ROOT))
+    if rc != 0:
+        print("Web app  build FAILED - "
+              + ("the previous build stays in service" if built_at
+                 else "the API runs with no web app"))
+        return
+    print("Web app  built into frontend/dist-v2")
+    # vidura36.app serves the web app from Cloudflare's edge (edge/, TUNNEL.md),
+    # and publishing there is a deploy -- not something a start does behind
+    # anyone's back. Until it is run, the edge serves the previous build.
+    if (ROOT / "edge" / "node_modules").is_dir():
+        print("         vidura36.app serves the web app from Cloudflare's edge -")
+        print("         publish this build there with:  npm --prefix edge run deploy")
+
+
+# --------------------------------------------------------------------------
 # commands
 # --------------------------------------------------------------------------
 
 def cmd_start(args) -> int:
     py = venv_python()
     if not py.is_file():
-        print(f"No virtualenv at {py}\nRun setup first:  "
-              f"{'setup.bat' if IS_WINDOWS else './setup.sh'}")
+        print(f"No virtualenv at {py}\nSet this copy up first:  "
+              f"{'start.bat' if IS_WINDOWS else './start.sh'} does it on its first "
+              f"run, or: python tools/setup.py")
         return 1
+
+    # Dependencies and the web app first, so the API starts against what is
+    # actually in the source tree, and serves the current web app from its
+    # very first request.
+    deps = ensure_python_deps()
+    if deps == "failed":
+        return 1
+    ensure_web_app()
 
     if args.foreground:
         if running_pid("api"):
             print("The API is already running in the background. Stop it first.")
             return 1
-        print(f"Tradier Bot API on http://127.0.0.1:{args.port}  (Ctrl-C to stop)")
+        print(f"Vidura API on http://127.0.0.1:{args.port}  (Ctrl-C to stop)")
         return subprocess.call(_api_cmd(args.port), cwd=str(ROOT), env=_api_env(args.port))
 
     pid = running_pid("api")
     if pid:
-        print(f"API already running (pid {pid}) on port {args.port}")
+        print(f"API      already running (pid {pid}) on port {args.port}")
+        if deps == "installed":
+            print("         it loads the new dependencies on its next start:  "
+                  f"{'start.bat' if IS_WINDOWS else './start.sh'} --restart")
     elif port_busy(args.port):
         # Something else owns the port. Starting anyway would produce a
         # server that fails to bind but keeps running every background loop
@@ -475,7 +614,8 @@ def cmd_start(args) -> int:
         if dpid:
             print(f"Desk     pid {dpid}  http://127.0.0.1:{DESK_PORT} (dev)")
         elif not (ROOT / "frontend" / "node_modules").is_dir():
-            print("Desk     skipped - frontend/node_modules missing (run setup)")
+            print("Desk     skipped - frontend/node_modules missing "
+                  "(python tools/setup.py installs it)")
         else:
             npm = "npm.cmd" if IS_WINDOWS else "npm"
             dpid = _spawn("desk", [npm, "run", "dev", "--prefix", "frontend"],
@@ -484,13 +624,22 @@ def cmd_start(args) -> int:
     elif desk_built:
         print(f"Desk     http://127.0.0.1:{args.port}/   (served by the API)")
     else:
-        print("Desk     not built - run `npm run build` in frontend/, "
-              "or start with --dev")
+        print("Desk     no web app build - the API runs without one "
+              "(install Node 18+, then start again)")
 
     if args.tunnel:
         _start_tunnel(args.port)
 
     print(f"Docs     http://127.0.0.1:{args.port}/docs")
+
+    public = tunnel_url() if args.tunnel and running_pid("tunnel") else None
+    stop = "stop.bat" if IS_WINDOWS else "./stop.sh"
+    print()
+    print(f"Vidura is up{'' if public else ' on this machine only'}.")
+    if public:
+        print(f"  anywhere      {public}")
+    print(f"  this machine  http://127.0.0.1:{args.port}/")
+    print(f"  stop it       {stop}")
     return 0
 
 
@@ -652,13 +801,19 @@ def cmd_stop(args) -> int:
         if port_busy(args.port):
             print(f"note: port {args.port} is still in use - another app "
                   f"is on it")
+
+    # Deliberately not "everything": a bot is a separate process with
+    # positions of its own, and stopping the desk must never be the same act
+    # as abandoning them (see _terminate). Say so, so nobody assumes otherwise.
+    print("Bots     left running - a bot holds its own positions; stop it "
+          "from the Bot Station")
     return 0
 
 
 def cmd_status(args) -> int:
     print(f"project  {ROOT}")
     venv = venv_python()
-    print(f"venv     {'ok' if venv.is_file() else 'MISSING - run setup'}")
+    print(f"venv     {'ok' if venv.is_file() else 'MISSING - the first start sets it up'}")
 
     pid = running_pid("api")
     if pid:
@@ -708,8 +863,8 @@ def cmd_url(args) -> int:
     picking it out of a status block.
     """
     if running_pid("tunnel") is None:
-        print("no tunnel running - start it with:  start.bat --tunnel",
-              file=sys.stderr)
+        print(f"no tunnel running - start it with:  "
+              f"{'start.bat' if IS_WINDOWS else './start.sh'}", file=sys.stderr)
         return 1
     url = tunnel_url()
     if not url:
@@ -717,58 +872,6 @@ def cmd_url(args) -> int:
               f"{log_file('tunnel')}", file=sys.stderr)
         return 1
     print(url)
-    return 0
-
-
-def _to_clipboard(text: str) -> bool:
-    """Best-effort copy. Never fails the launch over a missing utility."""
-    tools = ([["clip"]] if IS_WINDOWS
-             else [["pbcopy"], ["xclip", "-selection", "clipboard"], ["xsel", "-ib"]])
-    for tool in tools:
-        try:
-            proc = subprocess.run(tool, input=text, text=True,
-                                  capture_output=True, timeout=5)
-            if proc.returncode == 0:
-                return True
-        except (OSError, subprocess.SubprocessError):
-            continue
-    return False
-
-
-def cmd_launch(args) -> int:
-    """Bring the desk up on a public URL and show it, big.
-
-    Same work as `start --tunnel`, presented for someone who double-clicked
-    an icon rather than typed a command: the URL is the answer they came
-    for, so it gets a frame of its own and lands on the clipboard. The
-    wrapper keeps the window open afterwards.
-    """
-    rc = cmd_start(args)
-    if rc != 0:
-        return rc
-
-    url = tunnel_url()
-    print()
-    if not url:
-        print("  The desk is up locally, but the tunnel published no URL.")
-        print(f"  Look at {log_file('tunnel')} for why.")
-        print(f"  Locally it is on http://127.0.0.1:{args.port}/")
-        return 1
-
-    bar = "=" * (len(url) + 8)
-    print(f"  {bar}")
-    print(f"     {url}")
-    print(f"  {bar}")
-    print()
-    print("  Open that from any device, anywhere. Sign in with your")
-    print("  operator password.")
-    print()
-    if _to_clipboard(url):
-        print("  (copied to your clipboard)")
-    print()
-    print("  This window can be closed - the desk keeps running.")
-    print("  To take it down:   stop.bat")
-    print("  To see it again:   url.bat")
     return 0
 
 
@@ -780,11 +883,14 @@ def cmd_restart(args) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Start/stop the Tradier Bot.",
+        description="Start, stop and inspect Vidura.",
         formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("action",
-                    choices=["start", "stop", "restart", "status", "url",
-                             "launch"])
+                    choices=["start", "stop", "restart", "status", "url"])
+    # `start --restart` rather than a restart launcher of its own: the root
+    # carries start and stop, and a restart is the one of those done twice.
+    ap.add_argument("--restart", action="store_true",
+                    help="with start: stop everything first, then start it again")
     ap.add_argument("--dev", action="store_true",
                     help="also run the Vite dev server (hot reload) on 5199")
     # The tunnel is ON by default. This project has a NAMED tunnel on its own
@@ -808,9 +914,10 @@ def main() -> int:
     args.tunnel = not args.no_tunnel
 
     VAR.mkdir(parents=True, exist_ok=True)
+    if args.action == "start" and args.restart:
+        return cmd_restart(args)
     return {"start": cmd_start, "stop": cmd_stop, "restart": cmd_restart,
-            "status": cmd_status, "url": cmd_url,
-            "launch": cmd_launch}[args.action](args)
+            "status": cmd_status, "url": cmd_url}[args.action](args)
 
 
 if __name__ == "__main__":

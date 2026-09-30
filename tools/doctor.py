@@ -107,14 +107,14 @@ def check_env() -> None:
     header("ENV")
     if sys.version_info < (3, 12):
         fail("ENV", f"Python {sys.version.split()[0]} is too old",
-             "install Python 3.12+ and re-run setup")
+             "install Python 3.12+, then start again")
     else:
         ok("ENV", f"Python {sys.version.split()[0]}")
 
     venv_py = ROOT / (".venv/Scripts/python.exe" if IS_WINDOWS else ".venv/bin/python")
     if not venv_py.is_file():
         fail("ENV", "no virtualenv at .venv/",
-             "run setup.bat (Windows) or ./setup.sh")
+             "run start.bat (Windows) or ./start.sh - a first start sets the copy up")
         return
     ok("ENV", "virtualenv present")
 
@@ -132,7 +132,8 @@ def check_env() -> None:
              f"re-run as: {venv_py} tools/doctor.py")
     elif missing:
         fail("ENV", f"missing dependencies: {', '.join(missing)}",
-             "re-run setup, or: .venv/bin/pip install -r requirements.txt")
+             "start again (it installs what requirements.txt lists), "
+             "or: .venv/bin/pip install -r requirements.txt")
     else:
         ok("ENV", "all backend dependencies importable")
 
@@ -412,8 +413,10 @@ def check_line_endings() -> None:
     else:
         ok("LAUNCHERS", "*.sh are LF and *.bat are CRLF - both OSes can run them")
 
-    pairs = ("start", "stop", "restart", "status", "setup", "doctor",
-             "launch", "url")
+    # The root carries these two and nothing else: start sets a fresh copy
+    # up and does everything else a start needs, and the rarer commands
+    # (status, url, this audit) are one call each through tools/.
+    pairs = ("start", "stop")
     missing = [n for n in pairs
                if not (ROOT / f"{n}.bat").is_file() or not (ROOT / f"{n}.sh").is_file()]
     if missing:

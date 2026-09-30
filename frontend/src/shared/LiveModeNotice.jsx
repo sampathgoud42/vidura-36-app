@@ -61,7 +61,7 @@ export default function LiveModeNotice({ mode, accent = '#f87171' }) {
       <b>🔒 Live trading is locked on this server.</b> Starting in LIVE will be
       refused (<code>TBOT_PAPER_ONLY=true</code>). This is a deliberate guard —
       unlock it yourself, from a terminal, when you mean to trade real money:
-      <pre>set TBOT_PAPER_ONLY=false{'\n'}restart.bat</pre>
+      <pre>set TBOT_PAPER_ONLY=false{'\n'}start.bat --restart</pre>
       <span className="vw-live-hint">
         Until then PAPER runs the identical engine with simulated fills.
       </span>

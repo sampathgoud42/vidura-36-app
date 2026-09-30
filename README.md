@@ -29,30 +29,53 @@ venue, different instruments, and subprocess execution nothing else has.
 ## Quick start
 
 ```bash
-setup.bat
-```
-
-```bash
 start.bat
 ```
 
-Open <http://127.0.0.1:8791/>.
+That is the whole of it, on a fresh copy too (`./start.sh` on Linux/macOS).
+In order, `start`:
 
-The desk and the API are the same origin, so nothing has to be configured to
-point one at the other.
+1. sets the copy up if it has never run here: `.venv`, the Python and Node
+   dependencies, `.env` from `.env.example`, a first build, and the audit
+2. installs whatever `requirements.txt` or `package-lock.json` added since
+3. rebuilds the web app if its source is newer than the build
+4. starts the API, which serves the web app, and waits for it to answer
+5. opens the tunnel to <https://vidura36.app>
+
+Every step that has nothing to do is skipped, so an ordinary start takes
+seconds. Then open <http://127.0.0.1:8791/> here, or <https://vidura36.app>
+from anywhere. The desk and the API are the same origin, so nothing has to be
+configured to point one at the other.
+
+```bash
+stop.bat
+```
+
+Stops the tunnel, then the API. Bots keep running: each holds positions of
+its own, so they are stopped from the Bot Station, never as a side effect.
+
+| | |
+| --- | --- |
+| `start.bat --restart` | stop everything, then start it again |
+| `start.bat --no-tunnel` | start it on this machine only |
+| `start.bat --dev` | also run the Vite dev server on 5199 (hot reload) |
+| `.venv\Scripts\python tools\appctl.py status` | what is running, which database, paper or live |
+| `.venv\Scripts\python tools\appctl.py url` | the public address, and nothing else |
+| `.venv\Scripts\python tools\doctor.py` | the self-containment audit |
+| `python tools\autostart.py install` | start at logon ([TUNNEL.md](TUNNEL.md)) |
+
+Double-clicked from Explorer, `start.bat` and `stop.bat` keep their window
+open at the end so the result can be read.
 
 ### From anywhere
 
-```bash
-start.bat --tunnel
-```
-
-Publishes the same desk at <https://vidura36.app> over a Cloudflare tunnel.
-The address is permanent -- it is a named tunnel on your own zone rather than
-the random `trycloudflare.com` hostname the quick tunnel used to hand out.
+`start` publishes the desk at <https://vidura36.app> over a Cloudflare
+tunnel; `--no-tunnel` keeps it local. The address is permanent -- it is a
+named tunnel on your own zone rather than the random `trycloudflare.com`
+hostname the quick tunnel used to hand out.
 
 Nothing moves to a server: the tunnel is an inbound path to the process on
-this machine, so when the machine sleeps the address stops answering. Every
+this machine, so when the machine sleeps the API stops answering. Every
 `/api` route refuses without a session, so an unauthenticated visitor reaches
 the sign-in screen and nothing else. Details, and the things worth reading
 before sharing the link, are in [TUNNEL.md](TUNNEL.md).
