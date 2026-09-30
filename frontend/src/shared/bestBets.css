@@ -1,0 +1,94 @@
+/* Best Bets — the link, and its sheet. The sheet wears the report viewer's
+   chrome from superSignals.css (.ss-scrim, .ss-viewer, .ss-vhead, .ss-bp),
+   portaled to <body>, so it keeps that viewer's fixed dark palette rather
+   than the --tr-* tokens. The link sits inside a world, so it uses them.
+   Spacing between flex children is margin, not `gap` — older iPhone Safari
+   ignores gap in flexbox (vidura36 skill). */
+
+.bb-link {
+  display: inline-flex; align-items: center; min-height: 28px; padding: 0;
+  border: 0; background: transparent; cursor: pointer; text-align: left;
+  color: var(--tr-accent-hi, #93a0ff); text-decoration: underline; text-underline-offset: 3px;
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace;
+  font-size: 12px; font-weight: 600; -webkit-tap-highlight-color: transparent;
+}
+/* a flex container drops the span's leading space, so the gap is a margin */
+.bb-link .d { margin-left: 0.4em; font-weight: 400; color: var(--tr-dim, #9aa3d0); }
+.bb-link--touch { min-height: 44px; font-size: 13px; }
+
+/* ── the bar: which setups, and what is on screen ─────────────────────────── */
+.bb-bar {
+  display: flex; flex-wrap: wrap; align-items: center; flex: 0 0 auto;
+  padding: 4px 12px 10px; border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace;
+}
+.bb-bar > * { margin: 6px 10px 0 0; }
+.bb-seg {
+  display: flex; padding: 2px; border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+}
+.bb-seg button {
+  flex: 0 0 auto; min-height: 30px; padding: 0 11px; border: 0; border-radius: 999px;
+  background: transparent; color: #9aa3d0; cursor: pointer; white-space: nowrap;
+  font-family: inherit; font-size: 11px; font-weight: 600; -webkit-tap-highlight-color: transparent;
+}
+.bb-seg button.on { color: #e3e6fa; background: rgba(147, 160, 255, 0.18); }
+.bb-seg .n { margin-left: 6px; font-weight: 400; opacity: 0.7; }
+.bb-clear { height: 34px; }
+.bb-sum { flex: 1 1 260px; margin-right: 0 !important; font-size: 11px; line-height: 1.45; color: #9aa3d0; }
+.bb-sum b { color: #e3e6fa; }
+
+/* ── the table: every heading sorts, and carries its own filter ───────────── */
+.bb-table { font-size: 12px; }
+.bb-table thead th { vertical-align: top; }
+.bb-table th input {
+  display: block; box-sizing: border-box; width: calc(100% - 12px); min-width: 58px;
+  height: 26px; margin: 0 6px 6px; padding: 0 7px; border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.12); background: #0b0c16; color: #e3e6fa;
+  font-family: inherit; font-size: 11.5px; font-weight: 400; letter-spacing: 0; text-transform: none;
+}
+.bb-table th input::placeholder { color: #4d5480; }
+.bb-table th input:focus { outline: none; border-color: var(--ss-accent, #5b6af0); }
+.bb-table th input.bad { border-color: #fbbf24; }
+
+/* the ticker names the row, so it stays put while the numbers scroll past */
+.bb-table .tk { position: sticky; left: 0; z-index: 1; background: #0b0c16; }
+.bb-table thead .tk { z-index: 3; background: #12142a; }
+.bb-tkr {
+  border: 0; padding: 0; background: transparent; cursor: pointer;
+  font: inherit; font-weight: 700; color: #e3e6fa;
+  text-decoration: underline dotted; text-underline-offset: 2px; -webkit-tap-highlight-color: transparent;
+}
+.bb-table .pos { color: #34d399; }
+.bb-table .neg { color: #ff6b5e; }
+.bb-setup {
+  display: inline-block; min-width: 20px; padding: 1px 7px; border-radius: 6px;
+  font-weight: 700; text-align: center;
+}
+.bb-setup.A { color: #fbbf24; background: rgba(251, 191, 36, 0.12); }
+.bb-setup.B { color: #34d399; background: rgba(52, 211, 153, 0.12); }
+.bb-none { color: #5f679b; }
+.bb-table .ind { max-width: 220px; overflow: hidden; text-overflow: ellipsis; color: #9aa3d0; }
+.bb-table tr.dead td { color: #5f679b; }
+.bb-note b { color: #c7ccef; }
+
+@media (hover: hover) {
+  .bb-link:hover { color: var(--tr-ink, #e3e6fa); }
+  .bb-seg button:not(.on):hover { color: #e3e6fa; }
+}
+
+/* phones: full screen (the viewer's own rule), 44pt controls, and inputs at
+   16px so Safari does not zoom the page when one takes focus */
+@media (max-width: 720px) {
+  .bb-bar {
+    padding-left: max(12px, env(safe-area-inset-left));
+    padding-right: max(12px, env(safe-area-inset-right));
+  }
+  .bb-seg { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
+  .bb-seg button { min-height: 44px; font-size: 12px; }
+  .bb-clear { height: 44px; }
+  .bb-table th input { height: 40px; min-width: 76px; font-size: 16px; }
+  .bb-table td { padding: 10px 9px; }
+  .bb-tkr { min-height: 44px; min-width: 44px; text-align: left; }
+  .bb-table .ind { max-width: 150px; }
+}

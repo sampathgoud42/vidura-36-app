@@ -239,17 +239,22 @@ def market_session(*, cred: VenueCredential) -> dict:
 
 
 def timesales(symbol: str, *, cred: VenueCredential, interval: str = "5min",
-              start: str | None = None, sandbox: bool = True) -> list[dict]:
+              start: str | None = None, sandbox: bool = True,
+              session_filter: str | None = None) -> list[dict]:
     """Intraday bars.
 
     Only the intervals the venue serves natively are passed through. Anything
     coarser is folded from these by indicators.aggregate -- asking the venue
     for a 2-minute bar returns nothing useful, and doing the fold at each call
     site is how two boards end up disagreeing about the same instrument.
+
+    ``session_filter`` ("open" or "all") is passed through only when given, so
+    every existing caller keeps the venue's default.
     """
     client = _client(cred, sandbox=sandbox)
     try:
-        return list(client.timesales(symbol, interval, start=start))
+        return list(client.timesales(symbol, interval, start=start,
+                                     session_filter=session_filter))
     finally:
         client.close()
 

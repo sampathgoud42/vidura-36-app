@@ -1,0 +1,339 @@
+/* BreakoutRadar — dark, with emerald for everything that means "breakout".
+   The iPhone rules of the vidura36 skill hold here as in 36 Trades: spacing
+   between flex children is margin (older Safari ignores flex `gap`), touch
+   targets are 44px, inputs are 16px on phones so Safari never zooms, sheets
+   are portaled to <body> (a fixed element inside a scroller moves with it),
+   and fixed furniture clears the notch and the home indicator. */
+
+.br-root {
+  --br-bg: #050b09;
+  --br-panel: #0a1612;
+  --br-panel-2: #0e1d18;
+  --br-line: rgba(16, 185, 129, 0.18);
+  --br-ink: #e6f4ee;
+  --br-dim: #9fb8ad;
+  --br-faint: #5f7a6f;
+  --br-em: #10b981;
+  --br-em-hi: #34d399;
+  --br-em-lo: rgba(16, 185, 129, 0.14);
+  --br-red: #f87171;
+  --br-amber: #fbbf24;
+  min-height: 100vh;
+  background:
+    radial-gradient(1200px 500px at 10% -10%, rgba(16, 185, 129, 0.10), transparent 60%),
+    var(--br-bg);
+  color: var(--br-ink);
+  padding-bottom: env(safe-area-inset-bottom);
+}
+.br-main {
+  max-width: 1280px; margin: 0 auto;
+  padding: 8px max(16px, env(safe-area-inset-right)) 24px max(16px, env(safe-area-inset-left));
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace;
+}
+
+/* ── top navigation ────────────────────────────────────────────────────────── */
+.br-nav {
+  display: flex; flex-wrap: wrap; align-items: center;
+  padding: 10px 12px 4px; margin: 4px 0 10px;
+  border: 1px solid var(--br-line); border-radius: 14px; background: var(--br-panel);
+}
+.br-nav > * { margin: 0 8px 8px 0; }
+.br-brand {
+  margin-right: 12px !important; font-family: 'Outfit', system-ui, sans-serif;
+  font-size: 21px; font-weight: 600; letter-spacing: 0.01em; color: var(--br-ink); white-space: nowrap;
+}
+.br-brand b { color: var(--br-em-hi); font-weight: 700; }
+.br-pills {
+  display: flex; padding: 3px; border-radius: 999px;
+  border: 1px solid var(--br-line); background: rgba(0, 0, 0, 0.25);
+}
+.br-pills button {
+  min-height: 38px; padding: 0 14px; border: 0; border-radius: 999px;
+  background: transparent; color: var(--br-dim); cursor: pointer; white-space: nowrap;
+  font-family: 'Outfit', system-ui, sans-serif; font-size: 14px; font-weight: 600;
+  -webkit-tap-highlight-color: transparent;
+}
+.br-pills button + button { margin-left: 3px; }
+.br-pills button.on {
+  color: #03140d; background: var(--br-em-hi);
+  box-shadow: 0 0 18px rgba(52, 211, 153, 0.35);
+}
+.br-select { display: inline-flex; align-items: center; }
+.br-select span {
+  margin-right: 6px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--br-faint);
+}
+.br-select select {
+  height: 38px; padding: 0 30px 0 12px; border-radius: 10px;
+  border: 1px solid var(--br-line); background-color: var(--br-panel-2); color: var(--br-ink);
+  font-family: inherit; font-size: 13px; cursor: pointer;
+  -webkit-appearance: none; appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--br-em-hi) 50%),
+                    linear-gradient(135deg, var(--br-em-hi) 50%, transparent 50%);
+  background-position: calc(100% - 15px) 16px, calc(100% - 10px) 16px;
+  background-size: 5px 5px; background-repeat: no-repeat;
+}
+.br-run {
+  min-height: 40px; padding: 0 22px; border: 0; border-radius: 10px; cursor: pointer;
+  background: linear-gradient(180deg, #34d399, #10b981); color: #03140d;
+  font-family: 'Outfit', system-ui, sans-serif; font-size: 15px; font-weight: 700;
+  box-shadow: 0 6px 24px rgba(16, 185, 129, 0.35);
+  -webkit-tap-highlight-color: transparent;
+}
+.br-run:disabled { cursor: progress; opacity: 0.75; }
+.br-btn {
+  min-height: 38px; padding: 0 14px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--br-em); background: var(--br-em-lo); color: var(--br-em-hi);
+  font-family: inherit; font-size: 12.5px; font-weight: 600; white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+.br-btn.ghost { border-color: var(--br-line); background: transparent; color: var(--br-dim); }
+.br-btn.ghost.on { border-color: var(--br-em); color: var(--br-em-hi); }
+.br-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* ── progress + summary ───────────────────────────────────────────────────── */
+.br-progress {
+  position: relative; height: 22px; margin: 0 0 10px; overflow: hidden;
+  border-radius: 8px; border: 1px solid var(--br-line); background: var(--br-panel);
+}
+.br-progress i {
+  position: absolute; left: 0; top: 0; bottom: 0; display: block;
+  background: linear-gradient(90deg, rgba(16, 185, 129, 0.25), rgba(52, 211, 153, 0.55));
+  -webkit-transition: width 0.4s ease; transition: width 0.4s ease;
+}
+.br-progress span { position: relative; padding-left: 10px; font-size: 11px; line-height: 22px; color: var(--br-ink); }
+.br-summary { margin: 0 2px 10px; }
+.br-count { margin: 0 0 6px; font-size: 12px; color: var(--br-dim); line-height: 1.5; }
+.br-count .n { font-size: 20px; color: var(--br-em-hi); margin-right: 4px; }
+.br-count .run { color: var(--br-amber); }
+.br-fails { margin: 0; font-size: 11px; color: var(--br-faint); line-height: 2; }
+.br-chip {
+  display: inline-block; margin: 0 6px 0 0; padding: 1px 8px; border-radius: 999px;
+  border: 1px solid var(--br-line); color: var(--br-dim); white-space: nowrap;
+}
+.br-msg { margin: 6px 0; font-size: 13px; color: var(--br-dim); }
+.br-msg.err { color: var(--br-amber); }
+.br-empty {
+  margin: 4px 0 14px; padding: 14px 16px; border-radius: 12px; font-size: 12.5px; line-height: 1.55;
+  border: 1px dashed var(--br-line); color: var(--br-dim);
+}
+.br-hint { margin: 4px 0 0; font-size: 11px; line-height: 1.5; color: var(--br-faint); }
+.br-linkbtn {
+  border: 0; padding: 0; background: none; cursor: pointer; font: inherit;
+  color: var(--br-em-hi); text-decoration: underline; text-underline-offset: 2px;
+}
+
+/* ── the table ─────────────────────────────────────────────────────────────── */
+/* position: relative makes the wrapper the containing block of the table's
+   visually-hidden label (.sr, position: absolute). Without it the label's box
+   belongs to the page, escapes the sideways scroll, sits at the table's far
+   right edge -- and a phone widens its whole layout viewport to reach it,
+   dragging every fixed sheet off-screen with it. */
+.br-tablewrap {
+  position: relative;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--br-line); border-radius: 12px; background: var(--br-panel);
+}
+.br-table {
+  width: 100%; min-width: 760px; border-collapse: separate; border-spacing: 0; font-size: 12.5px;
+}
+.br-table th, .br-table td {
+  padding: 9px 12px; text-align: left; white-space: nowrap;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.br-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.br-table thead th { padding: 0; background: var(--br-panel-2); }
+.br-table th button {
+  display: flex; align-items: center; width: 100%; min-height: 36px; padding: 0 12px;
+  border: 0; background: transparent; color: var(--br-dim); cursor: pointer; white-space: nowrap;
+  font-family: inherit; font-size: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;
+  -webkit-tap-highlight-color: transparent;
+}
+.br-table th.num button { justify-content: flex-end; }
+.br-table thead th.plain {
+  padding: 0 12px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--br-dim);
+}
+.br-table th[aria-sort='ascending'] button, .br-table th[aria-sort='descending'] button { color: var(--br-em-hi); }
+.br-table .ar { margin-left: 5px; font-size: 9px; opacity: 0.4; }
+.br-table th[aria-sort='ascending'] .ar, .br-table th[aria-sort='descending'] .ar { opacity: 1; }
+/* the ticker names the row, so it stays put while the numbers scroll past */
+.br-table .tk { position: sticky; left: 0; z-index: 1; background: var(--br-panel); }
+.br-table thead .tk { z-index: 2; background: var(--br-panel-2); }
+.br-table td.tk b { font-size: 13px; color: var(--br-ink); }
+.br-table td.tk .age {
+  margin-left: 6px; padding: 0 5px; border-radius: 5px; font-size: 10px;
+  color: var(--br-amber); border: 1px solid rgba(251, 191, 36, 0.35);
+}
+.br-table td.tk .nm {
+  display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
+  font-size: 10px; color: var(--br-faint);
+}
+.br-table .up { color: var(--br-em-hi); }
+.br-table .down { color: var(--br-red); }
+.br-table .miss { color: var(--br-amber); font-size: 11.5px; }
+.br-table .act { text-align: right; }
+.br-table .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.br-badge {
+  display: inline-block; min-width: 54px; padding: 2px 8px; border-radius: 7px; text-align: center;
+  font-weight: 700; color: #b8f5d9; background: rgba(16, 185, 129, 0.12);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+}
+.br-badge.high { color: #03140d; background: #6ee7b7; border-color: #6ee7b7; }
+.br-badge.hot {
+  color: #03140d; background: #10b981; border-color: #34d399;
+  box-shadow: 0 0 12px rgba(52, 211, 153, 0.55);
+}
+.br-chartbtn {
+  min-height: 32px; padding: 0 12px; border-radius: 8px; cursor: pointer;
+  border: 1px solid var(--br-em); background: transparent; color: var(--br-em-hi);
+  font-family: inherit; font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.br-near { margin-top: 14px; }
+.br-neartoggle {
+  min-height: 40px; margin-bottom: 8px; padding: 0; border: 0; background: none; cursor: pointer;
+  color: var(--br-dim); font-family: inherit; font-size: 12px; letter-spacing: 0.06em;
+}
+.br-foot { margin: 18px 2px 0; font-size: 10.5px; line-height: 1.6; color: var(--br-faint); }
+
+@media (hover: hover) {
+  .br-pills button:not(.on):hover, .br-btn.ghost:hover { color: var(--br-ink); }
+  .br-table tbody tr:hover td { background: #0f221c; }
+  .br-chartbtn:hover { background: var(--br-em-lo); }
+  .br-table th button:hover { color: var(--br-ink); }
+}
+
+/* ── sheets: portaled to <body>, so they carry their own palette ─────────── */
+.br-scrim {
+  position: fixed; inset: 0; z-index: 1000; display: flex; justify-content: flex-end;
+  background: rgba(1, 6, 4, 0.72);
+  -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  font-family: ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace; color: #e6f4ee;
+}
+.br-scrim.center { align-items: center; justify-content: center; padding: 3vh 2vw; }
+.br-drawer {
+  min-width: 0;
+  display: flex; flex-direction: column; width: 100%; max-width: 420px; height: 100%;
+  background: #0a1612; border-left: 1px solid rgba(16, 185, 129, 0.25);
+  box-shadow: -20px 0 60px rgba(0, 0, 0, 0.5);
+  padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+  -webkit-animation: br-slide 0.18s ease-out; animation: br-slide 0.18s ease-out;
+}
+@-webkit-keyframes br-slide { from { -webkit-transform: translateX(40px); opacity: 0; } }
+@keyframes br-slide { from { transform: translateX(40px); opacity: 0; } }
+/* min-width: 0 on everything that holds the chart. A canvas's intrinsic
+   width is its backing store -- three times its CSS width on an iPhone -- and
+   a flex item will not shrink below its content's, so without this the modal
+   grows, the canvas is measured wider, redrawn wider, and walks off-screen. */
+.br-modal {
+  min-width: 0;
+  display: flex; flex-direction: column; width: 100%; max-width: 1100px; max-height: 94vh;
+  overflow: hidden; border-radius: 16px; background: #07100d;
+  border: 1px solid rgba(16, 185, 129, 0.25); box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+}
+.br-sheethd {
+  display: flex; align-items: center; flex: 0 0 auto; padding: 10px 12px;
+  border-bottom: 1px solid rgba(16, 185, 129, 0.15);
+}
+.br-sheethd > * { margin-left: 8px; }
+.br-sheettitle {
+  margin: 0 auto 0 4px !important; font-size: 10.5px; letter-spacing: 0.24em; text-transform: uppercase;
+  color: #34d399;
+}
+.br-sheettitle.big { margin-right: 0 !important; font-size: 18px; letter-spacing: 0.04em; text-transform: none; color: #e6f4ee; font-weight: 700; }
+.br-sub { font-size: 11px; color: #9fb8ad; }
+.br-sub:last-of-type { margin-right: auto; }
+.br-x {
+  min-width: 40px; height: 40px; border-radius: 10px; cursor: pointer;
+  border: 1px solid rgba(255, 255, 255, 0.14); background: transparent; color: inherit;
+  font-size: 20px; line-height: 1; -webkit-tap-highlight-color: transparent;
+}
+.br-sheetbody {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 12px 16px 20px;
+}
+.br-modalbody {
+  flex: 1 1 auto; min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; padding: 10px 14px 16px;
+}
+.br-scrim .br-btn {
+  border: 1px solid #10b981; background: rgba(16, 185, 129, 0.14); color: #34d399;
+}
+.br-scrim .br-btn.ghost { border-color: rgba(255, 255, 255, 0.14); background: transparent; color: #9fb8ad; }
+.br-scrim .br-hint { color: #7d978c; }
+
+.br-field { margin: 0 0 16px; }
+.br-fieldhd { display: flex; justify-content: space-between; font-size: 12px; color: #c9dcd4; }
+.br-fieldhd .v { color: #34d399; font-weight: 700; }
+.br-fieldrow { display: flex; align-items: center; margin-top: 6px; }
+.br-fieldrow input[type='range'] { flex: 1 1 auto; min-width: 0; margin-right: 10px; accent-color: #10b981; height: 28px; }
+.br-fieldrow input[type='number'], .br-in input {
+  height: 36px; padding: 0 9px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #050b09; color: #e6f4ee; font-family: inherit; font-size: 13px;
+}
+.br-fieldrow input[type='number'] { width: 96px; flex: 0 0 auto; }
+.br-fieldrow input:focus, .br-in input:focus { outline: none; border-color: #10b981; }
+.br-toggle { display: flex; align-items: center; min-height: 44px; font-size: 13px; cursor: pointer; }
+.br-toggle input { width: 20px; height: 20px; margin-right: 10px; accent-color: #10b981; }
+.br-fs { margin: 12px 0; padding: 8px 12px 12px; border: 1px solid rgba(16, 185, 129, 0.2); border-radius: 12px; }
+.br-fs legend { padding: 0 6px; font-size: 10.5px; letter-spacing: 0.16em; text-transform: uppercase; color: #34d399; }
+.br-in { display: flex; flex-direction: column; margin-top: 8px; font-size: 11px; color: #9fb8ad; }
+.br-in span { margin-bottom: 4px; }
+.br-row { display: flex; flex-wrap: wrap; align-items: center; }
+.br-row > * { margin: 0 10px 6px 0; }
+
+/* the chart and its verdict */
+.brc { min-width: 0; margin-bottom: 10px; }
+.brc-read { display: flex; flex-wrap: wrap; min-height: 18px; margin-bottom: 4px; font-size: 11px; color: #9fb8ad; }
+.brc-read span { margin-right: 10px; white-space: nowrap; }
+.brc-read .up { color: #34d399; }
+.brc-read .down { color: #f87171; }
+.brc-read .e20 { color: #6ee7b7; }
+.brc-read .e50 { color: #fbbf24; }
+.brc-canvas {
+  display: block; width: 100%; max-width: 100%; min-width: 0;
+  touch-action: pan-y; cursor: crosshair;
+}
+.br-verdict { margin-top: 6px; }
+.br-verdicthd { margin: 0 0 8px; font-size: 12.5px; font-weight: 700; }
+.br-verdicthd.pass { color: #34d399; }
+.br-verdicthd.fail { color: #fbbf24; }
+.br-rules {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); margin: 0; padding: 0; list-style: none;
+}
+.br-rules li {
+  display: flex; align-items: baseline; margin: 0 10px 6px 0; padding: 7px 10px; border-radius: 9px;
+  font-size: 11.5px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.br-rules li b { margin-right: 6px; white-space: nowrap; color: #e6f4ee; }
+.br-rules li span:last-child { color: #9fb8ad; overflow-wrap: anywhere; }
+.br-rules .mk { margin-right: 8px; font-weight: 700; }
+.br-rules .ok .mk { color: #34d399; }
+.br-rules .no .mk { color: #f87171; }
+.br-rules .na .mk { color: #9fb8ad; }
+.br-rules .no { border-color: rgba(248, 113, 113, 0.35); }
+
+/* ── phones and small tablets ─────────────────────────────────────────────── */
+@media (max-width: 720px) {
+  .br-main { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .br-nav { padding: 10px 10px 2px; }
+  .br-brand { width: 100%; margin-bottom: 6px !important; font-size: 20px; }
+  .br-pills { width: 100%; margin-right: 0 !important; }
+  .br-pills button { flex: 1 1 50%; min-height: 44px; font-size: 14px; padding: 0 8px; }
+  .br-select select { height: 44px; font-size: 16px; }
+  .br-run { min-height: 44px; flex: 1 1 auto; }
+  .br-btn { min-height: 44px; }
+  .br-table th button { min-height: 44px; }
+  .br-chartbtn { min-height: 44px; }
+  .br-neartoggle { min-height: 44px; }
+  .br-drawer { max-width: none; border-left: 0; }
+  .br-scrim.center { padding: 0; }
+  .br-modal {
+    max-width: none; max-height: none; height: 100%; border: 0; border-radius: 0;
+    padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom);
+  }
+  .br-x { min-width: 44px; height: 44px; }
+  .br-fieldrow input[type='number'], .br-in input { height: 44px; font-size: 16px; }
+  .br-fieldrow input[type='range'] { height: 44px; }
+  .br-rules { grid-template-columns: minmax(0, 1fr); }
+}

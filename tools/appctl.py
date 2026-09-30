@@ -521,17 +521,29 @@ def _ensure_node_deps(npm: str) -> bool:
     return True
 
 
-def ensure_web_app() -> None:
+def ensure_web_app(dev: bool = False) -> None:
     """Build the web app into dist-v2, if the source is newer than the build.
+
+    dist-v2 is gitignored, so a `git pull` brings new web-app source without a
+    new build -- and the API would go on serving the old bundle while
+    reporting a healthy start, a new world or panel simply absent from it.
 
     Never fatal. A failed build leaves the previous one in service -- vite
     writes nothing until the bundle compiles -- and with no build at all the
     API still runs, still trades and still answers /docs. Losing the UI must
     not cost the trading.
+
+    `dev` (start --dev) skips a rebuild that would only be stale again at the
+    next save: the dev server serves the source as it changes. A first build
+    still runs, so the API has a web app at all.
     """
     index = DIST / "index.html"
     built_at = index.stat().st_mtime if index.is_file() else 0.0
     if built_at and _newest(BUILD_INPUTS) <= built_at:
+        return
+    if dev and built_at:
+        print("Web app  --dev: not rebuilding - the dev server on 5199 serves the "
+              "current source; the API on 8791 serves the last build")
         return
     npm = _npm()
     if npm is None:
@@ -577,7 +589,7 @@ def cmd_start(args) -> int:
     deps = ensure_python_deps()
     if deps == "failed":
         return 1
-    ensure_web_app()
+    ensure_web_app(dev=args.dev)
 
     if args.foreground:
         if running_pid("api"):

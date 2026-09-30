@@ -157,7 +157,18 @@ def install(monkeypatch) -> None:
         if order_id in acct.orders:
             acct.orders[order_id]["status"] = "canceled"
 
+    # Market data answers with nothing, the same outcome a venue that cannot be
+    # reached gives the boards, without a network round trip per symbol. A
+    # test that needs bars or quotes substitutes its own.
+    def timesales(symbol, *, cred=None, interval="5min", start=None,
+                  sandbox=True, session_filter=None):
+        return []
+
+    def quotes(symbols, *, cred=None, sandbox=True):
+        return []
+
     for name, fn in (
+        ("timesales", timesales), ("quotes", quotes),
         ("expirations", expirations), ("option_chain", option_chain),
         ("balance", balance), ("held_quantity", held_quantity),
         ("working_orders_for", working_orders_for),

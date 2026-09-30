@@ -12,6 +12,7 @@ import { WorldGate, DefaultWorld } from './auth/WorldGate.jsx';
 const Tradier = lazy(() => import('./sites/tradier/TradierSite.jsx'));
 const Desk36 = lazy(() => import('./sites/desk36/Desk36Site.jsx'));
 const BotStation = lazy(() => import('./sites/botstation/BotStationSite.jsx'));
+const Breakout = lazy(() => import('./sites/breakout/BreakoutSite.jsx'));
 
 function Loader() {
   return (
@@ -54,7 +55,8 @@ export default function App() {
                 every world route is behind its own enabled flag, so an old
                 bookmark to a disabled world explains itself. Both trading
                 worlds carry a Lightweight board of their own; Bot Station
-                has none, so it is walled off in that mode. */}
+                and BreakoutRadar have none, so they are walled off in that
+                mode. */}
             <Route path="/" element={<DefaultWorld />} />
             <Route path="/tradier-platform/*" element={
               <WorldGate id="tradier-platform"><Tradier /></WorldGate>} />
@@ -63,6 +65,10 @@ export default function App() {
             <Route path="/bot-station/*" element={
               <WorldGate id="bot-station">
                 <RegularOnly world="Bot Station"><BotStation /></RegularOnly>
+              </WorldGate>} />
+            <Route path="/breakout-radar/*" element={
+              <WorldGate id="breakout-radar">
+                <RegularOnly world="BreakoutRadar"><Breakout /></RegularOnly>
               </WorldGate>} />
             <Route path="*" element={<DefaultWorld />} />
           </Routes>

@@ -47,6 +47,7 @@
     { "pattern": "vidura36.app/tradier-platform*", "zone_name": "vidura36.app" },
     { "pattern": "vidura36.app/36-trade-desk*", "zone_name": "vidura36.app" },
     { "pattern": "vidura36.app/bot-station*", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/breakout-radar*", "zone_name": "vidura36.app" },
     { "pattern": "vidura36.app/api/v1/auth/login", "zone_name": "vidura36.app" },
 
     { "pattern": "www.vidura36.app/", "zone_name": "vidura36.app" },
@@ -58,6 +59,7 @@
     { "pattern": "www.vidura36.app/tradier-platform*", "zone_name": "vidura36.app" },
     { "pattern": "www.vidura36.app/36-trade-desk*", "zone_name": "vidura36.app" },
     { "pattern": "www.vidura36.app/bot-station*", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/breakout-radar*", "zone_name": "vidura36.app" },
     { "pattern": "www.vidura36.app/api/v1/auth/login", "zone_name": "vidura36.app" }
   ],
 

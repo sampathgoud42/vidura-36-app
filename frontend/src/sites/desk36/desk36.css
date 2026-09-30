@@ -584,6 +584,10 @@
    report pills scroll on their own. */
 .d36-signals > .ss { padding: 12px 10px; overflow-x: visible; }
 
+/* Best bets (shared/BestBets.jsx): one link, a full 44pt row. */
+.d36-sectname { cursor: default; }
+.d36-bets > .bb-link { display: flex; width: 100%; padding: 0 4px; overflow-x: visible; }
+
 /* The desk's chart carries its own panel chrome; this only has to host it. */
 .d36-chartcell .tr-chart {
   border-radius: 10px;

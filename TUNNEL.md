@@ -56,7 +56,7 @@ live pointing at a server that is shutting down.
 
 A Cloudflare Worker, `vidura36-edge` (the `edge/` folder), sits in front of
 the tunnel on both hostnames. It carries a copy of the built desk and serves
-the web app's own paths from Cloudflare's edge: `/`, the three worlds,
+the web app's own paths from Cloudflare's edge: `/`, the four worlds,
 `/assets`, `/img`, `/guides` and the logo. They load fast on a phone, and they
 load even while this machine is asleep, so the sign-in card can say the desk
 is offline instead of Cloudflare's tunnel error page.

@@ -190,15 +190,23 @@ class TradierClient:
         return _as_list((d.get("quotes") or {}).get("quote"))
 
     def timesales(self, symbol: str, interval: str = "1min",
-                  start: str | None = None, end: str | None = None) -> list[dict]:
+                  start: str | None = None, end: str | None = None,
+                  session_filter: str | None = None) -> list[dict]:
         """Intraday bars for today: ``[{time, timestamp, open, high, low, close,
         volume, vwap}]``. The seed a live chart needs — the socket only starts
-        producing from the moment you connect."""
+        producing from the moment you connect.
+
+        ``session_filter`` is Tradier's own: "open" for the regular session
+        only, "all" (its default) for extended hours too. It changes how far
+        back the venue answers -- 15-minute bars reach 40 days with "open"
+        and 18 with "all" -- so a caller that needs the depth must ask."""
         params: dict[str, Any] = {"symbol": symbol, "interval": interval}
         if start:
             params["start"] = start
         if end:
             params["end"] = end
+        if session_filter:
+            params["session_filter"] = session_filter
         d = self._req("GET", "/markets/timesales", params=params)
         return _as_list((d.get("series") or {}).get("data"))
 
