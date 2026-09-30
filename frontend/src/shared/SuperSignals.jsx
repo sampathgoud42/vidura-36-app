@@ -21,6 +21,11 @@ import './superSignals.css';
 //
 // Nothing here trades. "call ▸" / "put ▸" opens the desk's own buy ticket
 // with the symbol and side filled in; the order is still yours to confirm.
+//
+// `lite` is the Lightweight board's form of it (shared/experience.js): today's
+// signals on the same timer, without the daily reports -- those are the desk's
+// history, not its signals. BestPair below takes the place of the pairs link
+// at its foot. `reloadKey` (that board's refresh) asks again at once.
 
 const POLL_OPEN_MS = 60_000;       // a 5m bar and its outcomes land once a bar; a minute catches each
 const POLL_IDLE_MS = 10 * 60_000;  // outside the desk's day only a new report changes anything
@@ -142,7 +147,8 @@ function deskStatus(d) {
 }
 
 export default function SuperSignals({
-  compact = false, touch = false, accent = '#5b6af0', paused = false, onPick, onTrade,
+  compact = false, touch = false, accent = '#5b6af0', paused = false,
+  lite = false, reloadKey = 0, onPick, onTrade,
 }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);           // text, or 'offline'
@@ -175,7 +181,8 @@ export default function SuperSignals({
   // never while the tab is hidden — coming back refreshes at once. The first
   // load always runs, so a desk opened in a background tab is ready when it
   // is switched to. `paused` (a sheet is open on 36 Trades) skips the tick
-  // rather than rebuilding the timer, so the next one stays on schedule.
+  // rather than rebuilding the timer, so the next one stays on schedule. A
+  // move of `reloadKey` does rebuild it: that is a load now, and a fresh wait.
   const pausedRef = useRef(paused);
   useEffect(() => { pausedRef.current = paused; }, [paused]);
   useEffect(() => {
@@ -195,11 +202,11 @@ export default function SuperSignals({
       clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVis);
     };
-  }, [load]);
+  }, [load, reloadKey]);
 
   // The list changes when a day's report is written, so follow the session.
   const reportKey = data ? `${data.date}|${data.report?.available}` : '';
-  useEffect(() => { loadReports(); }, [loadReports, reportKey]);
+  useEffect(() => { if (!lite) loadReports(); }, [loadReports, reportKey, lite]);
 
   const ids = useMemo(() => (data
     ? [...data.signals.map((s) => s.id), ...data.watchlist.map((w) => w.id)] : null), [data]);
@@ -303,7 +310,7 @@ export default function SuperSignals({
                 <>No signals yet{data.phase === 'pre-open' ? ' — the desk opens at 08:30 CST' : ''}.
                   {data.previous && (
                     <span> Last session {md(data.previous.date)}: {data.previous.signals} signals
-                      {data.previous.report && (
+                      {data.previous.report && !lite && (
                         <> · <button type="button" className="ss-link"
                           onClick={() => setViewer(data.previous.date)}>read its report</button></>
                       )}</span>
@@ -407,7 +414,7 @@ export default function SuperSignals({
         </>
       )}
 
-      {(data || reports?.length > 0) && (
+      {!lite && (data || reports?.length > 0) && (
         <div className="ss-best">
           <button type="button" className="ss-link ss-bestlink" onClick={() => setBest(true)}
             title="the daily report's best ticker + signal pairs over the last 30 sessions: sort any column, filter by win %, edge and net R">
@@ -416,7 +423,7 @@ export default function SuperSignals({
         </div>
       )}
 
-      {(reports?.length > 0 || data?.is_today) && (
+      {!lite && (reports?.length > 0 || data?.is_today) && (
         <div className="ss-reports">
           <div className="ss-rhead">daily reports</div>
           <div className="ss-pills">
@@ -447,6 +454,118 @@ export default function SuperSignals({
           onClose={() => setViewer(null)} />
       )}
       {best && <BestPairsViewer accent={accent} onClose={() => setBest(false)} />}
+    </section>
+  );
+}
+
+/** The best pair: the top of the daily report's best ticker + signal pairs
+ * (/super-signals/best-pairs, 30 sessions) as a card of its own, which is what
+ * a Lightweight board shows in place of the pairs link at the foot of the
+ * panel above. The whole sortable table is one tap away, in the same viewer.
+ * The list is rewritten once a day, after the 15:00 CST report, so this asks
+ * every ten minutes -- soon enough to show the new one shortly after it lands
+ * -- as well as on coming back to the tab and on the board's refresh
+ * (`reloadKey`). `paused` skips the tick, as it does for the panel above. */
+export function BestPair({
+  compact = false, touch = false, accent = '#5b6af0', paused = false, reloadKey = 0,
+  onPick, onTrade,
+}) {
+  const [res, setRes] = useState(null);           // the API's answer
+  const [err, setErr] = useState(null);           // text, or 'offline'
+  const [table, setTable] = useState(false);      // the full list, as a sheet
+
+  const load = useCallback(async () => {
+    try {
+      setRes(await vidura.superSignalsBestPairs());
+      setErr(null);
+    } catch (e) { setErr(errText(e)); }
+  }, []);
+  const pausedRef = useRef(paused);
+  useEffect(() => { pausedRef.current = paused; }, [paused]);
+  useEffect(() => {
+    load();
+    const t = setInterval(() => {
+      if (!document.hidden && !pausedRef.current) load();
+    }, POLL_IDLE_MS);
+    const onVis = () => { if (!document.hidden) load(); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onVis);
+    };
+  }, [load, reloadKey]);
+
+  const top = res?.pairs?.[0] || null;
+  const [agent, setup, grade, direction] = String(top?.type_key || '').split('|');
+  const long = direction !== 'SHORT';
+  const day = res?.session
+    ? new Date(`${res.session}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' })
+    : '';
+
+  return (
+    <section className={`ss tr-panel${compact ? ' ss--compact' : ''}${touch ? ' ss--touch' : ''}`}
+      aria-label="best pair">
+      <div className="ss-head">
+        <span className="tr-eyebrow ss-eyebrow">best pair</span>
+        {res?.session && (
+          <span className="ss-day" title={res.window
+            ? `${res.window.sessions} sessions, ${res.window.from} → ${res.window.to}` : undefined}>
+            {day} {md(res.session)} report
+          </span>
+        )}
+      </div>
+
+      {err === 'offline' && <p className="ss-offline">{OFFLINE}</p>}
+      {err && err !== 'offline' && <p className="tr-err ss-err">⚠ {err}</p>}
+      {!res && !err && <p className="ss-empty">loading the best pair…</p>}
+      {res && !top && !err && (
+        <p className="ss-empty">No best pairs yet: the desk writes them with its 15:00 CST report.</p>
+      )}
+
+      {top && (
+        <div className="ss-pair">
+          <div className="ss-pair-l1">
+            <button type="button" className="ss-tkr ss-pair-tkr" onClick={() => onPick?.(top.ticker)}
+              title={`${top.ticker} — quote, levels, chart`}>{top.ticker}</button>
+            <span className={`ss-dir ${long ? 'long' : 'short'}`}>{long ? '▲ LONG' : '▼ SHORT'}</span>
+            <span className="ss-pair-rank" title="its place in the report's list">
+              #{top.rank} of {res.total}
+            </span>
+          </div>
+          <p className="ss-pair-sig" title={top.signal}>
+            <span className="ss-agent">{agent}</span> {label(setup)}
+            {grade && <span className="ss-grade"> [{grade}]</span>}
+          </p>
+          <div className="ss-score" title={'over the last 30 sessions: targets – stops – timeouts, '
+            + 'win % (targets over targets + stops), net R, and edge (50 is breakeven)'}>
+            <span><b className="w">{top.wins}</b>–<b className="l">{top.losses}</b>–
+              <b className="t">{top.timeouts}</b></span>
+            {top.win_pct != null && <span>{Math.round(top.win_pct)}% win</span>}
+            <span className={`ss-net ${top.net_r > 0 ? 'pos' : top.net_r < 0 ? 'neg' : ''}`}>
+              {rStr(top.net_r)}
+            </span>
+            {top.edge != null && <span>edge {top.edge.toFixed(1)}</span>}
+          </div>
+          <p className="ss-pair-fired">
+            fired today {top.fired_today} · past week {top.fired_past_week}
+            {top.last_fired && ` · last ${md(top.last_fired)}`}
+          </p>
+          <div className="ss-actions">
+            {onTrade && (
+              <button type="button" className={`ss-btn ${long ? 'call' : 'put'}`}
+                onClick={() => onTrade(top.ticker, long ? 'call' : 'put')}
+                title={`open a buy ticket for a ${top.ticker} ${long ? 'call' : 'put'} — nothing is placed until you confirm it`}>
+                {top.ticker} {long ? 'call' : 'put'} ▸
+              </button>
+            )}
+            <button type="button" className="ss-btn" onClick={() => setTable(true)}
+              title="every pair, as a table that sorts on any column">
+              all {res.total} pairs ›
+            </button>
+          </div>
+        </div>
+      )}
+      {table && <BestPairsViewer accent={accent} onClose={() => setTable(false)} />}
     </section>
   );
 }

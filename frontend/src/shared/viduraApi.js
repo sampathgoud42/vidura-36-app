@@ -9,6 +9,8 @@
 //   3. dev/preview default: http://<current hostname>:8791
 //   4. same-origin '' (reverse-proxy deployments routing /api to the API)
 
+import { forgetExperience, liteRunning } from './experience.js';
+
 const API_BASE_KEY = 'api38.base';
 const API_KEY_KEY = 'vidura.api.key'; // session token / shared X-API-Key
 
@@ -79,8 +81,42 @@ function newIdempotencyKey() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 }
 
+// ---- Lightweight mode -----------------------------------------------------
+// Everything a Lightweight board may ask for: its five panels, the orders they
+// place, and signing in. Enforced here, at the one door every request passes,
+// so "lightweight" is a property of the traffic and not only of the layout: a
+// panel added to a board later cannot quietly start loading in this mode --
+// it gets a refusal, and has to be written for it. Prefixes of the path under
+// /api/v1; experience.js says when this applies.
+const LITE_PATHS = [
+  '/auth/',                     // identity and world access
+  '/tradier/venue',             // which accounts this operator can trade
+  '/tradier/balance',           // buying power, which every order is sized from
+  '/tradier/positions',         // managed positions: list, buy, sweep, close, target
+  '/tradier/chain',             // the 36 Trades ticket's contract preview
+  '/tradier/autotrade/',        // arm, disarm, status
+  '/tradier/timesales',         // the chart's bars
+  '/tradier/stream/session',    // the chart's live price (market data only)
+  '/levels/stop',               // the Tradier desk's 15:00 safety stop
+  '/super/quote/',              // the chart's pivots; a tapped ticker's quote
+  '/super-signals/session',     // super signals
+  '/super-signals/best-pairs',  // the best pair, and the arm form's pairs
+  '/super-signals/rank',        // the arm form's signal types
+];
+
+function liteRefuses(path) {
+  return liteRunning() && !LITE_PATHS.some((p) => path.startsWith(p));
+}
+
 async function req(method, path, { body, params, timeout = 30000,
                                    idempotencyKey } = {}) {
+  // Refused before anything is sent. The status is a word rather than a
+  // number because no HTTP status is true of a request that never left: the
+  // desks print it as the error's badge.
+  if (liteRefuses(path)) {
+    throw new ApiError('lite',
+      `${path.split('?')[0]} is not loaded in Lightweight mode - switch to Regular for it`);
+  }
   let url = apiBase() + '/api/v1' + path;
   if (params) {
     const qs = new URLSearchParams(
@@ -188,9 +224,16 @@ export function storedUserId() {
 // The session token rides in the SAME localStorage key and the SAME header
 // the shared-key mode already used, so every call above authenticates
 // without a single call site changing.
+//
+// Lightweight or Regular lives exactly as long as the token does, so both
+// places the token changes hands forget it: login() and clearToken(), which
+// every way out of a session goes through (sign-out, idle, 401, stale token).
 export const auth = {
   token: () => { try { return localStorage.getItem(API_KEY_KEY) || ''; } catch { return ''; } },
-  clearToken: () => { try { localStorage.removeItem(API_KEY_KEY); } catch { /* ignore */ } },
+  clearToken: () => {
+    try { localStorage.removeItem(API_KEY_KEY); } catch { /* ignore */ }
+    forgetExperience();
+  },
 
   // Open endpoint: is a password needed at all on this server?
   status: () => api.get('/auth/status'),
@@ -200,6 +243,7 @@ export const auth = {
   async login(username, password) {
     const out = await api.post('/auth/login', { username, password });
     try { localStorage.setItem(API_KEY_KEY, out.token); } catch { /* ignore */ }
+    forgetExperience();              // a new session asks again
     return out;
   },
 

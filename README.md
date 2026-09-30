@@ -146,6 +146,46 @@ Two hours of no keyboard or pointer input also signs you out.
 
 ---
 
+## Lightweight and Regular
+
+Straight after signing in, the desk asks: **Lightweight Mode** or **Regular
+Mode**. Nothing on the desk loads until you answer.
+
+| | Lightweight | Regular |
+| --- | --- | --- |
+| on screen | buy, auto-trade and venue controls; one large chart (SPY until you click its ticker and pick another); open positions; Super Signals; the best pair | every panel, board and chart |
+| refreshing | automatic: each panel on the timer it runs on the full desk, and on the live venue the chart's price streams tick by tick; **↻ refresh** reloads all five at once | every panel on its usual timer |
+| left out | the index strip, the chart grid, HOT scan, options flow, commodities, gamma, movers, the alerts bell and the daily reports, and every request behind them | nothing |
+| Bot Station | not available; switch to Regular to open it | as usual |
+
+The answer lasts for the **session on this device**. A reload or a second tab
+keeps it, and the next sign-in asks again with your last answer preselected,
+so Enter repeats it. Signing out, the two-hour idle sign-out and an expired
+session all end a session. Switch at any time with the **lite | regular**
+control in the header; the page restarts under the new mode.
+
+Lightweight is enforced on the traffic, not only on the layout. While it is
+on, the API client (`frontend/src/shared/viduraApi.js`, `LITE_PATHS`) refuses
+any request outside the five panels and the orders they place, before it is
+sent, so nothing the board leaves out can quietly come back in this mode.
+Measured against a request-logging stand-in for the API in market hours:
+
+| | Lightweight | Regular |
+| --- | --- | --- |
+| Tradier Platform, opening | 16 requests | 81 |
+| Tradier Platform, each minute after | about 22 | about 52 |
+| 36 Trades, opening | 10 | 40 |
+| 36 Trades, each minute after | about 9 | about 23 |
+
+Most of what is left on Tradier Platform is the positions list, which keeps
+the desk's six-second refresh. Both trading worlds have a Lightweight board:
+Tradier Platform lays it out for a desktop, 36 Trades for a phone. The chart's
+ticker is shared between them, and remembered on the device. Positions stay
+managed with no board open at all: the take-profit rests on the venue, and
+the stop-loss is the API's own monitor.
+
+---
+
 ## Safety
 
 This desk places real orders. The guarantees below are structural — they are

@@ -1502,4 +1502,69 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
 .tr-pairmins label { display: flex; flex-direction: column; margin: 0 10px 4px 0; }
 .tr-pairmins .tr-note { font-size: 10px; margin-bottom: 2px; }
 .tr-pairmins .tr-input { width: 96px; }
+
+/* ── Lightweight board: five panels and nothing else ────────────────────────
+   Execution in the header, then the chart over the open positions, with the
+   best pair over the super signals beside them -- one column, in that order,
+   below 1100px. Spacing between flex children is margin, not gap (Safari). */
+.tr-lite {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
+  gap: 16px;
+  align-items: start;
+}
+.tr-lite-main, .tr-lite-side { display: flex; flex-direction: column; min-width: 0; }
+.tr-lite-main > * + *, .tr-lite-side > * + * { margin-top: 16px; }
+@media (max-width: 1100px) {
+  .tr-lite { grid-template-columns: minmax(0, 1fr); }
+}
+/* the one chart is the board's centrepiece, so its readouts step up a size */
+.tr-lite .tr-chart { padding: 0.95rem 1.05rem 0.5rem; }
+.tr-lite .tr-chartsym { font-size: 13px; }
+.tr-lite .tr-chartchg { font-size: 13px; }
+/* its ticker is editable (click it); on a touch screen the box is 16px, or
+   iOS Safari zooms the whole page in to type into it */
+.tr-lite .tr-syminput { font-size: 13px; }
+@media (pointer: coarse) {
+  .tr-lite .tr-syminput { font-size: 16px; }
+}
+
+/* the refresh, and word that the board refreshes on its own -- always
+   reachable, even while the balance panel is still waiting on its first
+   answer. Not "live": on this desk that word is the venue. */
+.tr-literow { display: flex; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.tr-literow > * { margin-right: 10px; }
+.tr-literow .tr-livedot { margin: 0 6px 0 0; vertical-align: 1px; cursor: default; }
+.tr-literefresh {
+  min-height: 30px; padding: 4px 13px;
+  color: var(--tr-accent-hi); border-color: var(--tr-accent);
+  background: rgba(91, 106, 240, 0.1);
+  font-weight: 700; letter-spacing: 0.06em;
+}
+.tr-literefresh:hover:not(:disabled) { background: rgba(91, 106, 240, 0.2); }
+.tr-literefresh:disabled { opacity: 0.6; cursor: progress; }
+
+/* what the auto-trader is armed for, under the execution controls. Inline
+   flow rather than flex: a flex row wrapped the sentence away from its dot */
+.tr-autoline {
+  margin: 10px 0 0;
+  font-family: ui-monospace, Consolas, monospace; font-size: 10.5px; line-height: 1.45;
+  color: var(--tr-dim, #9aa3d0);
+}
+.tr-autoline.on { color: var(--tr-green, #34d399); }
+.tr-autoline .dot {
+  display: inline-block; vertical-align: 1px;
+  width: 7px; height: 7px; margin-right: 7px; border-radius: 50%;
+  background: currentColor; box-shadow: 0 0 7px currentColor;
+}
+
+/* a position already carried over, on the positions table */
+.tr-litecarry { margin-left: 6px; cursor: help; }
+
+
+@media (max-width: 480px) {
+  .tr-literefresh { min-height: 44px; }
+  .tr-lite-main > * + *, .tr-lite-side > * + * { margin-top: 12px; }
+  .tr-lite { gap: 12px; }
+}
 .tr-pairmins .tr-input.bad { border-color: var(--tr-amber); }

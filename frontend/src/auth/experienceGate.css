@@ -1,0 +1,233 @@
+/* The Lightweight / Regular question, straight after sign-in. It continues
+   the sign-in screen -- same hero plate, same gold on midnight navy, same
+   type -- so the two read as one doorway rather than a door and a form.
+   iPhone Safari first: safe areas, 44pt targets, margins rather than flex
+   gap, the prefixed backdrop blur, and one scrolling layer with nothing
+   fixed inside it. */
+
+.xp-root {
+  position: fixed;
+  inset: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  color: #f4f1ea;
+  font-family: 'Outfit', system-ui, sans-serif;
+  /* The plate is this layer's own background, not an <img> inside it: the
+     layer scrolls on a short phone, and the plate should not scroll with it. */
+  background:
+    radial-gradient(ellipse at 50% 38%, rgba(5, 5, 16, 0.4) 0%, rgba(5, 5, 16, 0.74) 62%,
+      rgba(5, 5, 16, 0.93) 100%),
+    url('/img/hero-vidura-bg.webp') center / cover no-repeat,
+    #050510;
+}
+
+.xp-center {
+  box-sizing: border-box;
+  min-height: 100%;
+  display: grid;
+  place-items: center;
+  padding:
+    calc(28px + env(safe-area-inset-top))
+    max(16px, env(safe-area-inset-right))
+    calc(28px + env(safe-area-inset-bottom))
+    max(16px, env(safe-area-inset-left));
+}
+
+.xp-stack {
+  width: 100%;
+  max-width: 760px;
+  text-align: center;
+}
+
+.xp-kicker {
+  margin: 0;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5em;
+  color: rgba(253, 230, 138, 0.7);
+}
+
+.xp-title {
+  margin: 0.55rem 0 0;
+  font-family: 'Cinzel', serif;
+  font-size: clamp(1.3rem, 4.2vw, 1.95rem);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #f4f1ea;
+  text-shadow: 0 0 26px rgba(232, 180, 90, 0.35);
+}
+
+.xp-sub {
+  margin: 0.65rem auto 0;
+  max-width: 32rem;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+/* Grid gap is safe on every Safari this serves; only flexbox gap is not. */
+.xp-options {
+  margin-top: 1.7rem;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  text-align: left;
+}
+@media (max-width: 640px) {
+  .xp-options { grid-template-columns: minmax(0, 1fr); }
+}
+
+.xp-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 44px;
+  padding: 1.2rem 1.2rem 1.05rem;
+  border-radius: 18px;
+  border: 1px solid rgba(251, 191, 36, 0.2);
+  background: rgba(10, 10, 26, 0.74);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  transition: border-color 150ms ease, box-shadow 160ms ease, transform 120ms ease;
+}
+.xp-card:focus { outline: none; }
+.xp-card:focus-visible {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.28), 0 24px 60px rgba(0, 0, 0, 0.5);
+}
+/* hover only where a pointer can hover -- on a phone it sticks after a tap */
+@media (hover: hover) {
+  .xp-card:hover:not(:disabled) {
+    border-color: rgba(251, 191, 36, 0.6);
+    box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.22), 0 28px 64px rgba(0, 0, 0, 0.55);
+    transform: translateY(-2px);
+  }
+}
+.xp-card:active:not(:disabled) { transform: scale(0.985); }
+.xp-card:disabled { cursor: progress; opacity: 0.6; }
+
+.xp-card-hd {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.xp-icon {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  margin-right: 10px;
+  color: #fbbf24;
+  filter: drop-shadow(0 0 10px rgba(251, 191, 36, 0.35));
+}
+.xp-name {
+  margin-right: 8px;               /* clear of the tag, even when it wraps */
+  font-family: 'Cinzel', serif;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.xp-last {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(251, 191, 36, 0.35);
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: rgba(253, 230, 138, 0.85);
+}
+
+.xp-blurb {
+  margin-top: 0.7rem;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.72);
+}
+
+.xp-points { display: block; margin-top: 0.75rem; }
+.xp-point {
+  position: relative;
+  display: block;
+  padding: 0.22rem 0 0.22rem 1rem;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.62);
+}
+.xp-point::before {
+  content: '';
+  position: absolute;
+  left: 0.2rem;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  margin-top: -2.5px;
+  border-radius: 50%;
+  background: rgba(251, 191, 36, 0.6);
+}
+
+.xp-go {
+  margin-top: auto;
+  padding-top: 0.95rem;
+  font-family: 'Cinzel', serif;
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #fbbf24;
+}
+
+.xp-signout {
+  margin-top: 1.4rem;
+  min-height: 44px;
+  padding: 0 14px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.42);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  -webkit-tap-highlight-color: transparent;
+}
+.xp-signout:disabled { cursor: progress; }
+@media (hover: hover) {
+  .xp-signout:hover:not(:disabled) { color: rgba(255, 255, 255, 0.75); }
+}
+
+/* ── the wall a Regular-only world shows in Lightweight ──────────────────
+   The disabled-world card (worldgate.css), in the chooser's gold rather than
+   its red: nothing is wrong, the world is simply not part of this mode. */
+.wg-card.xp-wall {
+  border-color: rgba(251, 191, 36, 0.3);
+  background: rgba(22, 17, 6, 0.6);
+}
+.xp-wall .wg-title { color: #fbbf24; }
+.xp-wall .wg-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  font: inherit;
+  font-family: 'IBM Plex Mono', ui-monospace, monospace;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+}
+.xp-wall button.wg-link {
+  border-color: rgba(251, 191, 36, 0.45);
+  background: rgba(251, 191, 36, 0.1);
+  color: #fde68a;
+}

@@ -1,5 +1,6 @@
-// Desk header: ⌂ home, the world switcher, the external-apps menu and the
-// app-wide notification toggle. It takes an accent colour because each
+// Desk header: ⌂ home, the world switcher, the external-apps menu, the
+// app-wide notification toggle and the Lightweight | Regular switch. It
+// takes an accent colour because each
 // world sets its own, and WORLDS below is the switcher's whole source of
 // truth — add a route to App.jsx and an entry here and it appears.
 //
@@ -14,6 +15,8 @@ import { soundEnabled, setSoundEnabled, initAudio } from '../signalSounds.js';
 import { auth } from './viduraApi.js';
 import { confirmDialog } from './Dialog.jsx';
 import { WORLDS } from './worlds.js';
+import { useExperience } from './experience.js';
+import { ExperienceSwitch } from './ExperienceControls.jsx';
 
 // The list lives in worlds.js so App.jsx can read the titles without
 // importing this component into the entry bundle. Re-exported here because
@@ -122,6 +125,11 @@ export default function WorldHeader({ accent = '#34d399', title, right = null, s
   const [sound, setSound] = useState(() => soundEnabled());
   const { pathname } = useLocation();
   const panelRef = useRef(null);
+  // The bell's alerts are a feed of their own (the signal list, on a 30s
+  // timer) and not one of Lightweight's five panels, so in that mode the bell
+  // has nothing to switch and is not shown -- nor the sound that only plays
+  // with it.
+  const { lite } = useExperience();
 
   // close on route change, Escape, or outside tap (tap matters on iPad)
   useEffect(() => { setOpen(null); }, [pathname]);
@@ -245,7 +253,7 @@ export default function WorldHeader({ accent = '#34d399', title, right = null, s
             in) so it rides in the header row instead of floating below it */}
         <span className="vw-hdr-slot" id="vw-header-slot" />
 
-        {showSound && (
+        {showSound && !lite && (
           <button
             type="button"
             className={`vw-icon-btn ${sound ? 'on' : 'off'}`}
@@ -257,15 +265,19 @@ export default function WorldHeader({ accent = '#34d399', title, right = null, s
           </button>
         )}
 
-        <button
-          type="button"
-          className={`vw-icon-btn ${notify ? 'on' : 'off'}`}
-          onClick={toggleNotify}
-          aria-label={notify ? 'push notifications on — tap to mute' : 'enable push notifications'}
-          title={notify ? 'push notifications on — tap to mute' : 'enable push notifications'}
-        >
-          <IconBell off={!notify} />
-        </button>
+        {!lite && (
+          <button
+            type="button"
+            className={`vw-icon-btn ${notify ? 'on' : 'off'}`}
+            onClick={toggleNotify}
+            aria-label={notify ? 'push notifications on — tap to mute' : 'enable push notifications'}
+            title={notify ? 'push notifications on — tap to mute' : 'enable push notifications'}
+          >
+            <IconBell off={!notify} />
+          </button>
+        )}
+
+        <ExperienceSwitch />
 
         <button
           type="button"
@@ -300,7 +312,7 @@ export default function WorldHeader({ accent = '#34d399', title, right = null, s
                 <span className="vw-worldicon" aria-hidden>{w.icon}</span>
                 <span className="vw-worldtext">
                   <b>{w.label}</b>
-                  <small>{w.blurb}</small>
+                  <small>{w.blurb}{lite && w.lite === false ? ' · regular only' : ''}</small>
                 </span>
                 {active && <span className="vw-worlddot" aria-label="current" />}
               </Link>

@@ -935,3 +935,62 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
   .d36-bar { transition: none; }
   .d36-pc:active { transform: none; }
 }
+
+/* ── Lightweight board ──────────────────────────────────────────────────── */
+/* Five panels and nothing else: the header's controls, one chart (SPY, or
+   the ticker picked), the open positions, the best pair and the super
+   signals, each on this board's own timers. Its sections are labels, not
+   toggles -- four of them need no hiding. */
+.d36-sectlabel {
+  color: var(--d36-ink);
+  font-size: 10px; font-weight: 700; letter-spacing: 0.2em; text-transform: uppercase;
+}
+
+/* the refresh, and word that the board refreshes on its own, in the stats
+   row beside the two numbers. Not "live": on this board that word is the
+   venue, and means real money. */
+.d36-literow { display: inline-flex; align-items: center; min-width: 0; }
+.d36-literefresh {
+  position: relative;
+  height: 28px; padding: 0 10px;
+  border: 1px solid rgba(134, 239, 172, 0.35); border-radius: 8px;
+  background: rgba(134, 239, 172, 0.08); color: var(--d36-green);
+  font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  cursor: pointer;
+}
+/* 44pt of reach around a 28px button, as the header's marks do */
+.d36-literefresh::after {
+  content: ''; position: absolute; left: -4px; right: -4px; top: -8px; bottom: -8px;
+}
+.d36-literefresh:active { transform: scale(0.96); }
+.d36-litelive {
+  display: inline-flex; align-items: center; margin-left: 8px;
+  font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--d36-faint); white-space: nowrap;
+}
+.d36-livedot {
+  width: 6px; height: 6px; margin-right: 5px; border-radius: 50%; flex: none;
+  background: var(--d36-green);
+  animation: d36-livedot 2.4s ease-in-out infinite;
+}
+@keyframes d36-livedot {
+  0%, 100% { opacity: 0.95; box-shadow: 0 0 0 0 rgba(134, 239, 172, 0.5); }
+  50%      { opacity: 0.4;  box-shadow: 0 0 0 4px rgba(134, 239, 172, 0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .d36-livedot { animation: none; }
+}
+
+/* what the auto-trader is armed for, under the header -- amber, as the
+   armed 🤖 button is on this board */
+.tr-autoline.d36-autoline {
+  margin: 10px 12px 0;
+  font-family: var(--d36-mono); font-size: 10px; letter-spacing: 0.02em;
+  color: var(--d36-dim);
+}
+.tr-autoline.d36-autoline.on { color: var(--d36-amber); }
+
+/* the one chart: the full width of the screen, less the board's gutter */
+.d36-litechart { padding: 0 8px; }
+/* its ticker is editable (tap it): 16px, or iOS Safari zooms the page in */
+.d36-litechart .tr-syminput { font-size: 16px; }

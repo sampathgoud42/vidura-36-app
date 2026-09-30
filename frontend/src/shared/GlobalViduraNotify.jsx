@@ -7,6 +7,7 @@
 
 import { useEffect, useRef } from 'react';
 import { vidura } from './viduraApi.js';
+import { useExperience } from './experience.js';
 import { initAudio, playHotSignal, playSignalSound, soundEnabled } from '../signalSounds.js';
 
 const ENABLED_KEY = 'vidura.notify.enabled';
@@ -32,8 +33,13 @@ function osNotify(title, body) {
 
 export default function GlobalViduraNotify() {
   const seen = useRef(null); // Set of signal ids; null until first baseline poll
+  const { lite } = useExperience();
 
   useEffect(() => {
+    // A feed of its own -- the signal list, on a 30s timer -- that is not one
+    // of Lightweight's five panels, so that mode leaves it off. The header
+    // hides the bell that would turn it on.
+    if (lite) return undefined;
     initAudio();
     let stopped = false;
 
@@ -66,7 +72,7 @@ export default function GlobalViduraNotify() {
     poll();
     const t = setInterval(poll, 30000);
     return () => { stopped = true; clearInterval(t); };
-  }, []);
+  }, [lite]);
 
   return null;
 }
