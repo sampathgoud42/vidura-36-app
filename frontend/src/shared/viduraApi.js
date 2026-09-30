@@ -116,6 +116,7 @@ const LITE_PATHS = [
   '/super-signals/session',     // super signals
   '/super-signals/best-pairs',  // the best pair, and the arm form's pairs
   '/super-signals/rank',        // the arm form's signal types
+  '/super-signals/desk/',       // the signal desk's start/stop switch (admins)
 ];
 
 function liteRefuses(path) {
@@ -508,6 +509,11 @@ export const vidura = {
   // the report's best ticker + signal pairs over 30 sessions, best first;
   // { min_win_pct, min_edge, min_net_r } are optional and inclusive
   superSignalsBestPairs: (mins) => api.get('/super-signals/best-pairs', { params: mins }),
+  // The signal desk's switch, admins only: start it as its 08:15 task does
+  // (a missed morning, or after a stop), or end its day early -- the agents
+  // finish their cycle and the day's report is written.
+  superSignalsDeskStart: () => api.post('/super-signals/desk/start', {}),
+  superSignalsDeskStop: () => api.post('/super-signals/desk/stop', {}),
   superSignalsReports: () => api.get('/super-signals/reports'),
   // a report page is ~1 MB of HTML; give it longer than a board poll
   superSignalsReport: (date) =>

@@ -3962,6 +3962,7 @@ export default function TradierSite() {
               <BestPair compact accent="#5b6af0" reloadKey={liteKey} onPick={setQuoteTicker}
                 onTrade={(sym, side) => openTicket({ symbol: sym, side })} />
               <SuperSignals compact lite reloadKey={liteKey} accent="#5b6af0"
+                canControl={!!user?.is_admin}
                 onPick={setQuoteTicker}
                 onTrade={(sym, side) => openTicket({ symbol: sym, side })} />
             </aside>
@@ -4199,6 +4200,7 @@ export default function TradierSite() {
               // daily reports; "call ▸ / put ▸" opens the ticket, prefilled
               <Section key="signals" id="signals" label="super signals" drag={railDrag}>
                 <SuperSignals compact accent="#5b6af0" onPick={setQuoteTicker}
+                  canControl={!!user?.is_admin}
                   onTrade={(sym, side) => openTicket({ symbol: sym, side })} />
               </Section>
             );

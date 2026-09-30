@@ -60,3 +60,34 @@ def get(path: str, params: dict | None = None) -> requests.Response:
 
 def get_json(path: str, params: dict | None = None) -> dict:
     return get(path, params).json()
+
+
+# What http.server answers a POST it has no handler for: the service is older
+# than its switch and has to be restarted to learn it.
+_NO_SWITCH = ("the super signals service is older than its start/stop switch -- "
+              "restart it (task Vidura_SignalAgents_API) to pick it up")
+
+
+def post_json(path: str) -> dict:
+    """Press the desk's switch (/api/desk/start or /api/desk/stop).
+
+    An empty JSON body on purpose: the service takes the switch only as JSON
+    and only without an Origin header, which a web page cannot send to
+    loopback without a preflight -- this client sends exactly that. 409 (the
+    desk is already in that state, or it is not a trading day) is relayed as
+    it is, with the service's own words."""
+    s = get_settings()
+    try:
+        r = _http.post(s.super_signals_url.rstrip("/") + path, json={},
+                       timeout=s.super_signals_timeout_s)
+    except requests.Timeout as exc:
+        raise Unavailable(504, "the super signals service did not answer in time") from exc
+    except requests.RequestException as exc:
+        raise Unavailable(503, OFFLINE) from exc
+    if r.status_code == 501:
+        raise Unavailable(501, _NO_SWITCH)
+    if r.status_code in (400, 404, 409):
+        raise Unavailable(r.status_code, _detail(r))
+    if not r.ok:
+        raise Unavailable(502, f"the super signals service answered {r.status_code}: {_detail(r)}")
+    return r.json()

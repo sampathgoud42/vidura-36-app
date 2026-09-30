@@ -1565,6 +1565,7 @@ export default function Desk36Site() {
           </div>
           <div className="d36-hot d36-signals">
             <Signals touch lite reloadKey={liteKey} accent="#86efac" paused={busy}
+              canControl={!!user?.is_admin}
               onPick={pickSym} onTrade={buySym} />
           </div>
         </>
@@ -1640,6 +1641,7 @@ export default function Desk36Site() {
             {sigOpen && (
               <div className="d36-hot d36-signals">
                 <Signals touch accent="#86efac" paused={busy}
+                  canControl={!!user?.is_admin}
                   onPick={pickSym} onTrade={buySym} />
               </div>
             )}

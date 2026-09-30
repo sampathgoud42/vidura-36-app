@@ -152,6 +152,10 @@ CONTRACT: list[tuple[str, str]] = [
     ("GET", f"{V1}/super-signals/best-pairs"),
     ("GET", f"{V1}/super-signals/reports"),
     ("GET", f"{V1}/super-signals/reports/{{report_date}}"),
+    # ...and its on/off switch, admin only like /super/on and /super/off: for
+    # a morning its 08:15 task missed, or to end the desk's day early.
+    ("POST", f"{V1}/super-signals/desk/start"),
+    ("POST", f"{V1}/super-signals/desk/stop"),
     # BreakoutRadar -- its own world: eight-rule breakout scans of the US
     # (S&P 500 + Nasdaq-100) and Indian (Nifty 500) markets from Yahoo, a
     # chart with the breakout overlay, and an alert relay that stores

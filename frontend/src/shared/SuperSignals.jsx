@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError, vidura } from './viduraApi.js';
+import { confirmDialog } from './Dialog.jsx';
 import './superSignals.css';
 
 // Super Signals — the signal-agent desk, inside both trading worlds.
@@ -26,6 +27,11 @@ import './superSignals.css';
 // signals on the same timer, without the daily reports -- those are the desk's
 // history, not its signals. BestPair below takes the place of the pairs link
 // at its foot. `reloadKey` (that board's refresh) asks again at once.
+//
+// `canControl` (an admin, per /auth/me) adds the desk's on/off switch beside
+// its status, in every form of the panel: start it on a morning its 08:15
+// task missed or after a stop, or end its day early. The API refuses anyone
+// else anyway (404); this only keeps them from being offered a dead button.
 
 const POLL_OPEN_MS = 60_000;       // a 5m bar and its outcomes land once a bar; a minute catches each
 const POLL_IDLE_MS = 10 * 60_000;  // outside the desk's day only a new report changes anything
@@ -148,7 +154,7 @@ function deskStatus(d) {
 
 export default function SuperSignals({
   compact = false, touch = false, accent = '#5b6af0', paused = false,
-  lite = false, reloadKey = 0, onPick, onTrade,
+  lite = false, reloadKey = 0, canControl = false, onPick, onTrade,
 }) {
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);           // text, or 'offline'
@@ -208,6 +214,67 @@ export default function SuperSignals({
   const reportKey = data ? `${data.date}|${data.report?.available}` : '';
   useEffect(() => { if (!lite) loadReports(); }, [loadReports, reportKey, lite]);
 
+  // ── the desk's switch ────────────────────────────────────────────────────
+  // `ctl` is the press in flight, and what it waits to see: 'starting' until
+  // the session reports the desk alive, 'stopping' until it reports it gone.
+  // A stop takes a while -- the agents finish their cycle and the report is
+  // written -- so the panel looks again every few seconds meanwhile, and gives
+  // up waiting (not the desk) after three minutes.
+  const [ctl, setCtl] = useState(null);
+  const [ctlErr, setCtlErr] = useState(null);
+  const alive = !!data?.desk?.alive;
+  useEffect(() => {
+    if (ctl && data && alive === (ctl === 'starting')) setCtl(null);
+  }, [ctl, data, alive]);
+  // A refusal is news for a moment; the status beside the switch says the rest.
+  useEffect(() => {
+    if (!ctlErr) return undefined;
+    const t = setTimeout(() => setCtlErr(null), 12_000);
+    return () => clearTimeout(t);
+  }, [ctlErr]);
+  useEffect(() => {
+    if (!ctl) return undefined;
+    const since = Date.now();
+    const t = setInterval(() => {
+      if (Date.now() - since > 180_000) {
+        setCtl(null);
+        setCtlErr(ctl === 'starting' ? 'the desk has not reported in yet - it may still be starting'
+          : 'the desk is still winding down - it stops once the report is written');
+        return;
+      }
+      load();
+    }, 4000);
+    return () => clearInterval(t);
+  }, [ctl, load]);
+  // Start: any time on a trading day before the close, when no desk runs.
+  // Stop: whenever one runs. Nothing to offer on a weekend or a holiday.
+  const canStart = canControl && !!data?.is_today && data.phase !== 'closed' && !alive;
+  const canStop = canControl && alive;
+  const pressSwitch = async () => {
+    if (ctl) return;
+    setCtlErr(null);
+    const stopping = alive;
+    if (stopping) {
+      const ok = await confirmDialog({
+        title: 'Stop the signal desk for today?',
+        body: 'Its agents finish their current cycle, the desk reconciles and writes '
+          + 'today\u2019s report, and no new signal comes in until it is started again. '
+          + 'Positions are not the desk\u2019s: nothing is closed.',
+        confirmText: 'Stop the desk', cancelText: 'Keep it running', tone: 'danger',
+      });
+      if (!ok) return;
+    }
+    setCtl(stopping ? 'stopping' : 'starting');
+    try {
+      await (stopping ? vidura.superSignalsDeskStop() : vidura.superSignalsDeskStart());
+    } catch (e) {
+      setCtl(null);
+      setCtlErr(e instanceof ApiError ? (e.detail || `HTTP ${e.status}`)
+        : 'the Vidura API did not answer');
+    }
+    load();
+  };
+
   const ids = useMemo(() => (data
     ? [...data.signals.map((s) => s.id), ...data.watchlist.map((w) => w.id)] : null), [data]);
   const fresh = useFresh(ids);
@@ -249,6 +316,16 @@ export default function SuperSignals({
             <span className="ss-dot" />{status.text}
           </span>
         )}
+        {(canStart || canStop || ctl) && (
+          <button type="button" className={`ss-switch ${ctl || (canStop ? 'stop' : 'start')}`}
+            onClick={pressSwitch} disabled={!!ctl}
+            title={canStop ? 'end the signal desk\u2019s day early: agents finish, the report is written'
+              : 'start the signal desk - it catches up from the open'}
+            aria-label={canStop ? 'stop the signal desk' : 'start the signal desk'}>
+            {ctl === 'starting' ? 'starting\u2026' : ctl === 'stopping' ? 'stopping\u2026'
+              : canStop ? '\u25a0 stop desk' : '\u25b6 start desk'}
+          </button>
+        )}
         {data && (
           <span className="ss-day" title={`session ${data.date}`}>
             {data.is_today ? 'today' : `${data.weekday} ${md(data.date)}`}
@@ -258,6 +335,7 @@ export default function SuperSignals({
 
       {err === 'offline' && <p className="ss-offline">{OFFLINE}</p>}
       {err && err !== 'offline' && <p className="tr-err ss-err">⚠ {err}</p>}
+      {ctlErr && <p className="tr-err ss-err" role="alert">⚠ {ctlErr}</p>}
       {!data && !err && <p className="ss-empty">loading today&rsquo;s signals…</p>}
 
       {data && (

@@ -334,11 +334,22 @@ opens the desk's own buy ticket, prefilled; nothing is placed until you
 confirm it.
 
 The data comes through `/api/v1/super-signals/{session,rank,best-pairs,reports,reports/<date>}`,
-which proxies the desk's read-only loopback service at `TBOT_SUPER_SIGNALS_URL`
+which proxies the desk's loopback service at `TBOT_SUPER_SIGNALS_URL`
 (default `http://127.0.0.1:8792`). A URL rather than a folder, so this project
 still reads nothing outside itself. Any signed-in operator may read it --
 a signal is the same fact for everybody on the desk. If that service is down
 the panel says so rather than showing an empty day.
+
+**Starting and stopping the desk.** For an admin, the panel carries the
+desk's switch beside its status, in every form of it -- Regular, Lightweight
+and 36 Trades on a phone. **▶ start desk** is offered on a trading day before
+the close whenever no desk is running -- a morning its 08:15 task missed, or
+after a stop -- and a desk started late catches up from the open. **■ stop
+desk** ends its day early after a confirmation: the agents finish their
+cycle, the desk reconciles and writes the day's report, and nothing is
+closed. Both go through `POST /api/v1/super-signals/desk/{start,stop}` (admin
+only, like the `/super` engine's on and off) to the service's own switch,
+which does exactly what `python -m signal_agents.desk run` / `stop` do.
 
 This replaces the A/B-book signal rail that read `runtime/super_research`
 directly. That runtime, its supervisors and the `ab_signal_options`

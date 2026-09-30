@@ -87,6 +87,9 @@ def me(session: sessions.Session = Depends(deps.current_session),
     body = session.public()
     body.update(tenants.worlds_for(db, tenant))
     body["display_name"] = tenant.display_name
+    # So a desk can leave out controls only an admin may use (the signal
+    # desk's switch) rather than offer a button that answers 404.
+    body["is_admin"] = bool(tenant.is_admin)
     return body
 
 
