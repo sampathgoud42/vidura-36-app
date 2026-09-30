@@ -12,6 +12,7 @@ import logging
 import time
 import threading
 from datetime import timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -858,6 +859,11 @@ class AutoTradeStart(BaseModel):
     window_open: str | None = Field(default=None, max_length=5)
     window_close: str | None = Field(default=None, max_length=5)
     zero_dte: bool = False
+    # How its buys are priced, as on the BUY ticket: "smart", "market", or
+    # "limit" -- the mark less discount_pct, withdrawn after 15 minutes
+    # unfilled. Left out, a discount above 0 means limit and none means smart.
+    order_type: Literal["smart", "market", "limit"] | None = None
+    discount_pct: float = Field(default=0, ge=0, le=50)
 
 
 @market_router.get("/autotrade/status", operation_id="getTradierAutoTradeStatus")
@@ -893,7 +899,9 @@ def autotrade_start(payload: AutoTradeStart,
             delta_max=payload.delta_max, signals=payload.signals,
             pairs=[p.model_dump() for p in payload.pairs],
             window_open=payload.window_open, window_close=payload.window_close,
-            zero_dte=payload.zero_dte)
+            zero_dte=payload.zero_dte,
+            order_type=payload.order_type or ("limit" if payload.discount_pct > 0 else "smart"),
+            discount_pct=payload.discount_pct)
     except autotrade.AutoTradeRefused as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
 

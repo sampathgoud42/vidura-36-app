@@ -2,7 +2,10 @@
 
 Three strategies, and the arm form offers exactly these (``STRATEGIES``):
 
-``10min_intraday_move`` -- the level-cross watcher described below.
+``10min_intraday_move`` -- the level-cross watcher described below. Its buys
+go through entry.open_managed like every other entry, priced by the order type
+it was armed with: smart (the default), market, or a limit at the mark less a
+discount, withdrawn after 15 minutes unfilled.
 
 ``super_signals`` -- the signal-agent desk's own signals, as they fire. The
 operator picks signal types from the desk's ranking (/super-signals/rank: the
@@ -142,6 +145,10 @@ class Watcher:
     feed: str = "starting"
     # This watcher's claim on the signal desk (signal_owner), "" for none.
     desk_holder: str = ""
+    # How its buys are priced (selection.ORDER_TYPES) and, for a limit, how
+    # far under the mark. The signal strategies' form offers only smart.
+    order_type: str = "smart"
+    discount_pct: float = 0.0
 
     def log(self, message: str) -> None:
         stamp = clock.now().strftime("%H:%M:%S")
@@ -188,6 +195,7 @@ class Watcher:
             "armed_at": self.armed_at.isoformat(),
             "buy_pct": self.buy_pct, "tp_pct": self.tp_pct,
             "sl_pct": self.sl_pct, "min_contracts": self.min_contracts,
+            "order_type": self.order_type, "discount_pct": self.discount_pct,
             "confirm_seconds": CONFIRM_SECONDS,
             "pending": [{"ticker": t, "cross": k,
                          "held_s": round(time.monotonic() - since, 1)}
@@ -252,50 +260,69 @@ def crosses(tickers: list[str]) -> list[dict]:
 # ---- the loop -------------------------------------------------------------
 
 def _place(watcher: Watcher, ticker: str, kind: str) -> None:
-    """Open one managed position through the normal, guarded path."""
+    """One confirmed cross -> one managed position, through entry.open_managed:
+    the manual BUY's own pick, price, size and guards, priced by the order
+    type the watcher was armed with.
+
+    This used to carry its own copy of the pick-and-size steps, and the copy
+    had drifted from the functions it called -- pick_contract and
+    size_contracts were handed arguments neither takes -- so every cross this
+    strategy confirmed raised before an order was sent.
+
+    The idempotency key is the break itself, (day, ticker, cross): a re-arm
+    or a restart later the same day cannot trade the same break twice. A
+    refusal releases it, as a refused manual order does.
+    """
     from app.api_v2 import deps
-    from app.domains.trading.execution import orders, selection
-    from app.domains.trading.execution import venue as venue_mod
+    from app.domains.trading.execution import entry, idempotency
+    from app.domains.trading.execution.orders import ExecutionRefused
     from app.platform.db.session import session_scope
     from app.tenancy import repository as tenants
 
     side = _SIDE_FOR_CROSS[kind]
+    day = clock.today().isoformat()
+    # Same-day contracts only before the auto-trader's 0DTE cutoff; after it
+    # the nearest later expiry. The order re-checks the cutoff itself.
+    zero_dte = watcher.zero_dte and not clock.past_auto_zero_dte_cutoff()
+    venue_name = "tradier" if watcher.live else "tradier_sandbox"
     with session_scope() as db:
-        cred = tenants.load_credential(
-            db, watcher.tenant_id,
-            "tradier" if watcher.live else "tradier_sandbox", deps.keyring())
-
-        pick = selection.pick_contract(
-            ticker, side, cred=cred, sandbox=not watcher.live,
-            delta_min=watcher.delta_min, delta_max=watcher.delta_max)
-        if pick is None:
-            watcher.log(f"{ticker} {side}: no contract in the delta band")
+        try:
+            attempt = idempotency.begin(
+                db, tenant_id=watcher.tenant_id, intent="open",
+                payload={"cross": kind, "symbol": ticker, "side": side, "day": day,
+                         "live": watcher.live, "strategy": watcher.label},
+                client_key=f"auto-cross:{day}:{ticker}:{kind}")
+        except (idempotency.DuplicateRequest, idempotency.KeyReused):
+            watcher.log(f"{ticker} {kind}: this break was already acted on today -- skipped")
             return
-
-        balance = venue_mod.balance(cred=cred, sandbox=not watcher.live) or {}
-        contracts = selection.size_contracts(
-            balance.get("option_buying_power") or 0.0, pick["ask"],
-            buy_pct=watcher.buy_pct, tolerance_pct=watcher.tolerance_pct)
-        if contracts < watcher.min_contracts:
-            # Refused rather than rounded up. Sizing below the floor means the
-            # account cannot carry this trade at the configured risk, and
-            # taking it anyway would be trading a size nobody chose.
-            watcher.log(
-                f"{ticker} {side}: sized {contracts} < min {watcher.min_contracts}"
-                f" — skipped")
-            return
-
-        orders.open_position(
-            db, tenant_id=watcher.tenant_id, cred=cred, symbol=ticker,
-            side=side, occ_symbol=pick["occ_symbol"],
-            underlying=ticker, strike=pick["strike"],
-            expiration=pick["expiration"], delta=pick.get("delta"),
-            contracts=contracts, limit_price=pick["ask"],
-            buy_pct=watcher.buy_pct, tolerance_pct=watcher.tolerance_pct,
-            tp_pct=watcher.tp_pct, sl_pct=watcher.sl_pct,
-            sandbox=not watcher.live, strategy=f"Auto/{watcher.strategy}")
+        try:
+            try:
+                cred = tenants.load_credential(db, watcher.tenant_id, venue_name,
+                                               deps.keyring())
+            except Exception:                           # noqa: BLE001
+                # Never relay the venue's own text: a 401 body can carry the token.
+                raise ExecutionRefused(
+                    f"no usable {venue_name} credential for this operator") from None
+            pos = entry.open_managed(
+                db, tenant_id=watcher.tenant_id, cred=cred, symbol=ticker, side=side,
+                buy_pct=watcher.buy_pct, tp_pct=watcher.tp_pct, sl_pct=watcher.sl_pct,
+                delta_min=watcher.delta_min, delta_max=watcher.delta_max,
+                tolerance_pct=watcher.tolerance_pct, sandbox=not watcher.live,
+                strategy=watcher.label, zero_dte=zero_dte,
+                min_contracts=watcher.min_contracts, order_type=watcher.order_type,
+                discount_pct=watcher.discount_pct)
+        except Exception as exc:
+            idempotency.fail(db, attempt, reason=str(exc)[:500])
+            db.commit()              # the scope rolls back on the way out
+            raise
+        idempotency.succeed(db, attempt, result={"cross": kind, "position_id": pos.id,
+                                                 "occ_symbol": pos.occ_symbol},
+                            position_id=pos.id, venue_order_id=pos.buy_order_id)
+        opened = (pos.contracts, pos.occ_symbol,
+                  "at market" if pos.limit_price is None else f"@ {pos.limit_price:.2f}")
     watcher.placed += 1
-    watcher.log(f"{ticker} {side}: opened {contracts} x {pick['occ_symbol']}")
+    watcher.log(f"{ticker} {side}: opened {opened[0]} x {opened[1]} {opened[2]}"
+                f" ({watcher.order_type})")
 
 
 def _run(watcher: Watcher) -> None:
@@ -440,7 +467,8 @@ def _enter(watcher: Watcher, row: dict, side: str):
                 sl_pct=watcher.sl_pct, delta_min=watcher.delta_min,
                 delta_max=watcher.delta_max, tolerance_pct=watcher.tolerance_pct,
                 sandbox=not watcher.live, strategy=watcher.label,
-                zero_dte=zero_dte, min_contracts=watcher.min_contracts)
+                zero_dte=zero_dte, min_contracts=watcher.min_contracts,
+                order_type=watcher.order_type, discount_pct=watcher.discount_pct)
         except Exception as exc:
             idempotency.fail(db, attempt, reason=str(exc)[:500])
             db.commit()              # the scope rolls back on the way out
@@ -709,10 +737,18 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
           min_contracts: int, delta_min: float, delta_max: float,
           signals: list[str] | None = None, pairs: list[dict] | None = None,
           window_open: str | None = None, window_close: str | None = None,
-          zero_dte: bool = False) -> dict:
+          zero_dte: bool = False, order_type: str = "smart",
+          discount_pct: float = 0.0) -> dict:
     """Arm the watcher for one operator. One per operator, never two."""
     from app.core.config import get_settings
+    from app.domains.trading.execution import selection
     from app.domains.trading.risk import heartbeat
+
+    if order_type not in selection.ORDER_TYPES:
+        raise AutoTradeRefused(f"unknown order type '{order_type}' -- one of "
+                               f"{', '.join(selection.ORDER_TYPES)}")
+    if not 0 <= discount_pct <= 50:
+        raise AutoTradeRefused("the limit discount must be between 0% and 50%")
 
     if live and get_settings().paper_only:
         raise AutoTradeRefused(
@@ -770,7 +806,8 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             tolerance_pct=tolerance_pct, min_contracts=min_contracts,
             delta_min=delta_min, delta_max=delta_max, armed_at=clock.now(),
             signals=picked, pairs=chosen, window_open=w_open, window_close=w_close,
-            zero_dte=bool(zero_dte), desk_holder=holder)
+            zero_dte=bool(zero_dte), desk_holder=holder, order_type=order_type,
+            discount_pct=float(discount_pct) if order_type == "limit" else 0.0)
         # The cooldown carries over: a ticker the bot -- or an earlier arm --
         # entered twenty minutes ago is still inside its hour.
         watcher.last_entry.update(recent)

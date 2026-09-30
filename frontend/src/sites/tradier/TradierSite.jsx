@@ -2714,7 +2714,9 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
     signals: [],
     pairs: [],
   });
-  const [market, setMarket] = useState(true);
+  // How the watcher's buys are priced -- the BUY ticket's three. SMART is
+  // what the auto-trader always did, so it is where the form opens.
+  const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
   const [zeroDte, setZeroDte] = useState(true);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -2730,11 +2732,11 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
 
   useEffect(() => {
     if (isHot) {
-      setMarket(false); setDiscount(10);
+      setOtype('limit'); setDiscount(10);
       setF((p) => ({ ...p, delta: '0.30-0.50' }));
     }
     if (isSuperHot) {
-      setMarket(false); setDiscount(10);
+      setOtype('limit'); setDiscount(10);
       setF((p) => ({ ...p, buy_pct: 30, delta: '0.30-0.50' }));
     }
     // Each strategy opens on its own window: the level cross is an opening-
@@ -2839,15 +2841,14 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
             </div>
           ) : (
           <div><span className="tr-label">Order type</span>
-            <div className="tr-market-toggle">
-              <button type="button"
-                className={`tr-chip ${market ? 'on' : ''}`}
-                onClick={() => setMarket(true)}>MKT</button>
-              <button type="button"
-                className={`tr-chip ${!market ? 'on' : ''}`}
-                onClick={() => setMarket(false)}>LIMIT</button>
+            <div className="tr-market-toggle" role="group" aria-label="order type">
+              {ORDER_TYPES.map(([id, text]) => (
+                <button key={id} type="button" aria-pressed={otype === id}
+                  className={`tr-chip ${otype === id ? 'on' : ''}`}
+                  onClick={() => setOtype(id)}>{text}</button>
+              ))}
             </div>
-            {!market && (
+            {otype === 'limit' && (
               <div className="tr-discount-row">
                 {AUTO_DISCOUNT_OPTIONS.map((d) => (
                   <button key={d} type="button"
@@ -2858,6 +2859,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
                 ))}
               </div>
             )}
+            <span className="tr-note tr-otnote">{orderNote(otype, discount)}</span>
           </div>
           )}
           <div><span className="tr-label">Expiration</span>
@@ -2906,18 +2908,18 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           ) : isSuperHot ? (
             <>
               Picks the top {f.top_n} tickers from the SUPERHOT scan (period-9 DMI/ADX,
-              directional efficiency, trend acceleration). Each gets a {market ? 'market' : `LIMIT −${discount}%`} buy,
+              directional efficiency, trend acceleration). Each gets a {orderTag(otype, discount)} buy,
               delta {f.delta}, {f.buy_pct}% of buying power per ticker.
-              {!market && ' Unfilled limit orders cancel after 30 min and retry if the signal persists.'}
+              {otype === 'limit' && ' An unfilled limit is cancelled after 15 min.'}
               {' '}Tickers are auto-discovered — no manual input needed. Each ticker is traded
               at most once per day.
             </>
           ) : isHot ? (
             <>
               Picks tickers appearing in BOTH the 5min and 15min HOT scan lists (strong
-              DMI/ADX trend on two time-frames). Each qualifying ticker gets a {market ? 'market' : `LIMIT −${discount}%`} buy,
+              DMI/ADX trend on two time-frames). Each qualifying ticker gets a {orderTag(otype, discount)} buy,
               delta {f.delta}, using the side (CALL/PUT) from the scan.
-              {!market && ' Unfilled limit orders cancel after 30 min and retry if the signal persists.'}
+              {otype === 'limit' && ' An unfilled limit is cancelled after 15 min.'}
               {' '}Tickers are auto-discovered from the HOT scan — no manual input needed.
               Each ticker is traded at most once per day.
             </>
@@ -2926,7 +2928,10 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               New above_10min_high → CALL / below_10min_low → PUT crosses inside the window,
               confirmed after {confirmS < 60 ? `${confirmS}s` : `${Math.round(confirmS / 60)} min`},
               open a managed 0DTE position sized by Buy % — sized below min contracts, the trade
-              is skipped. No same-day contract is bought from {defaults?.zero_dte_cutoff || '11:50'} CST on.
+              is skipped — bought {otype === 'limit'
+                ? `with a limit ${discount}% under the mark, cancelled if unfilled after 15 min`
+                : otype === 'market' ? 'at market' : 'at the smart limit'}. No same-day contract
+              is bought from {defaults?.zero_dte_cutoff || '11:50'} CST on.
             </>
           )}{' '}
           {paper === false ? 'LIVE account — this spends real money on its own.'
@@ -2943,8 +2948,12 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               // delta_min/max ride along so a board that forwards the form as it
               // stands (36 Trades) arms with the band on screen, not the default
               const [dMin, dMax] = parseDeltaRange(f.delta);
-              onArm({ ...f, discount_pct: market ? 0 : discount, zero_dte: zeroDte,
-                delta_min: dMin, delta_max: dMax });
+              // The signal strategies buy at the smart limit, as the form
+              // says for them; a LIMIT left chosen on another strategy must
+              // not ride along into theirs.
+              onArm({ ...f, order_type: onDesk ? 'smart' : otype,
+                discount_pct: !onDesk && otype === 'limit' ? discount : 0,
+                zero_dte: zeroDte, delta_min: dMin, delta_max: dMax });
             }}>{busy ? '…' : '🤖 Arm auto-trade'}</button>
           <button type="button" className="tr-btn sm" onClick={onClose}>Cancel</button>
         </div>
@@ -3296,6 +3305,7 @@ export function AutoStatus({ st, className = '' }) {
         auto-trader armed on {st.live ? 'LIVE' : 'SANDBOX'} · {what}
         {scope ? ` · ${scope}` : ''}
         {st.window ? ` · ${st.window} CST` : ''}
+        {st.order_type && st.order_type !== 'smart' ? ` · ${orderTag(st.order_type, st.discount_pct)}` : ''}
         {st.placed ? ` · ${st.placed} placed` : ''}
       </p>
     );
@@ -3552,6 +3562,7 @@ export default function TradierSite() {
         dte_max: parseInt(f.dte_max, 10),
         zero_dte_cutoff: (f.zero_dte_cutoff || '').trim(),
         cooldown_min: parseInt(f.cooldown_min, 10),
+        order_type: f.order_type || 'smart',
         discount_pct: parseFloat(f.discount_pct) || 0,
         top_n: parseInt(f.top_n, 10) || 3,
         zero_dte: f.zero_dte !== false,
