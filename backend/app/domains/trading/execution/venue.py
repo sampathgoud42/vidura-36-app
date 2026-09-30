@@ -270,13 +270,17 @@ def balance(*, cred: VenueCredential, sandbox: bool = True) -> dict:
 # ---- writes ---------------------------------------------------------------
 
 def place_buy(*, cred: VenueCredential, underlying: str, occ_symbol: str,
-              quantity: int, price: float, sandbox: bool = True) -> PlacedOrder:
+              quantity: int, price: float | None, sandbox: bool = True,
+              order_type: str = "limit") -> PlacedOrder:
+    """The entry. A limit at ``price``, or with order_type="market" a market
+    order, which carries no price at all."""
     client = _client(cred, sandbox=sandbox)
     try:
         order = client.place_option_order(
             underlying=underlying, occ_symbol=occ_symbol,
             side="buy_to_open", quantity=quantity,
-            order_type="limit", price=price,
+            order_type="market" if order_type == "market" else "limit",
+            price=None if order_type == "market" else price,
         )
         return PlacedOrder(str(order["id"]), str(order.get("status", "")), order)
     finally:

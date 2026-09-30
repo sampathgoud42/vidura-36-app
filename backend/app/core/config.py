@@ -262,11 +262,18 @@ class Settings(BaseSettings):
     tradier_best_bets_near_pct: float = 20.0        # B: now less than this above it
     tradier_best_bets_cross_within: int = 3         # B: crossed on one of the last N candles
     tradier_best_bets_velocity_bars: int = 5        # closes the rate of change is fitted on
-    # 4-hour bars change twice a session, so a quarter-hour old snapshot is
-    # current. Four workers keep a 60-name sweep inside Tradier's 120 req/min
-    # (60 on the sandbox) with room for the rest of the desk.
-    tradier_best_bets_ttl_s: int = 900
+    # Four workers keep a 60-name sweep inside Tradier's 120 req/min (60 on
+    # the sandbox) with room for the rest of the desk. The sheet is stored and
+    # is not re-swept on a timer: the day's first sign-in sweeps it, and the
+    # refresh button does on demand.
     tradier_best_bets_workers: int = 4
+
+    # --- the day's first sign-in --------------------------------------------
+    # Sweeps every stored scan not yet run on the desk's (Central) day, in the
+    # background: Best Bets on each venue the operator holds a credential for,
+    # and BreakoutRadar on both markets and all five timeframes. Off, the
+    # sheets fill only when someone presses refresh / Run Scan.
+    daily_prescan: bool = True
 
     # --- commodities (API Ninjas, off-hours) --------------------------------
     # No default on purpose: this is a vendor credential, and a default in

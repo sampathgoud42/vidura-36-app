@@ -7,6 +7,10 @@
 # keep working while the desk is down; the stop-loss monitor does not (see
 # DEPLOY.md, "What stopping does and does not do").
 #
+# Nor is anything that is not this machine's or not this project's: the web
+# app on Cloudflare's edge keeps loading, its sign-in saying the desk is
+# offline, and the signal desk's service keeps running on its own task.
+#
 # Only ever signals processes started from THIS folder, so an unrelated app on
 # the machine is never touched.
 cd "$(dirname "$0")" || exit 1

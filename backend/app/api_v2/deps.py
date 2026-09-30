@@ -13,11 +13,13 @@ surface rather than being merely ignored.
 
 from __future__ import annotations
 
+import hmac
 from collections.abc import Iterator
 
 from fastapi import Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session as DbSession
 
+from app.core.config import get_settings
 from app.platform.db.repository import TenantRepository
 from app.platform.db.session import session_factory
 from app.platform.security import sessions
@@ -58,6 +60,28 @@ def current_tenant(session: sessions.Session = Depends(current_session),
             detail="Sign in to use this desk",
         )
     return tenant
+
+
+def gex_pusher(x_api_key: str = Header(default=""),
+               db: DbSession = Depends(get_db)) -> Tenant | None:
+    """Who may push the SPY 0DTE chain: a signed-in operator, or the scoped
+    push token (TBOT_GEX_PUSH_TOKEN) the getgamma bookmarklet carries.
+
+    The bookmarklet runs on getgamma's own tab, where there is no sign-in to
+    borrow, so it carries this token instead -- and the token opens the two
+    push paths (POST /super/gex0dte/refresh and /heartbeat) and nothing else.
+    It names no operator, so it can reach no operator's data: None here means
+    "the pusher", and the chain it pushes is market data, the same for
+    everyone. An empty setting turns the token off.
+
+    The rebuild's session check had lost it -- the old app honoured it, this
+    one answered 401 to every push, and the feed stopped arriving.
+    """
+    token = get_settings().gex_push_token
+    if token and x_api_key and hmac.compare_digest(x_api_key.encode("utf-8"),
+                                                   token.encode("utf-8")):
+        return None
+    return current_tenant(current_session(x_api_key), db)
 
 
 def require_admin(session: sessions.Session = Depends(current_session),

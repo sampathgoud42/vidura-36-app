@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import SiteFooter from '../../shared/SiteFooter.jsx';
 import { ApiError, vidura } from '../../shared/viduraApi.js';
+import { EXCHANGE_TZ, deskStamp, wallToDesk } from '../../shared/cst.js';
 import BreakoutChart from './BreakoutChart.jsx';
 import '../../shared/worldHeader.css';
 import './breakout.css';
@@ -15,6 +16,11 @@ import './breakout.css';
 // downloads the market's candles in the background; everything else -- the
 // market tab, the timeframe, every slider in the parameter drawer -- re-judges
 // the scan already on the server, instantly, and downloads nothing.
+//
+// Scans are STORED: the day's first sign-in runs every market and timeframe,
+// and a page opened on one with no scan in memory shows the stored rows with
+// when they were scanned (CST). Only a scan in memory re-judges a threshold, so
+// stored rows judged with other thresholds say so, and Rescan applies these.
 //
 // Alerts ride on scans: when one this page started lands, any breakout not
 // alerted before goes to Telegram and/or Discord through the API's relay. The
@@ -89,6 +95,7 @@ function ago(at) {
   if (s < 172800) return `${(s / 3600).toFixed(1)} h ago`;
   return `${Math.round(s / 86400)} days ago`;
 }
+const TRIGGER = { daily: 'daily scan', rescan: 'rescanned', first: 'first scan' };
 const rvolTier = (v) => (v == null ? '' : v >= 3 ? 'hot' : v >= 2 ? 'high' : 'ok');
 const sizeTier = (v) => (v == null ? '' : v >= 8 ? 'hot' : v >= 4 ? 'high' : 'ok');
 
@@ -394,7 +401,9 @@ function ChartModal({ ticker, market, timeframe, query, onClose }) {
                 <div className="br-verdict">
                   <p className={`br-verdicthd ${v.passed ? 'pass' : 'fail'}`}>
                     {v.passed ? '● all eight rules hold' : `○ ${v.failed.length} rule${v.failed.length === 1 ? '' : 's'} short`}
-                    {v.breakout_candle_timestamp && ` · breakout candle ${v.breakout_candle_timestamp.replace('T', ' ')}`}
+                    {v.breakout_candle_timestamp && ` · breakout candle ${
+                      wallToDesk(v.breakout_candle_timestamp, EXCHANGE_TZ[market]).replace('T', ' ')}${
+                      timeframe === '1d' ? '' : ' CST'}`}
                   </p>
                   <ul className="br-rules">
                     {[
@@ -541,7 +550,7 @@ export default function BreakoutSite() {
             </select>
           </label>
           <button type="button" className="br-run" disabled={running} onClick={() => load(true)}>
-            {running ? `scanning${pctDone != null ? ` ${pctDone}%` : '…'}` : '▶ Run Scan'}
+            {running ? `scanning${pctDone != null ? ` ${pctDone}%` : '…'}` : scan?.at ? '↻ Rescan' : '▶ Run Scan'}
           </button>
           <button type="button" className="br-btn ghost" onClick={() => setDrawer('params')}
             title="the eight rules' thresholds">⚙ Parameters</button>
@@ -567,6 +576,12 @@ export default function BreakoutSite() {
 
         <section className="br-summary" aria-live="polite">
           {err && <p className="br-msg err">⚠ {err}</p>}
+          {!err && scan?.last_error && (
+            <p className="br-msg err">
+              ⚠ The {deskStamp(scan.last_error.at)} scan did not land: {scan.last_error.reason}
+              {scan.at ? ` — showing the ${deskStamp(scan.at)} scan.` : '.'}
+            </p>
+          )}
           {!err && scan && !scan.at && (
             <p className="br-msg">
               {running ? `Scanning the ${market === 'INDIA' ? 'Nifty 500' : 'S&P 500 + Nasdaq-100'} on ${timeframe} — a minute or two.`
@@ -579,9 +594,17 @@ export default function BreakoutSite() {
                 <b className="n">{scan.rows.length}</b> breakout{scan.rows.length === 1 ? '' : 's'}
                 <span> · {scan.scanned} scanned{scan.unavailable ? ` (${scan.unavailable} without data)` : ''}</span>
                 <span> · {universe?.name}{listNote && ` (${listNote})`}</span>
-                <span> · scanned {ago(scan.at)}</span>
+                <span title={scan.stored ? `stored ${scan.scanned_at || ''}` : 'held in memory: thresholds re-judge at once'}>
+                  {' · '}scanned <b>{deskStamp(scan.at)}</b> ({ago(scan.at)}{TRIGGER[scan.trigger] ? `, ${TRIGGER[scan.trigger]}` : ''})
+                </span>
                 {running && <span className="run"> · refreshing</span>}
               </p>
+              {scan.params_match === false && (
+                <p className="br-hint">
+                  These rows were judged with other thresholds than yours. Press <b>↻ Rescan</b> to judge
+                  this market with your parameters — after that every slider answers at once.
+                </p>
+              )}
               {failures.length > 0 && (
                 <p className="br-fails" title="how many names each rule turned away (a name can fail several)">
                   turned away by:{' '}

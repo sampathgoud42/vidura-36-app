@@ -8,6 +8,8 @@ is named as such in the Phase 4 consolidation table.
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session as DbSession
@@ -19,6 +21,18 @@ from app.tenancy import repository as tenants
 from app.tenancy.models import Tenant
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
+
+
+def _first_of_the_day(tenant_id: str) -> None:
+    """The day's first sign-in sweeps the stored scans behind the answer
+    (daily_scans). Never a reason for signing in to fail."""
+    try:
+        from app.domains.trading.market import daily_scans
+
+        daily_scans.on_signin(tenant_id)
+    except Exception as exc:                            # noqa: BLE001
+        logger.warning("daily scans did not start: %s: %s", type(exc).__name__, exc)
 
 
 class LoginRequest(BaseModel):
@@ -66,6 +80,7 @@ def login(payload: LoginRequest,
     session = sessions.create(tenant_id=tenant.id, slug=tenant.slug,
                               is_admin=tenant.is_admin,
                               ttl_s=settings.session_ttl_s)
+    _first_of_the_day(tenant.id)
     return LoginResponse(
         token=session.token, tenant_id=tenant.id, username=tenant.slug,
         is_admin=tenant.is_admin, expires_at=session.expires_at,
@@ -87,6 +102,12 @@ def me(session: sessions.Session = Depends(deps.current_session),
     body = session.public()
     body.update(tenants.worlds_for(db, tenant))
     body["display_name"] = tenant.display_name
+    # So a desk can leave out controls only an admin may use (the signal
+    # desk's switch) rather than offer a button that answers 404.
+    body["is_admin"] = bool(tenant.is_admin)
+    # A desk reopened on a session that outlived the night signs in without
+    # a login; this is its first call.
+    _first_of_the_day(tenant.id)
     return body
 
 

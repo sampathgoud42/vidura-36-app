@@ -136,6 +136,22 @@ def _batches(symbols: list[str], market: str, interval: str, period: str,
     return out
 
 
+def frames(market: str, symbols: list[str], interval: str, period: str, *,
+           intraday: bool, progress=None) -> dict[str, pd.DataFrame]:
+    """One download for a whole list, each ticker's frame in exchange time
+    (intraday ones inside the regular session). A market's sweep of several
+    timeframes shares these instead of fetching the same bars per timeframe."""
+    raw = _batches(symbols, market, interval, period, progress=progress)
+    return {s: local(f, market, intraday=intraday) for s, f in raw.items()}
+
+
+def trim_days(frame: pd.DataFrame, market: str, days: int) -> pd.DataFrame:
+    """The last `days` calendar days of an exchange-time frame: what Yahoo's
+    own `{days}d` period would have returned from a longer download."""
+    cut = pd.Timestamp.now(tz=ZONE[market]).tz_localize(None) - pd.Timedelta(days=days)
+    return frame[frame.index >= cut]
+
+
 def fetch(market: str, symbols: list[str], timeframe: str, progress=None, *,
           strict: bool = False) -> tuple[dict[str, pd.DataFrame], dict[str, pd.DataFrame]]:
     """``(candles, daily)`` per symbol, both in exchange time. `progress` is

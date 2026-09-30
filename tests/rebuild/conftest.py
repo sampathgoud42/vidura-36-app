@@ -36,6 +36,10 @@ os.environ.setdefault("TBOT_DATABASE_URL_OVERRIDE",
 os.environ.setdefault("TBOT_PAPER_ONLY", "true")
 os.environ.setdefault("TBOT_LOGIN_REQUIRED", "true")
 os.environ.setdefault("TBOT_ENCRYPTION_MASTER_KEY", "test-master-key-not-a-real-one")
+# Every sign-in in the suite is somebody's first of the day. The sweeps that
+# would start are the ones the Best Bets and BreakoutRadar tests drive on
+# purpose, so they stay off unless a test turns them on.
+os.environ.setdefault("TBOT_DAILY_PRESCAN", "false")
 
 
 @dataclass(frozen=True)
@@ -83,10 +87,11 @@ def fresh_schema():
     # every later test erroring in setup with a PermissionError that named the
     # fixture instead of the thread.
     from app.domains.trading.execution import autotrade
-    from app.domains.trading.market import best_bets, breakout_scan, flow
+    from app.domains.trading.market import best_bets, breakout_scan, daily_scans, flow
 
     autotrade.quiesce()
     flow.quiesce()
+    daily_scans.quiesce()
     best_bets.quiesce()
     breakout_scan.quiesce()
 
@@ -102,10 +107,16 @@ def fresh_schema():
     session.reset_for_tests()
     session_store.revoke_all()
     deps.reset_keyring_for_tests()
+    # Market data shared across operators (the chart bars, the previous close)
+    # is cached for seconds in the router; a case must never read the last
+    # case's venue through it.
+    from app.api_v2.routers import desk as desk_router
+    desk_router.reset_market_caches()
     migrations.upgrade_to_head(url=url)
     yield
     autotrade.quiesce()
     flow.quiesce()
+    daily_scans.quiesce()
     best_bets.quiesce()
     breakout_scan.quiesce()
     session.reset_for_tests()

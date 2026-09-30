@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError, vidura } from './viduraApi.js';
+import { deskStamp, wallClock, wallToDesk } from './cst.js';
 import './superSignals.css';
 import './bestBets.css';
 
@@ -19,6 +20,9 @@ import './bestBets.css';
 // chrome (.ss-scrim / .ss-viewer), portaled to the body so no scrolling
 // ancestor can trap it (iPhone Safari). Nothing here trades: a ticker opens
 // the quote popup.
+//
+// The rows are the venue's STORED sweep: the day's first sign-in runs it,
+// "↻ rescan" runs it again, and the sheet says when its rows are from (CST).
 
 const POLL_MS = 3000;              // while a sweep runs behind the snapshot
 const POLL_LIMIT_MS = 4 * 60_000;  // a 60-name sweep on the sandbox is ~70s
@@ -63,6 +67,12 @@ function ago(at) {
   if (s < 5400) return `${Math.round(s / 60)} min ago`;
   return `${(s / 3600).toFixed(1)} h ago`;
 }
+// The screen's anchor comes as the exchange's clock ("09:30 ET").
+function anchorCst(anchor) {
+  const m = /^(\d\d:\d\d) ET$/.exec(anchor || '');
+  return m ? `${wallClock(`2000-01-03T${m[1]}`)} CST` : anchor;
+}
+const TRIGGER = { daily: 'daily scan', rescan: 'rescanned', first: 'first scan' };
 
 // ---- per-column filters -------------------------------------------------
 // Text columns match anywhere, case-insensitive. Number columns take >x, <x,
@@ -215,8 +225,9 @@ function BestBetsSheet({ accent, live, onPick, onClose }) {
         <div className="ss-vhead">
           <span className="ss-vtitle">best bets · 4h · {rules.span || 21} ema</span>
           <button type="button" className="ss-vbtn wide" disabled={!!res?.refreshing}
-            onClick={() => load(true)} title="run the screen again now">
-            {res?.refreshing ? 'scanning…' : '↻ refresh'}
+            onClick={() => load(true)}
+            title="scan the watchlist again now — otherwise the sheet keeps the day's first scan">
+            {res?.refreshing ? 'scanning…' : '↻ rescan'}
           </button>
           <button type="button" className="ss-vbtn" ref={closeRef} onClick={onClose}
             aria-label="close best bets" title="close (Esc)">×</button>
@@ -240,8 +251,12 @@ function BestBetsSheet({ accent, live, onPick, onClose }) {
             {res ? (
               <>
                 <b>{rows.length}</b> shown · A {counts.A} · B {counts.B} of {meta.scanned ?? '…'} scanned
-                {tf.bar && ` · ${tf.bar} bars from ${tf.source_interval}, ${tf.anchor}`}
-                {res.at && ` · updated ${ago(res.at)}`}
+                {tf.bar && ` · ${tf.bar} bars from ${tf.source_interval}, ${anchorCst(tf.anchor)}`}
+                {res.at && (
+                  <span title={`${TRIGGER[res.trigger] || 'scanned'} · stored ${res.scanned_at || ''}`}>
+                    {' · '}scanned <b>{deskStamp(res.at)}</b> ({ago(res.at)}{TRIGGER[res.trigger] ? `, ${TRIGGER[res.trigger]}` : ''})
+                  </span>
+                )}
                 {meta.venue && ` · ${meta.venue}`}
                 {res.refreshing && ' · scanning…'}
               </>
@@ -251,9 +266,16 @@ function BestBetsSheet({ accent, live, onPick, onClose }) {
 
         <div className="ss-vbody">
           {err && <p className="ss-vmsg err">⚠ {err}</p>}
-          {!err && res && !res.at && (
+          {!err && res?.last_error && (
+            <p className="ss-vmsg err">⚠ The {deskStamp(res.last_error.at)} scan did not land:
+              {' '}{res.last_error.reason}{res.at ? ` — showing the ${deskStamp(res.at)} scan.` : '.'}</p>
+          )}
+          {!err && res && !res.at && res.refreshing && (
             <p className="ss-vmsg">The first scan is running: {meta.scanned || 'the'} tickers,
               one Tradier call each. The table fills in when it lands.</p>
+          )}
+          {!err && res && !res.at && !res.refreshing && !res.last_error && (
+            <p className="ss-vmsg">No scan has landed for this venue yet. Press <b>↻ rescan</b>.</p>
           )}
           {!err && res?.at && (
             <>
@@ -310,7 +332,7 @@ function BestBetsSheet({ accent, live, onPick, onClose }) {
                         : `≈ ${r.hours_to_catch} trading hours · ${r.bars_to_catch} four-hour bars at ${signed(r.velocity, 4)}/bar`}>
                         {r.days_to_catch == null ? '—' : `${r.days_to_catch.toFixed(1)} d`}
                       </td>
-                      <td className="num" title={r.deepest_at ? `deepest low vs its EMA: ${r.deepest_at.replace('T', ' ').slice(0, 16)} ET` : ''}>
+                      <td className="num" title={r.deepest_at ? `deepest low vs its EMA: ${wallToDesk(r.deepest_at).replace('T', ' ')} CST` : ''}>
                         {signed(r.deepest_pct, 1, '%')}
                       </td>
                       <td className="num" title={r.cross_age ? `last crossed above the EMA ${r.cross_age} candle${r.cross_age === 1 ? '' : 's'} ago (1 = the newest)` : 'no cross above in the window'}>
@@ -329,8 +351,8 @@ function BestBetsSheet({ accent, live, onPick, onClose }) {
                 </p>
               )}
               <p className="ss-bp-note bb-note">
-                4-hour bars are built from Tradier&rsquo;s 15-minute bars, anchored on the 09:30 open
-                (09:30–13:30, 13:30–16:00); Tradier keeps 40 days of them, so the EMA reads the last
+                4-hour bars are built from Tradier&rsquo;s 15-minute bars, anchored on the 08:30 CST open
+                (08:30–12:30, 12:30–15:00 CST); Tradier keeps 40 days of them, so the EMA reads the last
                 ~55 bars and the newest bar may still be forming. <b>A</b>: a low more than
                 {' '}{rules.deep_pct ?? 20}% under the EMA in that window, and the price turning back up.
                 {' '}<b>B</b>: crossed above the EMA within {rules.cross_within ?? 3} candles, now less

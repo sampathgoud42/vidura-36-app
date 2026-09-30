@@ -1,10 +1,17 @@
 """Build the getgamma 0DTE bookmarklet from its readable source.
 
-    python tools/make_bookmarklet.py
+    python tools/make_bookmarklet.py                              # this machine
+    python tools/make_bookmarklet.py --url https://vidura36.app    # through the tunnel
 
-Reads tools/gex0dte_bookmarklet.js, substitutes THIS machine's API port and
-push token from .env, strips comments and whitespace, and writes a single
-`javascript:` line to var/gex0dte_bookmarklet.txt.
+Reads tools/gex0dte_bookmarklet.js, substitutes where the desk is (this
+machine's API port from .env, or --url) and the push token from .env, strips
+comments and whitespace, and writes a single `javascript:` line to
+var/gex0dte_bookmarklet.txt.
+
+--url is the one to use from a browser: getgamma is a public HTTPS site, and
+Chrome asks before a public site may call this machine's own address (Local
+Network Access) -- a request it has not been allowed fails as "Failed to
+fetch". The public address is HTTPS and not local, so nothing is asked.
 
 The point of generating it is that the one-liner can never drift from the
 source, and the token in it is always the one the server will actually
@@ -71,10 +78,22 @@ def strip_js(text: str) -> str:
 
 
 def main() -> int:
+    import argparse
+
+    ap = argparse.ArgumentParser(description="Build the getgamma 0DTE bookmarklet.")
+    ap.add_argument("--url", default="",
+                    help="where the desk is, e.g. https://vidura36.app "
+                         "(default: this machine, http://127.0.0.1:<TBOT_PORT>)")
+    args = ap.parse_args()
+
     if not SRC.is_file():
         raise SystemExit(f"missing {SRC}")
     env = dotenv()
-    port = env.get("TBOT_PORT", "8790")
+    # 8791 is the API's own default (tools/appctl.py). This said 8790 -- the
+    # old app's port, where nothing answers now -- so a .env without
+    # TBOT_PORT built a bookmarklet that could only fail.
+    port = env.get("TBOT_PORT", "8791")
+    api = (args.url or f"http://127.0.0.1:{port}").rstrip("/")
     token = env.get("TBOT_GEX_PUSH_TOKEN", "")
 
     if not token:
@@ -85,7 +104,7 @@ def main() -> int:
         print("         then add TBOT_GEX_PUSH_TOKEN=... to .env and restart.\n")
 
     text = SRC.read_text(encoding="utf-8")
-    text = text.replace("'http://127.0.0.1:8791'", f"'http://127.0.0.1:{port}'")
+    text = text.replace("'http://127.0.0.1:8791'", f"'{api}'")
     text = text.replace("'PASTE_TBOT_GEX_PUSH_TOKEN_HERE'", f"'{token}'")
 
     body = strip_js(text)
@@ -97,7 +116,7 @@ def main() -> int:
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text(link, encoding="utf-8")
 
-    print(f"[bookmarklet] api   http://127.0.0.1:{port}")
+    print(f"[bookmarklet] api   {api}")
     print(f"[bookmarklet] token {'set (' + str(len(token)) + ' chars)' if token else 'MISSING'}")
     print(f"[bookmarklet] {len(link)} chars -> {OUT.relative_to(ROOT)}")
     print("\nCreate a bookmark, paste the file's contents as the URL, then")

@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { EXCHANGE_TZ, wallToDesk } from '../../shared/cst.js';
 
 // BreakoutRadar's chart: the desk's candle mechanism -- a canvas sized to its
 // real laid-out box, hollow up bodies and filled down ones, the price axis on
@@ -22,6 +23,8 @@ const FAINT = '#6b7a90';
 const GRID = 'rgba(16, 185, 129, 0.10)';
 const FONT = 'ui-monospace, Consolas, monospace';
 
+// Candle times arrive on the exchange's clock and are drawn on the desk's
+// (CST); a daily candle is a trading day and keeps its date.
 function label(t, timeframe, prev) {
   const day = t.slice(5, 10);
   if (timeframe === '1d') return day;
@@ -50,6 +53,9 @@ export default function BreakoutChart({ data, height = 360 }) {
 
   const candles = data?.candles || [];
   const tf = data?.timeframe;
+  const zone = EXCHANGE_TZ[data?.market] || EXCHANGE_TZ.US;
+  const times = useMemo(() => candles.map((c) => (tf === '1d' ? c.t : wallToDesk(c.t, zone))),
+    [candles, tf, zone]);
 
   useEffect(() => {
     const cv = canvasRef.current;
@@ -115,7 +121,7 @@ export default function BreakoutChart({ data, height = 360 }) {
     ctx.textAlign = 'center';
     candles.forEach((c, i) => {
       if (i % every !== 0) return;
-      ctx.fillText(label(c.t, tf, i >= every ? candles[i - every].t : null), cx(i), h - padB / 2);
+      ctx.fillText(label(times[i], tf, i >= every ? times[i - every] : null), cx(i), h - padB / 2);
     });
 
     // the consolidation channel, under everything else
@@ -252,7 +258,7 @@ export default function BreakoutChart({ data, height = 360 }) {
       ctx.fillText((lo + (1 - (cy - padT) / plotH) * span).toFixed(decimals), padL + plotW + 5, cy);
     }
     geomRef.current = { padL, slot };
-  }, [candles, data, box, height, cursor, tf]);
+  }, [candles, data, box, height, cursor, tf, times]);
 
   const onMove = (e) => {
     const g = geomRef.current;
@@ -272,7 +278,7 @@ export default function BreakoutChart({ data, height = 360 }) {
       <div className="brc-read" aria-live="off">
         {shown ? (
           <>
-            <span>{shown.t.replace('T', ' ')}</span>
+            <span>{times[i].replace('T', ' ')}{tf === '1d' ? '' : ' CST'}</span>
             <span>O {shown.o}</span><span>H {shown.h}</span><span>L {shown.l}</span>
             <span className={shown.c >= shown.o ? 'up' : 'down'}>C {shown.c}</span>
             <span className="e20">20 {data.ema20?.[i] ?? '—'}</span>

@@ -5,8 +5,9 @@
   "type": "module",
   "scripts": {
     "build:desk": "npm --prefix ../frontend run build",
-    "deploy": "npm run build:desk && wrangler deploy --env=",
+    "deploy": "npm run build:desk && wrangler deploy --env= && node scripts/deployed.mjs record",
     "deploy:staging": "npm run build:desk && wrangler deploy --env staging",
+    "delete": "wrangler delete --env= && node scripts/deployed.mjs clear",
     "check": "wrangler deploy --env= --dry-run --outdir .wrangler/dry-run",
     "tail": "wrangler tail --env="
   },

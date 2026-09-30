@@ -11,6 +11,8 @@ There is no ``user_id`` anywhere. The operator comes from the session.
 from __future__ import annotations
 
 import logging
+import re
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -18,7 +20,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session as DbSession
 
 from app.api_v2 import deps
-from app.domains.trading.execution import entry, idempotency, leases, orders
+from app.domains.trading.execution import entry, idempotency, leases, orders, selection
 from app.domains.trading.execution import venue as venue_mod
 from app.domains.trading.execution.orders import ExecutionRefused
 from app.domains.trading.models import Position
@@ -47,6 +49,17 @@ class OpenRequest(BaseModel):
     strategy: str = "Manual"
     # Guard 3's deliberate override. The default answers no.
     allow_add: bool = False
+    # How to price the buy: "smart" (the mid on a wide spread, the ask on a
+    # tight one), "market", or "limit" -- the mark less discount_pct, to the
+    # cent, cancelled if it has not filled in 15 minutes. Left out, a
+    # discount_pct above 0 means limit and none means smart, which is what a
+    # desk that only knew the discount was asking for.
+    order_type: Literal["smart", "market", "limit"] | None = None
+    discount_pct: float = Field(default=0, ge=0, le=50)
+
+
+def _order_type(order_type: str | None, discount_pct: float) -> str:
+    return order_type or ("limit" if discount_pct > 0 else "smart")
 
 
 def _serialise(pos: Position) -> dict:
@@ -65,6 +78,11 @@ def _serialise(pos: Position) -> dict:
         "tp_pct": pos.tp_pct,
         "sl_pct": pos.sl_pct,
         "buy_order_id": pos.buy_order_id,
+        # how the buy was priced, and until when an unfilled limit may work
+        "order_type": pos.order_type,
+        "limit_price": pos.limit_price,
+        "discount_pct": pos.discount_pct,
+        "buy_expires_at": pos.buy_expires_at,
         "tp_order_id": pos.tp_order_id,
         "stop_order_id": pos.stop_order_id,
         # Says out loud whether the stop survives this process dying.
@@ -219,6 +237,7 @@ def open_position(payload: OpenRequest,
 
     cred = _credential(db, tenant, kr, live=payload.live)
     sandbox = not payload.live
+    order_type = _order_type(payload.order_type, payload.discount_pct)
 
     try:
         # The same pick / price / size / guarded order the auto-trader uses.
@@ -229,7 +248,8 @@ def open_position(payload: OpenRequest,
             delta_max=payload.delta_max, tolerance_pct=payload.tolerance_pct,
             sandbox=sandbox, strategy=payload.strategy,
             expiration=payload.expiration, zero_dte=payload.zero_dte,
-            allow_add=payload.allow_add,
+            allow_add=payload.allow_add, order_type=order_type,
+            discount_pct=payload.discount_pct if order_type == "limit" else 0.0,
         )
         result = _serialise(pos)
         idempotency.succeed(db, attempt, result=result, position_id=pos.id,
@@ -305,16 +325,29 @@ def close_position(position_id: int,
 
 
 class ContractRequest(BaseModel):
-    """Buy one NAMED contract. The flow board already chose it."""
-    occ_symbol: str
-    underlying: str
-    contracts: int = Field(ge=1)
-    limit_price: float = Field(gt=0)
+    """Buy one NAMED contract. The flow board already chose it.
+
+    Either the caller says exactly what to send (contracts and limit_price),
+    or it sends the ticket's terms -- buy_pct, tolerance_pct and an order type
+    -- and the contract's own quote prices and sizes it, the same way the
+    delta-band BUY is priced and sized. The desk's ticket does the second.
+    """
+    occ_symbol: str = Field(min_length=10, max_length=32)
+    underlying: str | None = Field(default=None, max_length=16)
+    contracts: int | None = Field(default=None, ge=1)
+    limit_price: float | None = Field(default=None, gt=0)
+    buy_pct: float = 50.0
+    tolerance_pct: float = 25.0
     tp_pct: float = 15.0
     sl_pct: float = 30.0
     live: bool = False
     strategy: str = "Flow"
     allow_add: bool = False
+    order_type: Literal["smart", "market", "limit"] | None = None
+    discount_pct: float = Field(default=0, ge=0, le=50)
+
+
+_OCC = re.compile(r"^([A-Z.]{1,6})(\d{6})([CP])(\d{8})$")
 
 
 class TargetRequest(BaseModel):
@@ -351,17 +384,55 @@ def open_contract(payload: ContractRequest,
         raise HTTPException(status_code=409, detail=str(exc)) from None
 
     cred = _credential(db, tenant, kr, live=payload.live)
+    occ = payload.occ_symbol.strip().upper()
+    parsed = _OCC.match(occ)
+    underlying = (payload.underlying or (parsed.group(1) if parsed else "")).upper()
+    side = "call" if "C" in occ[-9:] else "put"
+    strike = int(parsed.group(4)) / 1000 if parsed else 0.0
+    explicit = (payload.contracts is not None and payload.limit_price is not None
+                and payload.order_type is None)
     try:
+        if not underlying:
+            raise ExecutionRefused(f"{occ} is not an OCC option symbol", status_code=422)
+        if explicit:
+            # Exactly what the caller asked for: a limit at its price, its size.
+            contracts, buy_pct, tolerance_pct = payload.contracts, 0.0, 0.0
+            price = selection.BuyPrice("limit", payload.limit_price,
+                                       payload.limit_price, None, None)
+            cancel_after_s = None
+        else:
+            order_type = _order_type(payload.order_type, payload.discount_pct)
+            quote = next((q for q in venue_mod.quotes([occ], cred=cred,
+                                                      sandbox=not payload.live)
+                          if (q.get("symbol") or "").upper() == occ), None)
+            if not quote:
+                raise ExecutionRefused(f"no quote for {occ}", status_code=404)
+            try:
+                price = selection.buy_price(
+                    order_type, float(quote.get("bid") or 0), float(quote.get("ask") or 0),
+                    payload.discount_pct if order_type == "limit" else 0.0)
+            except ValueError as exc:
+                raise ExecutionRefused(f"{occ}: {exc}", status_code=409) from None
+            buying_power = float((venue_mod.balance(cred=cred, sandbox=not payload.live)
+                                  or {}).get("option_buying_power") or 0)
+            sizing = selection.size_contracts(buying_power, payload.buy_pct,
+                                              price.sizing_price,
+                                              tolerance_pct=payload.tolerance_pct)
+            if sizing.contracts < 1:
+                raise ExecutionRefused(f"sized to zero: {sizing.explain()}", status_code=409)
+            contracts, buy_pct, tolerance_pct = (sizing.contracts, payload.buy_pct,
+                                                 payload.tolerance_pct)
+            cancel_after_s = selection.LIMIT_CANCEL_S if price.order_type == "limit" else None
         pos = orders.open_position(
-            db, tenant_id=tenant.id, cred=cred, symbol=payload.underlying,
-            side="call" if "C" in payload.occ_symbol[-9:] else "put",
-            occ_symbol=payload.occ_symbol, underlying=payload.underlying,
-            strike=0.0, expiration=_expiration_from(payload.occ_symbol),
-            delta=None, contracts=payload.contracts,
-            limit_price=payload.limit_price, buy_pct=0.0, tolerance_pct=0.0,
+            db, tenant_id=tenant.id, cred=cred, symbol=underlying, side=side,
+            occ_symbol=occ, underlying=underlying, strike=strike,
+            expiration=_expiration_from(occ), delta=None, contracts=contracts,
+            limit_price=price.limit, buy_pct=buy_pct, tolerance_pct=tolerance_pct,
             tp_pct=payload.tp_pct, sl_pct=payload.sl_pct,
             sandbox=not payload.live, strategy=payload.strategy,
-            allow_add=payload.allow_add,
+            allow_add=payload.allow_add, order_type=price.order_type,
+            discount_pct=price.discount_pct, mark=price.mark,
+            cancel_after_s=cancel_after_s,
         )
         result = _serialise(pos)
         idempotency.succeed(db, attempt, result=result, position_id=pos.id)

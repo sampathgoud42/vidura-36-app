@@ -42,8 +42,11 @@ In order, `start`:
 3. rebuilds the web app if its source is newer than the build
 4. starts the API, which serves the web app, and waits for it to answer
 5. opens the tunnel to <https://vidura36.app>
+6. puts a new build on Cloudflare's edge, once the edge has been deployed
 
-Every step that has nothing to do is skipped, so an ordinary start takes
+It also says whether the signal desk's service is answering -- Super Signals
+and the best pair read from it, and it runs from a project of its own. Every
+step that has nothing to do is skipped, so an ordinary start takes
 seconds. Then open <http://127.0.0.1:8791/> here, or <https://vidura36.app>
 from anywhere. The desk and the API are the same origin, so nothing has to be
 configured to point one at the other.
@@ -54,13 +57,15 @@ stop.bat
 
 Stops the tunnel, then the API. Bots keep running: each holds positions of
 its own, so they are stopped from the Bot Station, never as a side effect.
+The web app on Cloudflare's edge keeps loading, its sign-in saying the desk
+is offline.
 
 | | |
 | --- | --- |
 | `start.bat --restart` | stop everything, then start it again |
 | `start.bat --no-tunnel` | start it on this machine only |
 | `start.bat --dev` | also run the Vite dev server on 5199 (hot reload) |
-| `.venv\Scripts\python tools\appctl.py status` | what is running, which database, paper or live |
+| `.venv\Scripts\python tools\appctl.py status` | what is running, which database, paper or live, the edge, the signal desk |
 | `.venv\Scripts\python tools\appctl.py url` | the public address, and nothing else |
 | `.venv\Scripts\python tools\doctor.py` | the self-containment audit |
 | `python tools\autostart.py install` | start at logon ([TUNNEL.md](TUNNEL.md)) |
@@ -83,11 +88,14 @@ before sharing the link, are in [TUNNEL.md](TUNNEL.md).
 
 The web app itself is served from Cloudflare's edge by a small Worker
 (`edge/`), so it loads fast and says plainly when the desk is offline. The
-API never passes through it. After a frontend change:
+API never passes through it. It is deployed once, by hand:
 
 ```bash
 npm --prefix edge run deploy
 ```
+
+After that, every `start` that builds a new web app publishes it there too
+([TUNNEL.md](TUNNEL.md)).
 
 ### First run on a fresh machine
 
@@ -326,11 +334,22 @@ opens the desk's own buy ticket, prefilled; nothing is placed until you
 confirm it.
 
 The data comes through `/api/v1/super-signals/{session,rank,best-pairs,reports,reports/<date>}`,
-which proxies the desk's read-only loopback service at `TBOT_SUPER_SIGNALS_URL`
+which proxies the desk's loopback service at `TBOT_SUPER_SIGNALS_URL`
 (default `http://127.0.0.1:8792`). A URL rather than a folder, so this project
 still reads nothing outside itself. Any signed-in operator may read it --
 a signal is the same fact for everybody on the desk. If that service is down
 the panel says so rather than showing an empty day.
+
+**Starting and stopping the desk.** For an admin, the panel carries the
+desk's switch beside its status, in every form of it -- Regular, Lightweight
+and 36 Trades on a phone. **▶ start desk** is offered on a trading day before
+the close whenever no desk is running -- a morning its 08:15 task missed, or
+after a stop -- and a desk started late catches up from the open. **■ stop
+desk** ends its day early after a confirmation: the agents finish their
+cycle, the desk reconciles and writes the day's report, and nothing is
+closed. Both go through `POST /api/v1/super-signals/desk/{start,stop}` (admin
+only, like the `/super` engine's on and off) to the service's own switch,
+which does exactly what `python -m signal_agents.desk run` / `stop` do.
 
 This replaces the A/B-book signal rail that read `runtime/super_research`
 directly. That runtime, its supervisors and the `ab_signal_options`

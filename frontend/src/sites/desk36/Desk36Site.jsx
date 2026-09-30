@@ -10,8 +10,8 @@ import { useExperience } from '../../shared/experience.js';
 import { ExperienceSwitch } from '../../shared/ExperienceControls.jsx';
 import { READING_GUIDE_URL } from '../../config.js';
 import {
-  AutoStatus, AutoTradeForm, CommoditiesPanel, deskOwnerNote, HotScan, LiteChart, MiniChart,
-  OptionsFlow, useMovers,
+  AutoStatus, AutoTradeForm, CommoditiesPanel, deskOwnerNote, fmtMark, HotScan, LiteChart,
+  MiniChart, OptionsFlow, ORDER_TYPES, orderNote, orderPrice, useMovers,
 } from '../tradier/TradierSite.jsx';
 import '../../shared/quotePopup.css';
 import './desk36.css';
@@ -482,13 +482,13 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
   // false on both /tradier/chain and POST /tradier/positions, so this asks
   // for them rather than being the only thing preventing them.
   const [zeroDte, setZeroDte] = useState(false);
-  // Market, or a limit below it. discount_pct = 0 IS the market order as far
-  // as the backend is concerned -- it rests a smart_limit at the going price.
-  // Anything above 0 becomes a limit at market x (1 - pct/100) which the
-  // server cancels after fifteen minutes if it has not filled. Ten is the
-  // rung the desk preselects, so switching to LIMIT lands on something
-  // sensible rather than on nothing.
-  const [market, setMarket] = useState(true);
+  // MKT, LIMIT or SMART -- the desk ticket's three (TradierSite ORDER_TYPES).
+  // LIMIT bids the mark less the chosen discount, to the cent, and the server
+  // cancels it if it has not filled in fifteen minutes. SMART, the mid on a
+  // wide spread and the ask on a tight one, is what a buy always was, so it
+  // is where the sheet opens. Ten is the rung LIMIT preselects, so switching
+  // to it lands on something sensible rather than on nothing.
+  const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
   const [midDayWarn, setMidDayWarn] = useState(false);
 
@@ -573,7 +573,8 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
     try {
       const row = await vidura.tradierOpen({
         user_id: user.user_id, symbol, side, live, zero_dte: zeroDte,
-        discount_pct: market ? 0 : discount,
+        order_type: otype,
+        discount_pct: otype === 'limit' ? discount : 0,
         buy_pct: Number(f.buy_pct),
         delta_min: bandInput.lo, delta_max: bandInput.hi,
         tp_pct: Number(f.tp_pct), sl_pct: Number(f.sl_pct),
@@ -600,6 +601,9 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
     () => (pick?.band || []).find((c) => c.occ_symbol === pick.pick) || null,
     [pick],
   );
+  // What the order type would bid on the contract shown -- the server prices
+  // it again from the quote it reads as the order goes in.
+  const preview = chosen ? orderPrice(otype, chosen.bid, chosen.ask, discount) : null;
 
   const num = (k, label, step) => (
     <div className="d36-fld">
@@ -653,13 +657,13 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
         </button>
 
         <div className="d36-otype">
-          <div className="d36-chiprow">
-            <button type="button" className={`d36-chip ${market ? 'on' : ''}`}
-              aria-pressed={market} onClick={() => setMarket(true)}>MKT</button>
-            <button type="button" className={`d36-chip ${!market ? 'on' : ''}`}
-              aria-pressed={!market} onClick={() => setMarket(false)}>LIMIT</button>
+          <div className="d36-chiprow" role="group" aria-label="order type">
+            {ORDER_TYPES.map(([id, text]) => (
+              <button key={id} type="button" className={`d36-chip ${otype === id ? 'on' : ''}`}
+                aria-pressed={otype === id} onClick={() => setOtype(id)}>{text}</button>
+            ))}
           </div>
-          {!market && (
+          {otype === 'limit' && (
             <div className="d36-chiprow">
               {DISCOUNT_OPTIONS.map((d) => (
                 <button key={d} type="button"
@@ -669,13 +673,17 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
               ))}
             </div>
           )}
-          {/* What the choice actually does, in the terms the server acts on.
-              A limit that never fills is a position you did not take, so the
-              fifteen minutes is the part worth saying out loud. */}
+          {/* What the choice actually does, in the terms the server acts on,
+              and what it would bid on the contract above. A limit that never
+              fills is a position you did not take, so the fifteen minutes is
+              the part worth saying out loud. */}
           <div className="d36-otnote">
-            {market
-              ? 'market · fills at the going price'
-              : `limit −${discount}% · cancels after 15 min if unfilled`}
+            {orderNote(otype, discount)}
+            {chosen && otype === 'limit' && (preview
+              ? <><br />mark {fmtMark(preview.mark)} &rarr; limit <b>{preview.price.toFixed(2)}</b></>
+              : <><br />no two-sided quote &mdash; no mark to take a discount from</>)}
+            {preview && otype === 'smart' && <><br />limit <b>{preview.price.toFixed(2)}</b></>}
+            {preview && otype === 'market' && <><br />ask <b>{preview.ask.toFixed(2)}</b> now</>}
           </div>
         </div>
 
@@ -707,7 +715,7 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
         </button>
         <div className={`d36-warn ${live ? 'live' : 'paper'}`}>
           {live ? '● live — this places a real order' : '○ paper — sandbox venue'}
-          {!market && ` · limit −${discount}%`}
+          {otype === 'limit' ? ` · limit \u2212${discount}%` : otype === 'market' ? ' · market' : ' · smart limit'}
         </div>
       </div>
     </div>
@@ -867,7 +875,10 @@ function PositionsPanel({ user, live, onError, onOk, blocked, lite = false, relo
             </div>
             <div className="d36-posnums">
               <span>{p.contracts}x</span>
-              <span>in {p.entry_price ?? '—'}</span>
+              {/* not filled yet: what the buy is working at instead */}
+              <span>{p.entry_price != null ? `in ${p.entry_price}`
+                : p.limit_price != null ? `limit ${p.limit_price.toFixed(2)}`
+                  : p.order_type === 'market' ? 'at market' : 'in —'}</span>
               <span>tp {p.tp_price ?? '—'}</span>
               <span>sl {p.sl_price ?? '—'}</span>
               {p.live_bid != null && <span>bid {p.live_bid}</span>}
@@ -1118,8 +1129,11 @@ export default function Desk36Site() {
       })
       .catch((e) => { if (!dead) fail('quotes', e?.detail || e?.message || 'quotes unavailable'); });
     pull();
-    const id = setInterval(() => { if (!busyRef.current) pull(); }, QUOTE_MS);
-    return () => { dead = true; clearInterval(id); };
+    // Prices for a screen: a hidden tab skips its turns and asks again on return.
+    const id = setInterval(() => { if (!busyRef.current && !document.hidden) pull(); }, QUOTE_MS);
+    const onShow = () => { if (!document.hidden) pull(); };
+    document.addEventListener('visibilitychange', onShow);
+    return () => { dead = true; clearInterval(id); document.removeEventListener('visibilitychange', onShow); };
   }, [user, symbols, fail, ok, lite]);
 
   // DMI: one timesales call per new symbol, so rarely.
@@ -1135,7 +1149,7 @@ export default function Desk36Site() {
       setDmi(m);
     }).catch(() => { /* the board is still useful without readings */ });
     pull();
-    const id = setInterval(() => { if (!busyRef.current) pull(); }, DMI_MS);
+    const id = setInterval(() => { if (!busyRef.current && !document.hidden) pull(); }, DMI_MS);
     return () => { dead = true; clearInterval(id); };
   }, [user, symbols, live, lite]);
 
@@ -1565,6 +1579,7 @@ export default function Desk36Site() {
           </div>
           <div className="d36-hot d36-signals">
             <Signals touch lite reloadKey={liteKey} accent="#86efac" paused={busy}
+              canControl={!!user?.is_admin}
               onPick={pickSym} onTrade={buySym} />
           </div>
         </>
@@ -1640,6 +1655,7 @@ export default function Desk36Site() {
             {sigOpen && (
               <div className="d36-hot d36-signals">
                 <Signals touch accent="#86efac" paused={busy}
+                  canControl={!!user?.is_admin}
                   onPick={pickSym} onTrade={buySym} />
               </div>
             )}

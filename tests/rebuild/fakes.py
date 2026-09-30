@@ -131,9 +131,11 @@ def install(monkeypatch) -> None:
                             "status": "open", **kw}
         return venue.PlacedOrder(oid, "open", acct.orders[oid])
 
-    def place_buy(*, cred, underlying, occ_symbol, quantity, price, sandbox=True):
+    def place_buy(*, cred, underlying, occ_symbol, quantity, price, sandbox=True,
+                  order_type="limit"):
         return _place(cred, side="buy_to_open", occ_symbol=occ_symbol,
-                      quantity=quantity, prefix="buy", price=price)
+                      quantity=quantity, prefix="buy", price=price,
+                      type=order_type)
 
     def place_sell(*, cred, underlying, occ_symbol, quantity, price,
                    duration="gtc", sandbox=True):

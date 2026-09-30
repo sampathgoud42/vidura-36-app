@@ -26,6 +26,25 @@
 @keyframes ss-pulse { 50% { opacity: 0.3; } }
 .ss-day { margin-left: auto; margin-right: 0 !important; font-size: 10px; color: var(--tr-dim, #9aa3d0); }
 
+/* the desk's on/off switch (admins), beside its status */
+.ss-switch {
+  position: relative;
+  padding: 2px 9px; border-radius: 999px;
+  font: 700 9.5px/1.5 ui-monospace, 'Cascadia Code', 'IBM Plex Mono', Consolas, monospace;
+  letter-spacing: 0.06em; white-space: nowrap; cursor: pointer;
+  border: 1px solid var(--tr-line, rgba(148, 163, 255, 0.25));
+  background: transparent; color: var(--tr-dim, #9aa3d0);
+}
+.ss-switch.start { color: var(--tr-green, #34d399); border-color: rgba(52, 211, 153, 0.45); }
+.ss-switch.start:hover { background: rgba(52, 211, 153, 0.1); }
+.ss-switch.stop:hover { color: var(--tr-red, #ff6b5e); border-color: rgba(255, 107, 94, 0.5); }
+.ss-switch:disabled { opacity: 0.7; cursor: progress; }
+/* 44pt of reach on a phone without making the header row that tall */
+.ss--touch .ss-switch { padding: 4px 11px; font-size: 10.5px; }
+.ss--touch .ss-switch::after {
+  content: ''; position: absolute; left: -4px; right: -4px; top: -10px; bottom: -10px;
+}
+
 .ss-score {
   display: flex; flex-wrap: wrap; align-items: baseline;
   margin: 10px 0 8px; font-size: 11px; color: var(--tr-dim, #9aa3d0);
@@ -66,6 +85,11 @@
   background: color-mix(in srgb, var(--tr-accent, #5b6af0) 20%, transparent);
 }
 .ss-seg .n { margin-left: 5px; font-weight: 400; opacity: 0.75; }
+
+/* a signal that is one of the report's best pairs */
+.ss-thumbs { margin-left: 5px; font-size: 11px; line-height: 1; letter-spacing: -0.12em; cursor: help; }
+.ss--touch .ss-thumbs { font-size: 13px; }
+.ss-thumbsnote { color: var(--tr-green, #34d399); }
 
 /* ── agent chips: one line that scrolls sideways ──────────────────────────── */
 .ss-agents {

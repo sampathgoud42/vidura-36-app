@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from decimal import ROUND_HALF_UP, Decimal
 
 
 def delta_band(side: str, delta_min: float, delta_max: float) -> tuple[float, float]:
@@ -40,6 +41,73 @@ def smart_limit(bid: float, ask: float) -> float:
     if (ask - bid) <= 0.02:
         return round(ask, 2)
     return round((bid + ask) / 2, 2)
+
+
+# ---- how the buy is priced --------------------------------------------------
+# Three ways to bid, chosen on the ticket:
+#
+#   smart   smart_limit above: the mid on a wide spread, the ask on a tight
+#           one. It rests until it fills or the day ends.
+#   market  a market order: it takes whatever the offer is when it arrives.
+#   limit   the MARK less a discount, to the cent -- 1.03 at 10% off is
+#           0.927, bid 0.93 -- withdrawn by the monitor if it has not filled
+#           within LIMIT_CANCEL_S.
+ORDER_TYPES = ("smart", "market", "limit")
+LIMIT_CANCEL_S = 15 * 60
+_CENT = Decimal("0.01")
+
+
+def mark_price(bid: float, ask: float) -> Decimal | None:
+    """The mark: the middle of a two-sided quote, exactly (1.02 / 1.05 is
+    1.035). None without both sides -- a discount taken off a one-sided
+    "mark" is a discount off a price nobody is quoting."""
+    if bid is None or ask is None or bid <= 0 or ask <= 0 or ask < bid:
+        return None
+    return (Decimal(str(bid)) + Decimal(str(ask))) / 2
+
+
+def discounted_limit(mark: Decimal, discount_pct: float) -> float:
+    """mark x (1 - discount), rounded to the cent with halves going UP, the
+    way a person rounds a price: 0.927 -> 0.93, 0.945 -> 0.95. Binary floats
+    would have sent some halves down (0.945 is stored as 0.94499...)."""
+    raw = mark * (Decimal(100) - Decimal(str(discount_pct))) / Decimal(100)
+    return float(raw.quantize(_CENT, rounding=ROUND_HALF_UP))
+
+
+@dataclass(frozen=True)
+class BuyPrice:
+    """What to send, and what one contract is sized at."""
+    order_type: str
+    limit: float | None           # None for a market order
+    sizing_price: float           # the price the budget is divided by
+    mark: float | None            # the quote's mark, when it has one
+    discount_pct: float | None    # limit orders only
+
+
+def buy_price(order_type: str, bid: float, ask: float,
+              discount_pct: float = 0.0) -> BuyPrice:
+    """How to bid on this quote. ValueError when the quote cannot carry the
+    order type asked for; callers turn that into a refusal.
+
+    A market order is sized at the ask -- what it is expected to pay -- and a
+    limit at its own limit, since that is what it spends if it fills."""
+    if order_type not in ORDER_TYPES:
+        raise ValueError(f"unknown order type {order_type!r}")
+    if not ask or ask <= 0:
+        raise ValueError("there is no offer to buy from")
+    mark = mark_price(bid, ask)
+    if order_type == "market":
+        return BuyPrice("market", None, round(float(ask), 2),
+                        float(mark) if mark is not None else None, None)
+    if order_type == "smart":
+        px = smart_limit(bid or 0.0, ask)
+        return BuyPrice("smart", px, px, float(mark) if mark is not None else None, None)
+    if mark is None:
+        raise ValueError("there is no two-sided quote, so no mark to take a discount from")
+    px = discounted_limit(mark, discount_pct)
+    if px < 0.01:
+        raise ValueError(f"{discount_pct:g}% under a mark of {mark} rounds to nothing")
+    return BuyPrice("limit", px, px, float(mark), float(discount_pct))
 
 
 def pick_contract(chain: list[dict], side: str, delta_min: float,

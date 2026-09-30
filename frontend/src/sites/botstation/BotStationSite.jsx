@@ -140,11 +140,14 @@ function fmtElapsed(iso, nowMs) {
   return `${p(h)}:${p(m)}:${p(s)}`;
 }
 
+// An API stamp (UTC) on the desk's clock, like every other time here: CST.
 function utcTs(iso) {
   if (!iso) return '—';
   const d = new Date(/Z$|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
   return Number.isNaN(d.getTime()) ? iso
-    : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    : `${d.toLocaleString('en-US', {
+      timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    })} CST`;
 }
 
 // A launch time as the DESK reads it: CST, day first, 12-hour.

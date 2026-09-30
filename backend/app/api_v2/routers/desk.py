@@ -12,6 +12,7 @@ import logging
 import time
 import threading
 from datetime import timedelta
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -379,6 +380,81 @@ def chain(symbol: str = Query(...), side: str = Query(default="call"),
             "candidates": len(rows)}
 
 
+# ---- chart bars, shared ------------------------------------------------------
+# Every chart tile asks for its own bars, and the same ticker is usually on
+# several screens at once -- both desks, Lightweight, a phone -- so one Tradier
+# call per ticker per window serves them all. Bars are market data, the same for
+# every operator, so the key carries the venue and not the tenant. Fifteen
+# seconds is far inside a bar and under the tiles' one-minute poll; the price of
+# the bar in progress comes over the stream, not from here. Concurrent askers
+# for the same key wait for the one call already out (single flight); askers
+# for other keys never wait on it.
+_BARS_TTL_S = 15.0
+_BARS: dict[tuple, tuple[float, list]] = {}
+_BAR_LOCKS: dict[tuple, threading.Lock] = {}
+_BAR_GUARD = threading.Lock()
+
+# The previous close moves once a session, so it is asked for once a day per
+# ticker. It was a second Tradier call on every chart load -- half of each
+# tile's wait.
+_PREV_CLOSE: dict[tuple, float | None] = {}
+
+
+def _bar_lock(key: tuple) -> threading.Lock:
+    with _BAR_GUARD:
+        lock = _BAR_LOCKS.get(key)
+        if lock is None:
+            lock = _BAR_LOCKS[key] = threading.Lock()
+        return lock
+
+
+def _shared_bars(symbol: str, native: str, start: str, *, cred, sandbox: bool) -> list:
+    key = (symbol, native, start, sandbox)
+    hit = _BARS.get(key)
+    if hit and time.monotonic() - hit[0] < _BARS_TTL_S:
+        return hit[1]
+    with _bar_lock(key):
+        hit = _BARS.get(key)
+        if hit and time.monotonic() - hit[0] < _BARS_TTL_S:
+            return hit[1]
+        # Regular session only: the chart draws and measures 09:30-16:00 and
+        # dropped the rest, so asking for "all" shipped three times the bars.
+        bars = venue_mod.timesales(symbol, cred=cred, interval=native,
+                                   sandbox=sandbox, start=start, session_filter="open")
+        now = time.monotonic()
+        with _BAR_GUARD:
+            if len(_BARS) > 400:             # days of keys otherwise: keep the live ones
+                for k in [k for k, (at, _) in _BARS.items() if now - at > _BARS_TTL_S]:
+                    _BARS.pop(k, None)
+                    _BAR_LOCKS.pop(k, None)
+            _BARS[key] = (now, bars)
+        return bars
+
+
+def reset_market_caches() -> None:
+    """Forget the shared bars and previous closes -- for tests, which swap the
+    venue between cases and must not be answered from the last case's data."""
+    with _BAR_GUARD:
+        _BARS.clear()
+        _BAR_LOCKS.clear()
+    _PREV_CLOSE.clear()
+
+
+def _prev_close(symbol: str, *, cred, sandbox: bool) -> float | None:
+    from app.domains.trading.risk import clock
+
+    key = (symbol, sandbox, clock.today().isoformat())
+    if key in _PREV_CLOSE:
+        return _PREV_CLOSE[key]
+    quote = (venue_mod.quotes([symbol], cred=cred, sandbox=sandbox) or [{}])[0]
+    raw_prev = quote.get("prevclose") or quote.get("prev_close")
+    value = float(raw_prev) if raw_prev not in (None, "") else None
+    if len(_PREV_CLOSE) > 2000:
+        _PREV_CLOSE.clear()
+    _PREV_CLOSE[key] = value
+    return value
+
+
 @market_router.get("/timesales", operation_id="getTradierTimesales")
 @deps.tenant_scoped
 def timesales(symbol: str = Query(...), interval: str = Query(default="5min"),
@@ -395,9 +471,8 @@ def timesales(symbol: str = Query(...), interval: str = Query(default="5min"),
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from None
     try:
-        bars = venue_mod.timesales(
-            symbol.upper(), cred=cred, interval=native, sandbox=not live,
-            start=indicators.start_date(interval))
+        bars = _shared_bars(symbol.upper(), native, indicators.start_date(interval),
+                            cred=cred, sandbox=not live)
         bars = indicators.aggregate(bars, factor)
     except Exception as exc:                            # noqa: BLE001
         logger.warning("timesales unavailable for %s/%s: %s: %s",
@@ -432,12 +507,8 @@ def timesales(symbol: str = Query(...), interval: str = Query(default="5min"),
 
     # The line the day's change is measured from. v1 returned it and the chart
     # still reads seed.prev_close; without it every header shows no change.
-    prev_close = None
     try:
-        quote = (venue_mod.quotes([symbol.upper()], cred=cred,
-                                  sandbox=not live) or [{}])[0]
-        raw_prev = quote.get("prevclose") or quote.get("prev_close")
-        prev_close = float(raw_prev) if raw_prev not in (None, "") else None
+        prev_close = _prev_close(symbol.upper(), cred=cred, sandbox=not live)
     except Exception:                                   # noqa: BLE001
         prev_close = None
 
@@ -694,15 +765,16 @@ def best_bets(live: bool = Query(default=False), refresh: bool = Query(default=F
 
     Every symbol scanned comes back, qualifying or not, each with `setup` "A",
     "B" or null -- the sheet filters, and a ticker that misses by a point is
-    worth seeing. Served from a snapshot that refreshes in the background;
-    `refresh` starts a sweep now and the answer says `refreshing` until it
-    lands.
+    worth seeing. Served from the venue's stored sweep, with when it ran
+    (`at`, `scanned_at`, and what started it in `trigger`); `refresh` starts a
+    sweep now and the answer says `refreshing` until it lands. The operator's
+    own credential is still required: it is what a sweep reads through.
     """
     from app.domains.trading.market import best_bets as screen
 
     cred = _credential(db, tenant, kr, live=live)
     return {"kind": "best_bets",
-            **screen.snapshot(tenant.id, cred, sandbox=not live, force=refresh)}
+            **screen.snapshot(cred, sandbox=not live, force=refresh)}
 
 
 @market_router.get("/flow", operation_id="getTradierOptionsFlow")
@@ -858,6 +930,11 @@ class AutoTradeStart(BaseModel):
     window_open: str | None = Field(default=None, max_length=5)
     window_close: str | None = Field(default=None, max_length=5)
     zero_dte: bool = False
+    # How its buys are priced, as on the BUY ticket: "smart", "market", or
+    # "limit" -- the mark less discount_pct, withdrawn after 15 minutes
+    # unfilled. Left out, a discount above 0 means limit and none means smart.
+    order_type: Literal["smart", "market", "limit"] | None = None
+    discount_pct: float = Field(default=0, ge=0, le=50)
 
 
 @market_router.get("/autotrade/status", operation_id="getTradierAutoTradeStatus")
@@ -893,7 +970,9 @@ def autotrade_start(payload: AutoTradeStart,
             delta_max=payload.delta_max, signals=payload.signals,
             pairs=[p.model_dump() for p in payload.pairs],
             window_open=payload.window_open, window_close=payload.window_close,
-            zero_dte=payload.zero_dte)
+            zero_dte=payload.zero_dte,
+            order_type=payload.order_type or ("limit" if payload.discount_pct > 0 else "smart"),
+            discount_pct=payload.discount_pct)
     except autotrade.AutoTradeRefused as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
 

@@ -7,6 +7,7 @@ import SuperSignals, { BestPair } from '../../shared/SuperSignals.jsx';
 import BestBetsLink from '../../shared/BestBets.jsx';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
+import { deskDateTime, deskStamp, deskTime, wallClock, wallToDesk } from '../../shared/cst.js';
 import { useExperience } from '../../shared/experience.js';
 import '../../shared/worldHeader.css';
 import './tradier.css';
@@ -68,12 +69,10 @@ function usd(v) {
   })}`;
 }
 
+// An API stamp (naive UTC) on the desk's clock: "Sep 30, 14:05", in CST.
 function when(iso) {
   if (!iso) return '—';
-  const d = new Date(/Z$|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return deskDateTime(iso) || iso;
 }
 
 // ── lucky charm blessing: ONE random charm from the home screen's gallery,
@@ -232,6 +231,8 @@ function saveChartInterval(symbol, v) {
    withStrip=false is a socket for charts alone -- the Lightweight board's one
    chart, which has no strip: only `extras` are subscribed, and the strip's
    seed quotes and its timed BTC quote are left out. */
+const PAINT_MS = 250;
+
 function useIndexStream(user, live, extras = [], withStrip = true) {
   const [ticks, setTicks] = useState([]);
   // whatever the charts are showing rides the same socket — a symbol the
@@ -251,9 +252,22 @@ function useIndexStream(user, live, extras = [], withStrip = true) {
   // they are refreshed here on a timer instead of by a tick
   const polledRef = useRef([]);
 
+  // A busy tape sends quotes many times a second, and every paint re-renders
+  // the desk that owns this hook -- the strip, every chart fed by it, the
+  // tables. Ticks still land in bySymbol at once; the screen catches up at
+  // most once per PAINT_MS, which is faster than a price can be read.
+  const paintTimer = useRef(null);
+  const paintedAt = useRef(0);
   const paint = useCallback(() => {
-    setTicks(Object.values(bySymbol.current).filter((t) => !t.extra));
+    if (paintTimer.current) return;
+    const wait = Math.max(0, PAINT_MS - (Date.now() - paintedAt.current));
+    paintTimer.current = setTimeout(() => {
+      paintTimer.current = null;
+      paintedAt.current = Date.now();
+      setTicks(Object.values(bySymbol.current).filter((t) => !t.extra));
+    }, wait);
   }, []);
+  useEffect(() => () => clearTimeout(paintTimer.current), []);
 
   const connect = useCallback(async () => {
     // Streaming only exists on production, so it runs only when the desk is
@@ -621,6 +635,25 @@ function regularSession(bars) {
   });
 }
 
+// Whether an element is on screen or within reach of it. Chart tiles load and
+// refresh by it: a Regular board carries eighteen, most of them below the fold,
+// and opening it loaded every one at once -- so the charts in view waited
+// behind the ones nobody was looking at, and every hidden tile kept polling.
+// `remountKey` re-attaches it when the element is rebuilt (a chart expanded to
+// full screen is). Without IntersectionObserver everything counts as in view.
+function useNearView(ref, remountKey) {
+  const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return undefined;
+    const io = new IntersectionObserver(([entry]) => setNear(entry.isIntersecting),
+      { rootMargin: '400px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, remountKey]);
+  return near;
+}
+
 /* ── intraday candles: 15-minute bars from Tradier, live-updated ────────────
    Seeded from timesales because a socket only produces from the moment it
    connects. Streamed ticks do NOT append points — on a candle chart the live
@@ -679,9 +712,18 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
   const canvasRef = useRef(null);
   const geomRef = useRef(null);          // candle hit-boxes for the crosshair
 
+  // Loaded when the tile is first on screen or near it, refreshed only while
+  // it is, and brought up to date when it comes back into view.
+  const boxRef = useRef(null);
+  const near = useNearView(boxRef, expanded) || expanded;
+  const [seen, setSeen] = useState(near);
+  useEffect(() => { if (near) setSeen(true); }, [near]);
+  const lastLoadRef = useRef(0);
+
   const retryRef = useRef(null);
   const load = useCallback(async () => {
     if (!user) return;
+    lastLoadRef.current = Date.now();
     try {
       setSeed(await vidura.tradierTimesales(user.user_id, symbol, interval,
         live, interval === '1min' ? 1 : 5));
@@ -701,10 +743,17 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
   }, [user, symbol, interval, live, onError]);
 
   useEffect(() => {
+    if (!seen) return undefined;
     setSeed(null);
     load();
     return () => clearTimeout(retryRef.current);
-  }, [load]);
+  }, [load, seen]);
+
+  // Back in view after a minute or more away: catch up now, not at the next tick.
+  useEffect(() => {
+    if (near && seen && Date.now() - lastLoadRef.current > 60_000) load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [near]);
 
   // A refresh redraws over the bars already on screen rather than blanking
   // the tile first, so it is keyed apart from the load above.
@@ -725,14 +774,15 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
   // Pivots come from the prior completed session, so once per symbol is
   // enough — they do not move while the chart is open.
   useEffect(() => {
+    if (!seen) return undefined;
     let alive = true;
     setPivots(null);
     vidura.superQuote(symbol)
       .then((q) => { if (alive) setPivots(q?.pivots || null); })
       .catch(() => { if (alive) setPivots(null); });
     return () => { alive = false; };
-  }, [symbol]);
-  usePolling(load, 60_000, { enabled: !!user && isMarketOpen(), blocked });
+  }, [symbol, seen]);
+  usePolling(load, 60_000, { enabled: !!user && isMarketOpen() && near, blocked, inBackground: false });
 
   // everything fetched feeds the indicator; only the latest session is drawn
   const allBars = useMemo(() => regularSession(seed?.bars || []), [seed]);
@@ -864,7 +914,7 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
     ctx.fillStyle = FAINT;
     candles.forEach((c, i) => {
       if (i % every !== 0 && i !== candles.length - 1) return;
-      const hhmm = String(c.time || '').slice(11, 16);
+      const hhmm = wallClock(c.time);
       if (!hhmm) return;
       ctx.fillText(hhmm, cx(i), h - padB / 2);
     });
@@ -998,8 +1048,8 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
       ctx.textBaseline = 'middle';
       ctx.fillText(priceAt.toFixed(2), padL + plotW + 5, cy);
 
-      // and the bar's time, against the time axis
-      const hhmm = String(candles[i].time || '').slice(11, 16);
+      // and the bar's time, against the time axis (CST)
+      const hhmm = wallClock(candles[i].time);
       if (hhmm) {
         ctx.font = '9px ui-monospace, Consolas, monospace';
         const tw = ctx.measureText(hhmm).width + 8;
@@ -1032,7 +1082,7 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
   const shown = hover || (candles.length ? candles[candles.length - 1] : null);
 
   const chart = (
-    <div className={`tr-chart ${expanded ? 'fs' : ''}`}>
+    <div ref={boxRef} className={`tr-chart ${expanded ? 'fs' : ''}`}>
       <div className="tr-charthd">
         {editSym ? (
           <input className="tr-syminput" value={symDraft} autoFocus maxLength={10}
@@ -1107,7 +1157,7 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
       <div className="tr-chartohlc tr-note">
         {shown ? (
           <>
-            <span>{String(shown.time || '').replace('T', ' ').slice(0, 16)}</span>
+            <span>{wallToDesk(shown.time).slice(5).replace('T', ' ')} CST</span>
             {' · '}O {shown.o?.toFixed(2)} H {shown.h?.toFixed(2)}
             {' '}L {shown.l?.toFixed(2)}{' '}
             <span style={{ color: shown.c >= shown.o ? 'var(--tr-green)' : 'var(--tr-red)' }}>
@@ -1239,12 +1289,59 @@ function loadDeskDefaults() {
 
 const DISCOUNT_OPTIONS = [5, 10, 20, 40];
 
+// How a buy is priced -- the server's three (execution/selection.py):
+//   MKT    a market order: it takes the offer.
+//   LIMIT  the MARK (the middle of bid and ask) less the discount, to the
+//          cent -- mark 1.03 at -10% is 0.927, bid 0.93 -- cancelled if it
+//          has not filled in fifteen minutes.
+//   SMART  the desk's smart limit: the mid on a wide spread, the ask on a
+//          tight one. What every buy did before there was a choice.
+// Exported with the preview below, so 36 Trades' ticket offers and shows the
+// same three the same way.
+export const ORDER_TYPES = [['market', 'MKT'], ['limit', 'LIMIT'], ['smart', 'SMART']];
+
+// to the cent, halves up -- as the server rounds (0.945 -> 0.95)
+const toCents = (x) => Math.round((x + 1e-9) * 100) / 100;
+
+/** A mark to the cent, or to the tenth of a cent when it has one (1.035). */
+export const fmtMark = (m) => {
+  const s = Number(m).toFixed(3);
+  return s.endsWith('0') ? s.slice(0, -1) : s;
+};
+
+/** What an order type would bid on this quote. A preview: the server prices
+ * from the quote it reads as the order goes in. Null when the quote cannot
+ * carry it (no offer; or, for a limit, no two-sided quote to take a mark of). */
+export function orderPrice(otype, bid, ask, discount) {
+  const b = Number(bid);
+  const a = Number(ask);
+  if (!(a > 0)) return null;
+  if (otype === 'market') return { price: null, ask: a };
+  if (otype === 'smart') return { price: !(b > 0) || a - b <= 0.02 ? toCents(a) : toCents((a + b) / 2) };
+  if (!(b > 0) || a < b) return null;
+  const mark = (a + b) / 2;
+  return { mark, price: toCents((mark * (100 - discount)) / 100) };
+}
+
+/** The ticket's one line on what the chosen order type does. */
+export function orderNote(otype, discount) {
+  if (otype === 'market') return 'market \u00b7 takes the offer, at the going price';
+  if (otype === 'limit') {
+    return `limit ${discount}% under the mark \u00b7 cancels after 15 min if unfilled`;
+  }
+  return 'smart limit \u00b7 the mid on a wide spread, the ask on a tight one';
+}
+
+const orderTag = (otype, discount) => (otype === 'limit' ? `LIMIT \u2212${discount}%`
+  : otype === 'market' ? 'MKT' : 'SMART');
+
 function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, onClose }) {
   const named = !!open?.occ_symbol;
   const [side, setSide] = useState(open?.side === 'put' ? 'put' : 'call');
   const [zeroDte, setZeroDte] = useState(false);
   const [manualSym, setManualSym] = useState('');
-  const [market, setMarket] = useState(true);
+  // SMART first: it is what every buy was before there was a choice.
+  const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
   const [midDayWarn, setMidDayWarn] = useState(false);
   useEffect(() => {
@@ -1278,7 +1375,8 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
     occ_symbol: open.occ_symbol,
     side,
     zero_dte: zeroDte,
-    discount_pct: market ? 0 : discount,
+    order_type: otype,
+    discount_pct: otype === 'limit' ? discount : 0,
     ...desk,
   });
 
@@ -1347,15 +1445,14 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
             <input className="tr-input" type="number" min="1" max="99" value={desk.sl_pct}
               onWheel={(e) => e.currentTarget.blur()} onChange={set('sl_pct')} /></div>
           <div><span className="tr-label">Order type</span>
-            <div className="tr-market-toggle">
-              <button type="button"
-                className={`tr-chip ${market ? 'on' : ''}`}
-                onClick={() => setMarket(true)}>MKT</button>
-              <button type="button"
-                className={`tr-chip ${!market ? 'on' : ''}`}
-                onClick={() => setMarket(false)}>LIMIT</button>
+            <div className="tr-market-toggle" role="group" aria-label="order type">
+              {ORDER_TYPES.map(([id, text]) => (
+                <button key={id} type="button" aria-pressed={otype === id}
+                  className={`tr-chip ${otype === id ? 'on' : ''}`}
+                  onClick={() => setOtype(id)}>{text}</button>
+              ))}
             </div>
-            {!market && (
+            {otype === 'limit' && (
               <div className="tr-discount-row">
                 {DISCOUNT_OPTIONS.map((d) => (
                   <button key={d} type="button"
@@ -1366,6 +1463,7 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
                 ))}
               </div>
             )}
+            <span className="tr-note tr-otnote">{orderNote(otype, discount)}</span>
           </div>
         </div>
 
@@ -1406,7 +1504,7 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
               ? `${desk.buy_pct}% ±${desk.size_tol}% · TP ${desk.tp_pct}% · SL ${desk.sl_pct}%`
               : `delta ${signedBandLabel(side, desk.delta)} · ${desk.buy_pct}% ±${desk.size_tol}%`
                 + ` · TP ${desk.tp_pct}% · SL ${desk.sl_pct}%`}
-            {!market && ` · LIMIT −${discount}%`}
+            {` · ${orderTag(otype, discount)}`}
           </span>
           <span className="ml-auto" />
           <button type="button" className="tr-btn sm" onClick={onClose} disabled={busy}>
@@ -1510,7 +1608,9 @@ export function HotScan({ user, live, onPick, onError, onBuy, buying, blocked, s
   // While a sweep is IN FLIGHT it tightens to a few seconds — a granularity
   // switch starts a fresh one, and waiting out a full tick to see the result
   // makes the switch feel broken.
-  usePolling(load, snap?.refreshing ? 3_000 : 60_000, { enabled: !!user && isMarketOpen(), blocked });
+  usePolling(load, snap?.refreshing ? 3_000 : 60_000, {
+    enabled: !!user && isMarketOpen(), blocked, inBackground: false,
+  });
 
   const doRefresh = async () => {
     if (busy) return;
@@ -1679,11 +1779,11 @@ export function HotScan({ user, live, onPick, onError, onBuy, buying, blocked, s
             do the subtraction. The exact time is in the title. */}
         {!snap?.refreshing && !busy && meta.at && (
           <span className="tr-note"
-            title={`swept ${meta.at} · ${meta.scanned} scanned · `
+            title={`swept ${deskStamp(meta.at)} · ${meta.scanned} scanned · `
               + `${meta.with_readings} with readings · ${meta.took_s}s · `
               + `${meta.venue} · ${meta.interval} bars · `
               + `re-sweeps every ${HOT_REFRESH_MIN} min`}>
-            {snap?.age_s == null ? meta.at : `${Math.floor(snap.age_s / 60)}m`}
+            {snap?.age_s == null ? deskTime(meta.at) : `${Math.floor(snap.age_s / 60)}m`}
           </span>
         )}
         <button type="button" className="tr-chip" onClick={doRefresh} disabled={busy}
@@ -1765,7 +1865,7 @@ export function CommoditiesPanel({ user, live, onPick, onError, onBuy, blocked }
   }, [user, live, onError]);
 
   useEffect(() => { load(); }, [load]);
-  usePolling(load, 60_000, { enabled: !!user, blocked });
+  usePolling(load, 60_000, { enabled: !!user, blocked, inBackground: false });
 
   const doRefresh = async () => {
     if (busy) return;
@@ -1870,7 +1970,7 @@ function TickerRail({ user, onPick }) {
       } catch (e) { if (alive) setErr(errText(e)); }
     };
     load();
-    const t = setInterval(load, 15_000);
+    const t = setInterval(() => { if (!document.hidden) load(); }, 15_000);
     return () => { alive = false; clearInterval(t); };
   }, [user, symbols]);
 
@@ -2133,15 +2233,29 @@ function ErrorTray({ errors, onDismiss, onClear }) {
    The dismiss button IS the retry button: a blocked poll drops its timer
    entirely, and fires once the moment it is unblocked — so closing the card
    refreshes straight away instead of waiting out the interval. */
-function usePolling(fn, everyMs, { enabled = true, blocked = false } = {}) {
+// `inBackground: false` is for what only a screen can use -- charts, boards,
+// the positions table. In a tab nobody is looking at those polls were pure
+// cost, and the boards' ones kept the API sweeping a hundred names and whole
+// option chains for them. They pause while the tab is hidden and catch up the
+// moment it is shown again. Anything that acts, or alerts, keeps polling.
+function usePolling(fn, everyMs, { enabled = true, blocked = false, inBackground = true } = {}) {
   const wasBlocked = useRef(false);
+  const lastRun = useRef(0);
   useEffect(() => {
     if (!enabled) return undefined;
     if (blocked) { wasBlocked.current = true; return undefined; }
-    if (wasBlocked.current) { wasBlocked.current = false; fn(); }
-    const t = setInterval(fn, everyMs);
-    return () => clearInterval(t);
-  }, [fn, everyMs, enabled, blocked]);
+    const run = () => { lastRun.current = Date.now(); fn(); };
+    if (wasBlocked.current) { wasBlocked.current = false; run(); }
+    const t = setInterval(() => { if (inBackground || !document.hidden) run(); }, everyMs);
+    const onShow = () => {
+      if (!document.hidden && Date.now() - lastRun.current >= everyMs) run();
+    };
+    if (!inBackground) document.addEventListener('visibilitychange', onShow);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onShow);
+    };
+  }, [fn, everyMs, enabled, blocked, inBackground]);
 }
 
 /* Collects desk errors, folding repeats of the same failure into one card
@@ -2162,7 +2276,7 @@ function useDeskErrors() {
     const message = errText(e);
     // a venue outcome arrives as plain text, not a failed HTTP call
     const kind = typeof e === 'string' ? 'rejected' : errKind(status);
-    const at = new Date().toLocaleTimeString();
+    const at = `${deskTime(new Date(), { seconds: true })} CST`;
     setErrors((prev) => {
       const i = prev.findIndex((x) => x.message === message && x.kind === kind);
       if (i >= 0) {
@@ -2666,7 +2780,9 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
     signals: [],
     pairs: [],
   });
-  const [market, setMarket] = useState(true);
+  // How the watcher's buys are priced -- the BUY ticket's three. SMART is
+  // what the auto-trader always did, so it is where the form opens.
+  const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
   const [zeroDte, setZeroDte] = useState(true);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -2682,11 +2798,11 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
 
   useEffect(() => {
     if (isHot) {
-      setMarket(false); setDiscount(10);
+      setOtype('limit'); setDiscount(10);
       setF((p) => ({ ...p, delta: '0.30-0.50' }));
     }
     if (isSuperHot) {
-      setMarket(false); setDiscount(10);
+      setOtype('limit'); setDiscount(10);
       setF((p) => ({ ...p, buy_pct: 30, delta: '0.30-0.50' }));
     }
     // Each strategy opens on its own window: the level cross is an opening-
@@ -2791,15 +2907,14 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
             </div>
           ) : (
           <div><span className="tr-label">Order type</span>
-            <div className="tr-market-toggle">
-              <button type="button"
-                className={`tr-chip ${market ? 'on' : ''}`}
-                onClick={() => setMarket(true)}>MKT</button>
-              <button type="button"
-                className={`tr-chip ${!market ? 'on' : ''}`}
-                onClick={() => setMarket(false)}>LIMIT</button>
+            <div className="tr-market-toggle" role="group" aria-label="order type">
+              {ORDER_TYPES.map(([id, text]) => (
+                <button key={id} type="button" aria-pressed={otype === id}
+                  className={`tr-chip ${otype === id ? 'on' : ''}`}
+                  onClick={() => setOtype(id)}>{text}</button>
+              ))}
             </div>
-            {!market && (
+            {otype === 'limit' && (
               <div className="tr-discount-row">
                 {AUTO_DISCOUNT_OPTIONS.map((d) => (
                   <button key={d} type="button"
@@ -2810,6 +2925,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
                 ))}
               </div>
             )}
+            <span className="tr-note tr-otnote">{orderNote(otype, discount)}</span>
           </div>
           )}
           <div><span className="tr-label">Expiration</span>
@@ -2858,18 +2974,18 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           ) : isSuperHot ? (
             <>
               Picks the top {f.top_n} tickers from the SUPERHOT scan (period-9 DMI/ADX,
-              directional efficiency, trend acceleration). Each gets a {market ? 'market' : `LIMIT −${discount}%`} buy,
+              directional efficiency, trend acceleration). Each gets a {orderTag(otype, discount)} buy,
               delta {f.delta}, {f.buy_pct}% of buying power per ticker.
-              {!market && ' Unfilled limit orders cancel after 30 min and retry if the signal persists.'}
+              {otype === 'limit' && ' An unfilled limit is cancelled after 15 min.'}
               {' '}Tickers are auto-discovered — no manual input needed. Each ticker is traded
               at most once per day.
             </>
           ) : isHot ? (
             <>
               Picks tickers appearing in BOTH the 5min and 15min HOT scan lists (strong
-              DMI/ADX trend on two time-frames). Each qualifying ticker gets a {market ? 'market' : `LIMIT −${discount}%`} buy,
+              DMI/ADX trend on two time-frames). Each qualifying ticker gets a {orderTag(otype, discount)} buy,
               delta {f.delta}, using the side (CALL/PUT) from the scan.
-              {!market && ' Unfilled limit orders cancel after 30 min and retry if the signal persists.'}
+              {otype === 'limit' && ' An unfilled limit is cancelled after 15 min.'}
               {' '}Tickers are auto-discovered from the HOT scan — no manual input needed.
               Each ticker is traded at most once per day.
             </>
@@ -2878,7 +2994,10 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               New above_10min_high → CALL / below_10min_low → PUT crosses inside the window,
               confirmed after {confirmS < 60 ? `${confirmS}s` : `${Math.round(confirmS / 60)} min`},
               open a managed 0DTE position sized by Buy % — sized below min contracts, the trade
-              is skipped. No same-day contract is bought from {defaults?.zero_dte_cutoff || '11:50'} CST on.
+              is skipped — bought {otype === 'limit'
+                ? `with a limit ${discount}% under the mark, cancelled if unfilled after 15 min`
+                : otype === 'market' ? 'at market' : 'at the smart limit'}. No same-day contract
+              is bought from {defaults?.zero_dte_cutoff || '11:50'} CST on.
             </>
           )}{' '}
           {paper === false ? 'LIVE account — this spends real money on its own.'
@@ -2895,8 +3014,12 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               // delta_min/max ride along so a board that forwards the form as it
               // stands (36 Trades) arms with the band on screen, not the default
               const [dMin, dMax] = parseDeltaRange(f.delta);
-              onArm({ ...f, discount_pct: market ? 0 : discount, zero_dte: zeroDte,
-                delta_min: dMin, delta_max: dMax });
+              // The signal strategies buy at the smart limit, as the form
+              // says for them; a LIMIT left chosen on another strategy must
+              // not ride along into theirs.
+              onArm({ ...f, order_type: onDesk ? 'smart' : otype,
+                discount_pct: !onDesk && otype === 'limit' ? discount : 0,
+                zero_dte: zeroDte, delta_min: dMin, delta_max: dMax });
             }}>{busy ? '…' : '🤖 Arm auto-trade'}</button>
           <button type="button" className="tr-btn sm" onClick={onClose}>Cancel</button>
         </div>
@@ -3087,7 +3210,7 @@ export function OptionsFlow({ user, live, onPick, onError, onBuy, buying, blocke
   useEffect(() => { load(); }, [load]);
   // The sweep itself is on a 5-minute TTL server-side; polling faster just
   // picks up a finished refresh sooner.
-  usePolling(load, 60_000, { enabled: !!user && isMarketOpen(), blocked });
+  usePolling(load, 60_000, { enabled: !!user && isMarketOpen(), blocked, inBackground: false });
 
   const doRefresh = async () => {
     if (busy) return;
@@ -3248,6 +3371,7 @@ export function AutoStatus({ st, className = '' }) {
         auto-trader armed on {st.live ? 'LIVE' : 'SANDBOX'} · {what}
         {scope ? ` · ${scope}` : ''}
         {st.window ? ` · ${st.window} CST` : ''}
+        {st.order_type && st.order_type !== 'smart' ? ` · ${orderTag(st.order_type, st.discount_pct)}` : ''}
         {st.placed ? ` · ${st.placed} placed` : ''}
       </p>
     );
@@ -3504,6 +3628,7 @@ export default function TradierSite() {
         dte_max: parseInt(f.dte_max, 10),
         zero_dte_cutoff: (f.zero_dte_cutoff || '').trim(),
         cooldown_min: parseInt(f.cooldown_min, 10),
+        order_type: f.order_type || 'smart',
         discount_pct: parseFloat(f.discount_pct) || 0,
         top_n: parseInt(f.top_n, 10) || 3,
         zero_dte: f.zero_dte !== false,
@@ -3574,9 +3699,14 @@ export default function TradierSite() {
   // Tracks both the newest id (new position -> charm) and each row's status,
   // so a fill or an exit lands in the event strip the moment it happens.
   const posSeen = useRef({ filter: null, max: null, statuses: null });
+  // Only the newest read may paint: chips clicked in quick succession each
+  // ask, and an older answer landing last would show the wrong filter's rows.
+  const posReq = useRef(0);
   const loadPositions = useCallback(async (uid, st, vn) => {
+    const mine = ++posReq.current;
     try {
       const page = await vidura.tradierPositions(uid, st, vn, true);
+      if (mine !== posReq.current) return;
       setPositions(page);
       const items = page.items || [];
       const max = items.reduce((m, p) => Math.max(m, p.id || 0), 0);
@@ -3598,9 +3728,19 @@ export default function TradierSite() {
   }, [showCharm]);
 
   // sweep + refresh: the sweep runs the SAME monitor pass as the backend
-  // loop, so what renders is the venue's current truth, not the last tick
-  const refresh = useCallback(async () => {
+  // loop, so what renders is the venue's current truth, not the last tick.
+  //
+  // The table is not made to wait for it. The sweep is a pass against the
+  // venue and takes a second or two with positions open; the table answers
+  // from the database at once. So a filter chip reloads just the table, the
+  // desk's first paint shows the table and the balance without waiting, and
+  // the sweep -- on load, on a venue change, every 30s, and on "sweep now" --
+  // reads the table again when it lands.
+  const filters = useRef({ filter, venueFilter });
+  filters.current = { filter, venueFilter };
+  const refresh = useCallback(async (first) => {
     if (!user) return;
+    if (first === true) loadBalance(user.user_id, live);
     try {
       const s = await vidura.tradierSweep(user.user_id);
       if (s?.events?.length) {
@@ -3611,11 +3751,14 @@ export default function TradierSite() {
           .forEach((ev) => pushErr('venue', ev));
       }
     } catch (e) { pushErr('sweep', e); }
-    loadBalance(user.user_id, live);
-    loadPositions(user.user_id, filter, venueFilter);
-  }, [user, filter, venueFilter, live, loadBalance, loadPositions]);
+    if (first !== true) loadBalance(user.user_id, live);
+    loadPositions(user.user_id, filters.current.filter, filters.current.venueFilter);
+  }, [user, live, loadBalance, loadPositions]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { refresh(true); }, [refresh]);
+  useEffect(() => {
+    if (user) loadPositions(user.user_id, filter, venueFilter);
+  }, [user, filter, venueFilter, loadPositions]);
   // Two cadences. The heavy pass (sweep + balance) every 30s, and the table
   // itself every 6s so an open, a fill, an exit and the live mark all land
   // without the operator touching anything. The sweep is the expensive half:
@@ -3625,13 +3768,18 @@ export default function TradierSite() {
   // otherwise a dead balance endpoint keeps being asked every 30s while its
   // card sits on screen.
   const deskBlocked = isBlocked('sweep') || isBlocked('balance') || isBlocked('positions');
-  usePolling(refresh, 30_000, { enabled: !!user && !marketOffline && isMarketOpen(), blocked: deskBlocked });
+  // The API's own monitor loop keeps exiting positions whether or not this
+  // tab is shown; the sweep here only refreshes what the screen shows.
+  usePolling(refresh, 30_000, {
+    enabled: !!user && !marketOffline && isMarketOpen(), blocked: deskBlocked, inBackground: false,
+  });
 
   const pollPositions = useCallback(() => {
     if (user) loadPositions(user.user_id, filter, venueFilter);
   }, [user, filter, venueFilter, loadPositions]);
   usePolling(pollPositions, 6_000, {
     enabled: !!user && !marketOffline && isMarketOpen(), blocked: isBlocked('positions'),
+    inBackground: false,
   });
 
   // Lightweight's ↻: everything on the board, now, without waiting for the
@@ -3674,6 +3822,7 @@ export default function TradierSite() {
         tolerance_pct: parseFloat(t.size_tol),
         tp_pct: parseFloat(t.tp_pct),
         sl_pct: parseFloat(t.sl_pct),
+        order_type: t.order_type || 'smart',
         discount_pct: t.discount_pct || 0,
       };
       if (t.occ_symbol) {
@@ -3962,6 +4111,7 @@ export default function TradierSite() {
               <BestPair compact accent="#5b6af0" reloadKey={liteKey} onPick={setQuoteTicker}
                 onTrade={(sym, side) => openTicket({ symbol: sym, side })} />
               <SuperSignals compact lite reloadKey={liteKey} accent="#5b6af0"
+                canControl={!!user?.is_admin}
                 onPick={setQuoteTicker}
                 onTrade={(sym, side) => openTicket({ symbol: sym, side })} />
             </aside>
@@ -4002,7 +4152,7 @@ export default function TradierSite() {
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <span className="tr-eyebrow" style={{ display: 'inline' }}>managed positions</span>
             <span className="tr-livedot" title={posAt
-              ? `auto-refreshing every 6s · last ${new Date(posAt).toLocaleTimeString()}`
+              ? `auto-refreshing every 6s · last ${deskTime(posAt, { seconds: true })} CST`
               : 'auto-refreshing every 6s'} />
             <span className="ml-auto" />
             {VENUE_FILTERS.map(([v, label]) => (
@@ -4042,7 +4192,7 @@ export default function TradierSite() {
               <thead><tr>
                 <th>#</th><th>venue</th><th>contract</th><th>strategy</th><th>Δ</th><th>qty</th><th>entry</th>
                 <th>tp</th><th>sl</th><th>mark</th><th>p&l</th><th>status</th>
-                <th>opened</th><th></th>
+                <th>opened (CST)</th><th></th>
               </tr></thead>
               <tbody>
                 {items.length === 0 && (
@@ -4199,6 +4349,7 @@ export default function TradierSite() {
               // daily reports; "call ▸ / put ▸" opens the ticket, prefilled
               <Section key="signals" id="signals" label="super signals" drag={railDrag}>
                 <SuperSignals compact accent="#5b6af0" onPick={setQuoteTicker}
+                  canControl={!!user?.is_admin}
                   onTrade={(sym, side) => openTicket({ symbol: sym, side })} />
               </Section>
             );

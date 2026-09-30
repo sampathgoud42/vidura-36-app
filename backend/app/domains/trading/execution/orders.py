@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import time
+from datetime import timedelta
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -149,14 +150,44 @@ def _settle_and_confirm(cred, pos: Position, ours: str, sandbox: bool) -> bool:
 
 # ---- the entry ------------------------------------------------------------
 
+def _money(v: float) -> str:
+    """A price to the cent, or to the tenth of a cent when it has one (a mark
+    in the middle of a one-cent spread): 1.03, 1.035."""
+    s = f"{v:.3f}"
+    return s[:-1] if s.endswith("0") else s
+
+
+def _entry_note(contracts: int, order_type: str, limit_price: float | None,
+                discount_pct: float | None, mark: float | None,
+                cancel_after_s: int | None) -> str:
+    """What was sent, in words, for the positions table while it works."""
+    if order_type == "market":
+        return f"buy_to_open {contracts} at market"
+    if order_type == "smart":
+        return f"buy_to_open {contracts} @ {limit_price:.2f} smart limit"
+    note = f"buy_to_open {contracts} @ {limit_price:.2f} limit"
+    if discount_pct and mark is not None:
+        note += f", {discount_pct:g}% under the mark {_money(mark)}"
+    if cancel_after_s:
+        until = clock.now() + timedelta(seconds=cancel_after_s)
+        note += f"; cancelled if unfilled by {until:%H:%M} CST"
+    return note
+
+
 def open_position(db: Session, *, tenant_id: str, cred, symbol: str, side: str,
                   occ_symbol: str, underlying: str, strike: float,
                   expiration: str, delta: float | None, contracts: int,
-                  limit_price: float, buy_pct: float, tolerance_pct: float,
+                  limit_price: float | None, buy_pct: float, tolerance_pct: float,
                   tp_pct: float, sl_pct: float, sandbox: bool,
                   strategy: str = "Manual", allow_add: bool = False,
-                  zero_dte: bool = False) -> Position:
-    """Place a managed entry. Every guard runs before the venue is touched."""
+                  zero_dte: bool = False, order_type: str = "limit",
+                  discount_pct: float | None = None, mark: float | None = None,
+                  cancel_after_s: int | None = None) -> Position:
+    """Place a managed entry. Every guard runs before the venue is touched.
+
+    ``order_type`` is how the buy is sent: a limit at ``limit_price`` ("limit"
+    or "smart"), or "market" with no price. ``cancel_after_s`` withdraws a
+    limit that has not filled in that long -- the monitor does it."""
 
     # Guard 6 — refuse, never clamp.
     validate_entry(side=side, buy_pct=buy_pct, tp_pct=tp_pct, sl_pct=sl_pct,
@@ -197,7 +228,11 @@ def open_position(db: Session, *, tenant_id: str, cred, symbol: str, side: str,
 
         placed = venue_mod.place_buy(
             cred=cred, underlying=underlying, occ_symbol=occ_symbol,
-            quantity=contracts, price=limit_price, sandbox=sandbox)
+            quantity=contracts, price=limit_price, sandbox=sandbox,
+            # the venue knows two kinds; "smart" and "limit" are both limits
+            order_type="market" if order_type == "market" else "limit")
+        opened = utcnow()
+        expires = (opened + timedelta(seconds=cancel_after_s)) if cancel_after_s else None
 
         pos = Position(
             tenant_id=tenant_id, venue_sandbox=sandbox,
@@ -205,9 +240,12 @@ def open_position(db: Session, *, tenant_id: str, cred, symbol: str, side: str,
             strike=strike, expiration=expiration, delta_at_entry=delta,
             contracts=contracts, buy_pct=buy_pct, tolerance_pct=tolerance_pct,
             tp_pct=tp_pct, sl_pct=sl_pct, buy_order_id=placed.order_id,
+            order_type=order_type, limit_price=limit_price,
+            discount_pct=discount_pct, buy_expires_at=expires,
             status="pending", stop_protection="pending", strategy=strategy,
-            opened_at=utcnow(),
-            note=f"buy_to_open {contracts} @ {limit_price:.2f} limit",
+            opened_at=opened,
+            note=_entry_note(contracts, order_type, limit_price, discount_pct,
+                             mark, cancel_after_s),
         )
         if unwatched:
             # Opened with the watchdog off. Flagged for review because that is

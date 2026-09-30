@@ -2,15 +2,18 @@
 
 The desk -- eight strategy agents on one 5m feed, a watchlist tracker, and a
 daily report at 15:00 CST -- is a separate project with its own schedule. It
-serves a read-only view of itself on loopback, and this router is the only
-door into it: the sign-in stays in front, and this project still reads no file
-outside its own folder (tools/check_self_contained.py). The HTTP client is
-shared with the super_signals auto-trade strategy (app.services.super_signals).
+serves a view of itself on loopback, and an on/off switch, and this router is
+the only door into it: the sign-in stays in front, and this project still
+reads no file outside its own folder (tools/check_self_contained.py). The HTTP
+client is shared with the super_signals auto-trade strategy
+(app.services.super_signals).
 
 Access matches /super: any signed-in operator may read -- a signal is a fact
-about the market, the same for everybody on the desk -- and there is nothing
-to write. The service itself has no sign-in and binds to loopback; proxying it
-is what keeps the tunnel from exposing it.
+about the market, the same for everybody on the desk -- and only an admin may
+start or stop the desk, as only an admin turns the /super engine on and off:
+there is one desk, and it serves every operator. The service itself has no
+sign-in and binds to loopback; proxying it is what keeps the tunnel from
+exposing it.
 """
 
 from __future__ import annotations
@@ -70,6 +73,24 @@ def best_pairs(min_win_pct: float | None = Query(default=None, ge=0, le=100),
     mins = {"min_win_pct": min_win_pct, "min_edge": min_edge, "min_net_r": min_net_r}
     return _relay(desk.get_json, "/api/best-pairs",
                   {k: v for k, v in mins.items() if v is not None} or None)
+
+
+@router.post("/desk/start", status_code=202, operation_id="startSuperSignalsDesk")
+def desk_start(tenant: Tenant = Depends(deps.require_admin)) -> dict:
+    """Start the desk, as its 08:15 task does: for a morning the task missed,
+    or after a stop. Started late, it catches up from the open, so today's
+    signals so far appear at once. 409 when it is already running or today is
+    not a trading day."""
+    return _relay(desk.post_json, "/api/desk/start")
+
+
+@router.post("/desk/stop", status_code=202, operation_id="stopSuperSignalsDesk")
+def desk_stop(tenant: Tenant = Depends(deps.require_admin)) -> dict:
+    """End the desk's day early, gracefully: the agents finish their cycle,
+    the desk reconciles and writes the day's report, and no new signal comes
+    in until it is started again. Positions are not the desk's -- nothing is
+    closed. 409 when it is not running."""
+    return _relay(desk.post_json, "/api/desk/stop")
 
 
 @router.get("/reports", operation_id="getSuperSignalsReports")

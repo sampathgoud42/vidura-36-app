@@ -250,17 +250,22 @@ class Gex0dteRefresh(BaseModel):
 @router.post("/gex0dte/refresh", operation_id="refreshGex0dte")
 @deps.tenant_scoped
 def refresh_gex0dte(body: Gex0dteRefresh,
-                    tenant: Tenant = Depends(deps.current_tenant),
+                    pusher: Tenant | None = Depends(deps.gex_pusher),
                     db: DbSession = Depends(deps.get_db)) -> dict:
     """Store a chain, pushed from a browser tab or fetched here.
 
     Any operator rather than admin: this is the desk's own data path -- a tab
     the operator already has open pushes what it already sees -- and it costs
-    no metered budget.
+    no metered budget. The getgamma bookmarklet pushes with the scoped push
+    token instead (deps.gex_pusher), and that token only ever pushes: without
+    a chain in the body it is refused rather than made to fetch one here.
     """
     from app.services import gex0dte
 
     raw = body.payload
+    if raw is None and pusher is None:
+        raise HTTPException(status_code=422,
+                            detail="the push token pushes a chain; send one as payload")
     if raw is None:
         try:
             raw = gex0dte.fetch_live(ticker=body.ticker)
@@ -287,7 +292,7 @@ class HeartbeatIn(BaseModel):
 @router.post("/gex0dte/heartbeat", operation_id="gex0dtePusherHeartbeat")
 @deps.tenant_scoped
 def gex0dte_heartbeat(body: HeartbeatIn,
-                      tenant: Tenant = Depends(deps.current_tenant),
+                      pusher: Tenant | None = Depends(deps.gex_pusher),
                       db: DbSession = Depends(deps.get_db)) -> dict:
     """Record that a push cycle happened, whatever its outcome.
 
