@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { vidura } from './viduraApi.js';
+import { deskTime } from './cst.js';
 import './quotePopup.css';
 
 // Shared live-quote + pivot-levels popup — the same desk popup the Super
@@ -120,7 +121,7 @@ export default function QuotePopup({ ticker, onClose, onBuy, accent = '#e879f9' 
                 </>
               )}
             </div>
-            <p className="qtp-meta">yfinance · cached 60s · fetched {String(q.fetched_at).slice(11, 19)} UTC</p>
+            <p className="qtp-meta">yfinance · cached 60s · fetched {deskTime(q.fetched_at, { seconds: true })} CST</p>
           </>
         )}
       </div>

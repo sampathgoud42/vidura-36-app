@@ -7,6 +7,7 @@ import SuperSignals, { BestPair } from '../../shared/SuperSignals.jsx';
 import BestBetsLink from '../../shared/BestBets.jsx';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
+import { deskDateTime, deskStamp, deskTime, wallClock, wallToDesk } from '../../shared/cst.js';
 import { useExperience } from '../../shared/experience.js';
 import '../../shared/worldHeader.css';
 import './tradier.css';
@@ -68,12 +69,10 @@ function usd(v) {
   })}`;
 }
 
+// An API stamp (naive UTC) on the desk's clock: "Sep 30, 14:05", in CST.
 function when(iso) {
   if (!iso) return '—';
-  const d = new Date(/Z$|[+-]\d\d:?\d\d$/.test(iso) ? iso : `${iso}Z`);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return deskDateTime(iso) || iso;
 }
 
 // ── lucky charm blessing: ONE random charm from the home screen's gallery,
@@ -232,6 +231,8 @@ function saveChartInterval(symbol, v) {
    withStrip=false is a socket for charts alone -- the Lightweight board's one
    chart, which has no strip: only `extras` are subscribed, and the strip's
    seed quotes and its timed BTC quote are left out. */
+const PAINT_MS = 250;
+
 function useIndexStream(user, live, extras = [], withStrip = true) {
   const [ticks, setTicks] = useState([]);
   // whatever the charts are showing rides the same socket — a symbol the
@@ -251,9 +252,22 @@ function useIndexStream(user, live, extras = [], withStrip = true) {
   // they are refreshed here on a timer instead of by a tick
   const polledRef = useRef([]);
 
+  // A busy tape sends quotes many times a second, and every paint re-renders
+  // the desk that owns this hook -- the strip, every chart fed by it, the
+  // tables. Ticks still land in bySymbol at once; the screen catches up at
+  // most once per PAINT_MS, which is faster than a price can be read.
+  const paintTimer = useRef(null);
+  const paintedAt = useRef(0);
   const paint = useCallback(() => {
-    setTicks(Object.values(bySymbol.current).filter((t) => !t.extra));
+    if (paintTimer.current) return;
+    const wait = Math.max(0, PAINT_MS - (Date.now() - paintedAt.current));
+    paintTimer.current = setTimeout(() => {
+      paintTimer.current = null;
+      paintedAt.current = Date.now();
+      setTicks(Object.values(bySymbol.current).filter((t) => !t.extra));
+    }, wait);
   }, []);
+  useEffect(() => () => clearTimeout(paintTimer.current), []);
 
   const connect = useCallback(async () => {
     // Streaming only exists on production, so it runs only when the desk is
@@ -768,7 +782,7 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
       .catch(() => { if (alive) setPivots(null); });
     return () => { alive = false; };
   }, [symbol, seen]);
-  usePolling(load, 60_000, { enabled: !!user && isMarketOpen() && near, blocked });
+  usePolling(load, 60_000, { enabled: !!user && isMarketOpen() && near, blocked, inBackground: false });
 
   // everything fetched feeds the indicator; only the latest session is drawn
   const allBars = useMemo(() => regularSession(seed?.bars || []), [seed]);
@@ -900,7 +914,7 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
     ctx.fillStyle = FAINT;
     candles.forEach((c, i) => {
       if (i % every !== 0 && i !== candles.length - 1) return;
-      const hhmm = String(c.time || '').slice(11, 16);
+      const hhmm = wallClock(c.time);
       if (!hhmm) return;
       ctx.fillText(hhmm, cx(i), h - padB / 2);
     });
@@ -1034,8 +1048,8 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
       ctx.textBaseline = 'middle';
       ctx.fillText(priceAt.toFixed(2), padL + plotW + 5, cy);
 
-      // and the bar's time, against the time axis
-      const hhmm = String(candles[i].time || '').slice(11, 16);
+      // and the bar's time, against the time axis (CST)
+      const hhmm = wallClock(candles[i].time);
       if (hhmm) {
         ctx.font = '9px ui-monospace, Consolas, monospace';
         const tw = ctx.measureText(hhmm).width + 8;
@@ -1143,7 +1157,7 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
       <div className="tr-chartohlc tr-note">
         {shown ? (
           <>
-            <span>{String(shown.time || '').replace('T', ' ').slice(0, 16)}</span>
+            <span>{wallToDesk(shown.time).slice(5).replace('T', ' ')} CST</span>
             {' · '}O {shown.o?.toFixed(2)} H {shown.h?.toFixed(2)}
             {' '}L {shown.l?.toFixed(2)}{' '}
             <span style={{ color: shown.c >= shown.o ? 'var(--tr-green)' : 'var(--tr-red)' }}>
@@ -1594,7 +1608,9 @@ export function HotScan({ user, live, onPick, onError, onBuy, buying, blocked, s
   // While a sweep is IN FLIGHT it tightens to a few seconds — a granularity
   // switch starts a fresh one, and waiting out a full tick to see the result
   // makes the switch feel broken.
-  usePolling(load, snap?.refreshing ? 3_000 : 60_000, { enabled: !!user && isMarketOpen(), blocked });
+  usePolling(load, snap?.refreshing ? 3_000 : 60_000, {
+    enabled: !!user && isMarketOpen(), blocked, inBackground: false,
+  });
 
   const doRefresh = async () => {
     if (busy) return;
@@ -1763,11 +1779,11 @@ export function HotScan({ user, live, onPick, onError, onBuy, buying, blocked, s
             do the subtraction. The exact time is in the title. */}
         {!snap?.refreshing && !busy && meta.at && (
           <span className="tr-note"
-            title={`swept ${meta.at} · ${meta.scanned} scanned · `
+            title={`swept ${deskStamp(meta.at)} · ${meta.scanned} scanned · `
               + `${meta.with_readings} with readings · ${meta.took_s}s · `
               + `${meta.venue} · ${meta.interval} bars · `
               + `re-sweeps every ${HOT_REFRESH_MIN} min`}>
-            {snap?.age_s == null ? meta.at : `${Math.floor(snap.age_s / 60)}m`}
+            {snap?.age_s == null ? deskTime(meta.at) : `${Math.floor(snap.age_s / 60)}m`}
           </span>
         )}
         <button type="button" className="tr-chip" onClick={doRefresh} disabled={busy}
@@ -1849,7 +1865,7 @@ export function CommoditiesPanel({ user, live, onPick, onError, onBuy, blocked }
   }, [user, live, onError]);
 
   useEffect(() => { load(); }, [load]);
-  usePolling(load, 60_000, { enabled: !!user, blocked });
+  usePolling(load, 60_000, { enabled: !!user, blocked, inBackground: false });
 
   const doRefresh = async () => {
     if (busy) return;
@@ -1954,7 +1970,7 @@ function TickerRail({ user, onPick }) {
       } catch (e) { if (alive) setErr(errText(e)); }
     };
     load();
-    const t = setInterval(load, 15_000);
+    const t = setInterval(() => { if (!document.hidden) load(); }, 15_000);
     return () => { alive = false; clearInterval(t); };
   }, [user, symbols]);
 
@@ -2217,15 +2233,29 @@ function ErrorTray({ errors, onDismiss, onClear }) {
    The dismiss button IS the retry button: a blocked poll drops its timer
    entirely, and fires once the moment it is unblocked — so closing the card
    refreshes straight away instead of waiting out the interval. */
-function usePolling(fn, everyMs, { enabled = true, blocked = false } = {}) {
+// `inBackground: false` is for what only a screen can use -- charts, boards,
+// the positions table. In a tab nobody is looking at those polls were pure
+// cost, and the boards' ones kept the API sweeping a hundred names and whole
+// option chains for them. They pause while the tab is hidden and catch up the
+// moment it is shown again. Anything that acts, or alerts, keeps polling.
+function usePolling(fn, everyMs, { enabled = true, blocked = false, inBackground = true } = {}) {
   const wasBlocked = useRef(false);
+  const lastRun = useRef(0);
   useEffect(() => {
     if (!enabled) return undefined;
     if (blocked) { wasBlocked.current = true; return undefined; }
-    if (wasBlocked.current) { wasBlocked.current = false; fn(); }
-    const t = setInterval(fn, everyMs);
-    return () => clearInterval(t);
-  }, [fn, everyMs, enabled, blocked]);
+    const run = () => { lastRun.current = Date.now(); fn(); };
+    if (wasBlocked.current) { wasBlocked.current = false; run(); }
+    const t = setInterval(() => { if (inBackground || !document.hidden) run(); }, everyMs);
+    const onShow = () => {
+      if (!document.hidden && Date.now() - lastRun.current >= everyMs) run();
+    };
+    if (!inBackground) document.addEventListener('visibilitychange', onShow);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', onShow);
+    };
+  }, [fn, everyMs, enabled, blocked, inBackground]);
 }
 
 /* Collects desk errors, folding repeats of the same failure into one card
@@ -2246,7 +2276,7 @@ function useDeskErrors() {
     const message = errText(e);
     // a venue outcome arrives as plain text, not a failed HTTP call
     const kind = typeof e === 'string' ? 'rejected' : errKind(status);
-    const at = new Date().toLocaleTimeString();
+    const at = `${deskTime(new Date(), { seconds: true })} CST`;
     setErrors((prev) => {
       const i = prev.findIndex((x) => x.message === message && x.kind === kind);
       if (i >= 0) {
@@ -3180,7 +3210,7 @@ export function OptionsFlow({ user, live, onPick, onError, onBuy, buying, blocke
   useEffect(() => { load(); }, [load]);
   // The sweep itself is on a 5-minute TTL server-side; polling faster just
   // picks up a finished refresh sooner.
-  usePolling(load, 60_000, { enabled: !!user && isMarketOpen(), blocked });
+  usePolling(load, 60_000, { enabled: !!user && isMarketOpen(), blocked, inBackground: false });
 
   const doRefresh = async () => {
     if (busy) return;
@@ -3669,9 +3699,14 @@ export default function TradierSite() {
   // Tracks both the newest id (new position -> charm) and each row's status,
   // so a fill or an exit lands in the event strip the moment it happens.
   const posSeen = useRef({ filter: null, max: null, statuses: null });
+  // Only the newest read may paint: chips clicked in quick succession each
+  // ask, and an older answer landing last would show the wrong filter's rows.
+  const posReq = useRef(0);
   const loadPositions = useCallback(async (uid, st, vn) => {
+    const mine = ++posReq.current;
     try {
       const page = await vidura.tradierPositions(uid, st, vn, true);
+      if (mine !== posReq.current) return;
       setPositions(page);
       const items = page.items || [];
       const max = items.reduce((m, p) => Math.max(m, p.id || 0), 0);
@@ -3693,9 +3728,19 @@ export default function TradierSite() {
   }, [showCharm]);
 
   // sweep + refresh: the sweep runs the SAME monitor pass as the backend
-  // loop, so what renders is the venue's current truth, not the last tick
-  const refresh = useCallback(async () => {
+  // loop, so what renders is the venue's current truth, not the last tick.
+  //
+  // The table is not made to wait for it. The sweep is a pass against the
+  // venue and takes a second or two with positions open; the table answers
+  // from the database at once. So a filter chip reloads just the table, the
+  // desk's first paint shows the table and the balance without waiting, and
+  // the sweep -- on load, on a venue change, every 30s, and on "sweep now" --
+  // reads the table again when it lands.
+  const filters = useRef({ filter, venueFilter });
+  filters.current = { filter, venueFilter };
+  const refresh = useCallback(async (first) => {
     if (!user) return;
+    if (first === true) loadBalance(user.user_id, live);
     try {
       const s = await vidura.tradierSweep(user.user_id);
       if (s?.events?.length) {
@@ -3706,11 +3751,14 @@ export default function TradierSite() {
           .forEach((ev) => pushErr('venue', ev));
       }
     } catch (e) { pushErr('sweep', e); }
-    loadBalance(user.user_id, live);
-    loadPositions(user.user_id, filter, venueFilter);
-  }, [user, filter, venueFilter, live, loadBalance, loadPositions]);
+    if (first !== true) loadBalance(user.user_id, live);
+    loadPositions(user.user_id, filters.current.filter, filters.current.venueFilter);
+  }, [user, live, loadBalance, loadPositions]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { refresh(true); }, [refresh]);
+  useEffect(() => {
+    if (user) loadPositions(user.user_id, filter, venueFilter);
+  }, [user, filter, venueFilter, loadPositions]);
   // Two cadences. The heavy pass (sweep + balance) every 30s, and the table
   // itself every 6s so an open, a fill, an exit and the live mark all land
   // without the operator touching anything. The sweep is the expensive half:
@@ -3720,13 +3768,18 @@ export default function TradierSite() {
   // otherwise a dead balance endpoint keeps being asked every 30s while its
   // card sits on screen.
   const deskBlocked = isBlocked('sweep') || isBlocked('balance') || isBlocked('positions');
-  usePolling(refresh, 30_000, { enabled: !!user && !marketOffline && isMarketOpen(), blocked: deskBlocked });
+  // The API's own monitor loop keeps exiting positions whether or not this
+  // tab is shown; the sweep here only refreshes what the screen shows.
+  usePolling(refresh, 30_000, {
+    enabled: !!user && !marketOffline && isMarketOpen(), blocked: deskBlocked, inBackground: false,
+  });
 
   const pollPositions = useCallback(() => {
     if (user) loadPositions(user.user_id, filter, venueFilter);
   }, [user, filter, venueFilter, loadPositions]);
   usePolling(pollPositions, 6_000, {
     enabled: !!user && !marketOffline && isMarketOpen(), blocked: isBlocked('positions'),
+    inBackground: false,
   });
 
   // Lightweight's ↻: everything on the board, now, without waiting for the
@@ -4099,7 +4152,7 @@ export default function TradierSite() {
           <div className="flex flex-wrap items-center gap-2 mb-3">
             <span className="tr-eyebrow" style={{ display: 'inline' }}>managed positions</span>
             <span className="tr-livedot" title={posAt
-              ? `auto-refreshing every 6s · last ${new Date(posAt).toLocaleTimeString()}`
+              ? `auto-refreshing every 6s · last ${deskTime(posAt, { seconds: true })} CST`
               : 'auto-refreshing every 6s'} />
             <span className="ml-auto" />
             {VENUE_FILTERS.map(([v, label]) => (
@@ -4139,7 +4192,7 @@ export default function TradierSite() {
               <thead><tr>
                 <th>#</th><th>venue</th><th>contract</th><th>strategy</th><th>Δ</th><th>qty</th><th>entry</th>
                 <th>tp</th><th>sl</th><th>mark</th><th>p&l</th><th>status</th>
-                <th>opened</th><th></th>
+                <th>opened (CST)</th><th></th>
               </tr></thead>
               <tbody>
                 {items.length === 0 && (

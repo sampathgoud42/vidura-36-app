@@ -28,6 +28,8 @@ DOMAIN = {
     "execution_lease": "trading", "risk_heartbeat": "trading",
     "signal": "trading",
     "bot_run": "bot-station", "bot_trade": "bot-station",
+    "scan_run": "market-scans", "scan_best_bets_row": "market-scans",
+    "scan_breakout_row": "market-scans",
 }
 
 WHY = {
@@ -73,6 +75,18 @@ WHY = {
     "bot_trade": "One trade a bot recorded, mirrored into the shared ledger. "
                  "Nothing here names a bot family -- adding a bot must not "
                  "add a table.",
+    "scan_run": "When a stored scan ran, one row per combination: Best Bets "
+                "by venue, BreakoutRadar by market and timeframe. Replaced "
+                "with the combination's rows in one transaction (truncate and "
+                "load), so its time is always the time of the rows beside it. "
+                "Market data, so no tenant: the day's first sign-in sweeps "
+                "each combination once for everybody.",
+    "scan_best_bets_row": "One symbol of a venue's Best Bets sweep, in the "
+                          "sheet's order. The row itself is JSON: the screen's "
+                          "columns change more often than this table should.",
+    "scan_breakout_row": "One ticker of a BreakoutRadar scan -- a breakout "
+                         "(`pass`) or a near miss (`near`) -- judged with the "
+                         "thresholds its run records.",
 }
 
 COLUMN_WHY = {
@@ -162,13 +176,14 @@ def main() -> int:
             w("    }")
     w("```")
     w("")
-    w("`signal` and `execution_lease` stand alone deliberately. Signals are")
-    w("market data with no owner; a lease is transient bookkeeping whose key")
-    w("already carries the tenant.")
+    w("`signal`, the research tables, the stored scans and `execution_lease`")
+    w("stand alone deliberately. The first three are market data with no")
+    w("owner; a lease is transient bookkeeping whose key already carries the")
+    w("tenant.")
     w("")
 
     # ---- tables -----------------------------------------------------------
-    for domain in ("tenancy", "trading", "bot-station"):
+    for domain in ("tenancy", "trading", "bot-station", "market-scans"):
         w(f"## {domain}")
         w("")
         for table in sorted(meta.tables.values(), key=lambda t: t.name):
@@ -197,10 +212,14 @@ def main() -> int:
                   f"{'yes' if col.nullable else 'no'} | {' · '.join(bits)} |")
             w("")
 
-            uniques = [c for c in table.constraints
-                       if c.__class__.__name__ == "UniqueConstraint"]
-            checks = [c for c in table.constraints
-                      if c.__class__.__name__ == "CheckConstraint"]
+            # Sorted: table.constraints is a set, and an unsorted list made
+            # every regeneration reorder lines nobody had changed.
+            uniques = sorted((c for c in table.constraints
+                              if c.__class__.__name__ == "UniqueConstraint"),
+                             key=lambda c: [col.name for col in c.columns])
+            checks = sorted((c for c in table.constraints
+                             if c.__class__.__name__ == "CheckConstraint"),
+                            key=lambda c: c.name or "")
             if uniques:
                 w("**Unique:** " + ", ".join(
                     f"`({', '.join(col.name for col in c.columns)})`"

@@ -765,15 +765,16 @@ def best_bets(live: bool = Query(default=False), refresh: bool = Query(default=F
 
     Every symbol scanned comes back, qualifying or not, each with `setup` "A",
     "B" or null -- the sheet filters, and a ticker that misses by a point is
-    worth seeing. Served from a snapshot that refreshes in the background;
-    `refresh` starts a sweep now and the answer says `refreshing` until it
-    lands.
+    worth seeing. Served from the venue's stored sweep, with when it ran
+    (`at`, `scanned_at`, and what started it in `trigger`); `refresh` starts a
+    sweep now and the answer says `refreshing` until it lands. The operator's
+    own credential is still required: it is what a sweep reads through.
     """
     from app.domains.trading.market import best_bets as screen
 
     cred = _credential(db, tenant, kr, live=live)
     return {"kind": "best_bets",
-            **screen.snapshot(tenant.id, cred, sandbox=not live, force=refresh)}
+            **screen.snapshot(cred, sandbox=not live, force=refresh)}
 
 
 @market_router.get("/flow", operation_id="getTradierOptionsFlow")

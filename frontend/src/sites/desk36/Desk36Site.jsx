@@ -1129,8 +1129,11 @@ export default function Desk36Site() {
       })
       .catch((e) => { if (!dead) fail('quotes', e?.detail || e?.message || 'quotes unavailable'); });
     pull();
-    const id = setInterval(() => { if (!busyRef.current) pull(); }, QUOTE_MS);
-    return () => { dead = true; clearInterval(id); };
+    // Prices for a screen: a hidden tab skips its turns and asks again on return.
+    const id = setInterval(() => { if (!busyRef.current && !document.hidden) pull(); }, QUOTE_MS);
+    const onShow = () => { if (!document.hidden) pull(); };
+    document.addEventListener('visibilitychange', onShow);
+    return () => { dead = true; clearInterval(id); document.removeEventListener('visibilitychange', onShow); };
   }, [user, symbols, fail, ok, lite]);
 
   // DMI: one timesales call per new symbol, so rarely.
@@ -1146,7 +1149,7 @@ export default function Desk36Site() {
       setDmi(m);
     }).catch(() => { /* the board is still useful without readings */ });
     pull();
-    const id = setInterval(() => { if (!busyRef.current) pull(); }, DMI_MS);
+    const id = setInterval(() => { if (!busyRef.current && !document.hidden) pull(); }, DMI_MS);
     return () => { dead = true; clearInterval(id); };
   }, [user, symbols, live, lite]);
 

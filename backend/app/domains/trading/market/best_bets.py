@@ -4,9 +4,16 @@ One Tradier call per symbol (15-minute bars, regular session, 40 days), folded
 into 4-hour bars and read by ema_screen, then market cap and industry from
 fundamentals. Sixty names is sixty requests against a venue that allows 120 a
 minute in production and 60 on the sandbox, so the endpoint never waits for a
-sweep: it answers from the last good snapshot and refreshes behind it, the way
-the HOT board and the options flow do. The desk polls while `refreshing` is
-set and picks the new rows up on its own.
+sweep: it answers from the last stored sweep and runs a new one behind it only
+when asked. The desk polls while `refreshing` is set and picks the new rows up
+on its own.
+
+STORED, per venue (scan_store, truncate and load). The sheet is the same for
+every operator on a venue -- one universe, one set of rules, the venue's own
+bars -- so one sweep serves them all, and it survives a restart. It is not
+re-swept on a timer: the day's first sign-in sweeps each venue once
+(daily_scans), the refresh button sweeps again, and between the two the sheet
+says exactly when its rows are from.
 
 A symbol the venue will not answer, or that has too little history, is still
 a row -- unavailable, with the reason -- because a watchlist that silently
@@ -27,11 +34,17 @@ from app.services.tradier_client import TradierError
 
 logger = logging.getLogger(__name__)
 
-# (tenant, live) -> {"at": epoch seconds, "rows": [...], "meta": {...}}
-_CACHE: dict[tuple[str, bool], dict] = {}
-_REFRESHING: set[tuple[str, bool]] = set()
+# The venues ("live", "sandbox") with a sweep running, and the last sweep of
+# each that failed outright: {"at": epoch seconds, "reason": text}.
+_REFRESHING: set[str] = set()
+_ERRORS: dict[str, dict] = {}
 _THREADS: set[threading.Thread] = set()
 _LOCK = threading.Lock()
+
+# A venue never scanned starts its first sweep when the sheet opens -- unless
+# that sweep just failed, which the next open should report rather than
+# repeat on every poll.
+RETRY_FIRST_AFTER_S = 300.0
 
 # Tradier answers 429 once the minute's allowance is spent. Waiting it out is
 # the whole fix; the allowance resets within the minute.
@@ -160,73 +173,129 @@ def sweep(cred, *, sandbox: bool) -> dict:
     }
 
 
-def _sweep_async(key: tuple[str, bool], cred, *, sandbox: bool) -> None:
-    """One sweep at a time per operator and venue."""
+def venue_of(sandbox: bool) -> str:
+    return "sandbox" if sandbox else "live"
+
+
+class NothingAnswered(RuntimeError):
+    """The venue answered for none of the universe: a failed sweep, not a
+    sheet of empty rows to store over the last good one."""
+
+
+def _run(venue: str, cred, *, sandbox: bool, trigger: str) -> None:
+    """One sweep, stored. The caller has claimed the venue."""
+    from app.domains.trading.market import scan_store
+
+    try:
+        got = sweep(cred, sandbox=sandbox)
+        meta = got["meta"]
+        if meta["scanned"] and not meta["available"]:
+            reasons = sorted({r["reason"] for r in got["rows"] if r.get("reason")})
+            raise NothingAnswered(f"the venue answered none of the {meta['scanned']} symbols"
+                                  + (f" ({reasons[0]})" if reasons else ""))
+        scan_store.replace_best_bets(venue, got["rows"], meta, trigger=trigger)
+        with _LOCK:
+            _ERRORS.pop(venue, None)
+        logger.info("best bets sweep (%s): %s -> A %d, B %d of %d", trigger, venue,
+                    meta["matched"]["A"], meta["matched"]["B"], meta["scanned"])
+    except Exception as exc:                            # noqa: BLE001
+        # The last stored sheet stays: stale rows whose age the sheet shows
+        # beat an empty sheet that looks like a quiet market. Never the
+        # exception's own text for anything else: a venue's 401 body can
+        # carry the refused token.
+        reason = str(exc) if isinstance(exc, NothingAnswered) else \
+            f"the sweep stopped ({type(exc).__name__})"
+        with _LOCK:
+            _ERRORS[venue] = {"at": time.time(), "reason": reason}
+        logger.warning("best bets sweep (%s) %s failed: %s", trigger, venue, reason)
+    finally:
+        with _LOCK:
+            _REFRESHING.discard(venue)
+
+
+def _claim(venue: str) -> bool:
     with _LOCK:
-        if key in _REFRESHING:
-            return
-        _REFRESHING.add(key)
+        if venue in _REFRESHING:
+            return False
+        _REFRESHING.add(venue)
+        return True
+
+
+def sweep_now(cred, *, sandbox: bool, trigger: str = "daily") -> bool:
+    """Sweep and store on THIS thread (the day's first sign-in runs it on its
+    own). False when a sweep of the venue was already running."""
+    venue = venue_of(sandbox)
+    if not _claim(venue):
+        return False
+    _run(venue, cred, sandbox=sandbox, trigger=trigger)
+    return True
+
+
+def _sweep_async(cred, *, sandbox: bool, trigger: str) -> None:
+    """One sweep at a time per venue, behind the answer."""
+    venue = venue_of(sandbox)
+    if not _claim(venue):
+        return
 
     def run() -> None:
         try:
-            got = sweep(cred, sandbox=sandbox)
-            with _LOCK:
-                _CACHE[key] = {"at": time.time(), **got}
-            logger.info("best bets sweep: %s -> A %d, B %d of %d", got["meta"]["venue"],
-                        got["meta"]["matched"]["A"], got["meta"]["matched"]["B"],
-                        got["meta"]["scanned"])
-        except Exception as exc:                        # noqa: BLE001
-            # The last good snapshot stays: stale rows whose age the sheet
-            # shows beat an empty sheet that looks like a quiet market.
-            logger.warning("best bets sweep failed: %s: %s", type(exc).__name__, exc)
+            _run(venue, cred, sandbox=sandbox, trigger=trigger)
         finally:
             with _LOCK:
-                _REFRESHING.discard(key)
                 _THREADS.discard(threading.current_thread())
 
-    thread = threading.Thread(target=run, daemon=True,
-                              name=f"best-bets-{key[0][:8]}-{'live' if key[1] else 'sbx'}")
+    thread = threading.Thread(target=run, daemon=True, name=f"best-bets-{venue}")
     with _LOCK:
         _THREADS.add(thread)
     thread.start()
 
 
-def snapshot(tenant_id: str, cred, *, sandbox: bool = True, force: bool = False) -> dict:
-    """The sheet: the last good rows now, refreshed behind the response.
+def snapshot(cred, *, sandbox: bool = True, force: bool = False) -> dict:
+    """The sheet: the venue's stored rows now, with when they were scanned.
 
-    ``force`` (the refresh button) starts a sweep even while the snapshot is
-    fresh, but still does not wait for it: sixty venue calls can outlast the
-    tunnel's request ceiling, and the sheet polls until `refreshing` clears.
+    ``force`` (the refresh button) starts a sweep but does not wait for it:
+    sixty venue calls can outlast the tunnel's request ceiling, and the sheet
+    polls until `refreshing` clears. A venue never scanned starts its first
+    sweep here; one that has rows is swept again only when asked, or by the
+    next day's first sign-in.
     """
-    from app.core.config import get_settings
+    from app.domains.trading.market import scan_store
 
-    key = (tenant_id, not sandbox)
+    venue = venue_of(sandbox)
+    stored = scan_store.best_bets(venue)
     with _LOCK:
-        hit = _CACHE.get(key)
-        busy = key in _REFRESHING
-    age = time.time() - hit["at"] if hit else None
-    stale = hit is None or age > get_settings().tradier_best_bets_ttl_s
-    if (stale or force) and not busy:
-        _sweep_async(key, cred, sandbox=sandbox)
+        busy = venue in _REFRESHING
+        error = dict(_ERRORS[venue]) if venue in _ERRORS else None
+    first = stored is None and not (error and time.time() - error["at"] < RETRY_FIRST_AFTER_S)
+    if (force or first) and not busy:
+        _sweep_async(cred, sandbox=sandbox, trigger="rescan" if stored else "first")
         busy = True
+    # A failure older than the rows is history, not news.
+    if error and stored and error["at"] <= stored["at"]:
+        error = None
 
-    venue = "sandbox" if sandbox else "live"
-    if hit is None:
+    if stored is None:
         return {"rows": [], "refreshing": busy, "at": None, "age_s": None,
+                "last_error": error,
                 "meta": {"venue": venue, "scanned": len(universe()),
                          "rules": rules().public(),
-                         "note": "the first sweep is running"}}
-    return {"rows": hit["rows"], "refreshing": busy, "at": round(hit["at"], 3),
-            "age_s": round(age, 1), "meta": hit["meta"]}
+                         "note": ("the first sweep is running" if busy
+                                  else "no sweep has landed for this venue yet")}}
+    return {"rows": stored["rows"], "refreshing": busy, "at": stored["at"],
+            "age_s": round(time.time() - stored["at"], 1),
+            "scanned_at": stored["scanned_at"], "trade_date": stored["trade_date"],
+            "trigger": stored["trigger"], "stored": True, "last_error": error,
+            "meta": stored["meta"]}
 
 
 def quiesce(timeout: float = 10.0) -> None:
-    """Wait for in-flight sweeps and forget every snapshot (shutdown, tests)."""
+    """Wait for in-flight sweeps and forget what is running (shutdown, tests).
+    The stored sheets are the database's, and stay."""
     with _LOCK:
         threads = list(_THREADS)
     for thread in threads:
         thread.join(timeout=timeout)
     with _LOCK:
         _THREADS.clear()
-        _CACHE.clear()
         _REFRESHING.clear()
+        _ERRORS.clear()

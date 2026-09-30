@@ -4,7 +4,7 @@
 edit by hand -- re-run it after a migration and the shape follows the
 database instead of drifting from it.
 
-SQLite, one schema, 13 tables. Every tenant-owned table
+SQLite, one schema, 20 tables. Every tenant-owned table
 carries a `tenant_id` foreign key that is NOT NULL, so a row without an
 owner cannot be written even by a raw INSERT.
 
@@ -30,10 +30,31 @@ erDiagram
     tenant ||--o{ tenant_secret_audit : owns
     tenant_credential |o--o{ tenant_secret_audit : credential_id
     tenant ||--o{ tenant_world_access : owns
-    tenant ||--o{ wellness_goal : owns
     wellness_profile ||--o{ wellness_goal : profile_id
+    tenant ||--o{ wellness_goal : owns
     tenant ||--o{ wellness_profile : owns
     execution_lease {
+        text standalone
+    }
+    research_gex0dte_hour {
+        text standalone
+    }
+    research_pusher_heartbeat {
+        text standalone
+    }
+    research_signal {
+        text standalone
+    }
+    research_snapshot {
+        text standalone
+    }
+    scan_best_bets_row {
+        text standalone
+    }
+    scan_breakout_row {
+        text standalone
+    }
+    scan_run {
         text standalone
     }
     signal {
@@ -41,9 +62,10 @@ erDiagram
     }
 ```
 
-`signal` and `execution_lease` stand alone deliberately. Signals are
-market data with no owner; a lease is transient bookkeeping whose key
-already carries the tenant.
+`signal`, the research tables, the stored scans and `execution_lease`
+stand alone deliberately. The first three are market data with no
+owner; a lease is transient bookkeeping whose key already carries the
+tenant.
 
 ## tenancy
 
@@ -190,7 +212,7 @@ What makes a duplicate order impossible to EXPRESS rather than unlikely. The row
 
 **Unique:** `(tenant_id, idempotency_key)`, `(tenant_id, request_fingerprint)`
 
-**Checks:** `ck_execution_attempt_status_known`, `ck_execution_attempt_intent_known`
+**Checks:** `ck_execution_attempt_intent_known`, `ck_execution_attempt_status_known`
 
 **Indexes:** `ix_execution_attempt_tenant_id`
 
@@ -230,6 +252,10 @@ An options position and both its exits.
 | `tp_price` | FLOAT | yes |  |
 | `sl_price` | FLOAT | yes |  |
 | `buy_order_id` | VARCHAR(64) | yes |  |
+| `order_type` | VARCHAR(8) | yes |  |
+| `limit_price` | FLOAT | yes |  |
+| `discount_pct` | FLOAT | yes |  |
+| `buy_expires_at` | DATETIME | yes |  |
 | `tp_order_id` | VARCHAR(64) | yes |  |
 | `stop_order_id` | VARCHAR(64) | yes | the stop that rests AT THE VENUE, so it survives this process dying |
 | `stop_protection` | VARCHAR(16) | no | says out loud whether the stop survives a crash: venue_resting or monitored_only |
@@ -244,7 +270,7 @@ An options position and both its exits.
 | `created_at` | DATETIME | no |  |
 | `updated_at` | DATETIME | no |  |
 
-**Checks:** `ck_position_status_known`, `ck_position_tp_positive`, `ck_position_stop_protection_known`, `ck_position_option_type_known`, `ck_position_sl_in_range`, `ck_position_contracts_positive`
+**Checks:** `ck_position_contracts_positive`, `ck_position_option_type_known`, `ck_position_sl_in_range`, `ck_position_status_known`, `ck_position_stop_protection_known`, `ck_position_tp_positive`
 
 **Indexes:** `ix_position_tenant_id`, `ix_position_tenant_status`, `ix_position_tenant_symbol_status`
 
@@ -328,13 +354,19 @@ One trade a bot recorded, mirrored into the shared ledger. Nothing here names a 
 | `status` | VARCHAR(16) | no |  |
 | `opened_at` | DATETIME | yes |  |
 | `closed_at` | DATETIME | yes |  |
-| `contracts` | INTEGER | yes |  |
+| `contracts` | FLOAT | yes |  |
 | `entry_price` | FLOAT | yes |  |
 | `exit_price` | FLOAT | yes |  |
 | `realized_pnl` | FLOAT | yes |  |
+| `market_title` | VARCHAR(256) | yes |  |
+| `outcome` | VARCHAR(128) | yes |  |
+| `entry_usd` | FLOAT | yes |  |
+| `exit_usd` | FLOAT | yes |  |
+| `fees_usd` | FLOAT | yes |  |
 | `is_live` | BOOLEAN | yes | NULLABLE ON PURPOSE. 93 of the imported v2 rows predate the dry-run flag and their mode is unknowable. Unknown stays unknown. |
 | `reconciled_at` | DATETIME | yes |  |
 | `fee_checked_at` | DATETIME | yes |  |
+| `resolve_attempts` | INTEGER | no |  |
 | `raw` | TEXT | yes |  |
 | `created_at` | DATETIME | no |  |
 | `updated_at` | DATETIME | no |  |
@@ -344,6 +376,60 @@ One trade a bot recorded, mirrored into the shared ledger. Nothing here names a 
 **Checks:** `ck_bot_trade_status_known`
 
 **Indexes:** `ix_bot_trade_tenant_bot_opened`, `ix_bot_trade_tenant_id`
+
+## market-scans
+
+### `scan_best_bets_row`
+
+One symbol of a venue's Best Bets sweep, in the sheet's order. The row itself is JSON: the screen's columns change more often than this table should.
+
+| column | type | null | notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | no | **PK** |
+| `venue` | VARCHAR(8) | no |  |
+| `rank` | INTEGER | no |  |
+| `symbol` | VARCHAR(16) | no |  |
+| `setup` | VARCHAR(1) | yes |  |
+| `available` | BOOLEAN | no |  |
+| `data` | JSON | no |  |
+| `scanned_at` | DATETIME | no |  |
+
+**Indexes:** `ix_scan_best_bets_row_venue_rank`
+
+### `scan_breakout_row`
+
+One ticker of a BreakoutRadar scan -- a breakout (`pass`) or a near miss (`near`) -- judged with the thresholds its run records.
+
+| column | type | null | notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | no | **PK** |
+| `market` | VARCHAR(8) | no |  |
+| `timeframe` | VARCHAR(4) | no |  |
+| `section` | VARCHAR(8) | no |  |
+| `rank` | INTEGER | no |  |
+| `ticker` | VARCHAR(24) | no |  |
+| `data` | JSON | no |  |
+| `scanned_at` | DATETIME | no |  |
+
+**Indexes:** `ix_scan_breakout_row_combo`
+
+### `scan_run`
+
+When a stored scan ran, one row per combination: Best Bets by venue, BreakoutRadar by market and timeframe. Replaced with the combination's rows in one transaction (truncate and load), so its time is always the time of the rows beside it. Market data, so no tenant: the day's first sign-in sweeps each combination once for everybody.
+
+| column | type | null | notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | no | **PK** |
+| `kind` | VARCHAR(16) | no |  |
+| `combo` | VARCHAR(24) | no |  |
+| `trade_date` | VARCHAR(10) | no |  |
+| `scanned_at` | DATETIME | no |  |
+| `took_s` | FLOAT | yes |  |
+| `row_count` | INTEGER | no |  |
+| `trigger` | VARCHAR(16) | no |  |
+| `meta` | JSON | no |  |
+
+**Unique:** `(kind, combo)`
 
 ## Conventions
 

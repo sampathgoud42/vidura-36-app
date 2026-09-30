@@ -36,6 +36,10 @@ os.environ.setdefault("TBOT_DATABASE_URL_OVERRIDE",
 os.environ.setdefault("TBOT_PAPER_ONLY", "true")
 os.environ.setdefault("TBOT_LOGIN_REQUIRED", "true")
 os.environ.setdefault("TBOT_ENCRYPTION_MASTER_KEY", "test-master-key-not-a-real-one")
+# Every sign-in in the suite is somebody's first of the day. The sweeps that
+# would start are the ones the Best Bets and BreakoutRadar tests drive on
+# purpose, so they stay off unless a test turns them on.
+os.environ.setdefault("TBOT_DAILY_PRESCAN", "false")
 
 
 @dataclass(frozen=True)
@@ -83,10 +87,11 @@ def fresh_schema():
     # every later test erroring in setup with a PermissionError that named the
     # fixture instead of the thread.
     from app.domains.trading.execution import autotrade
-    from app.domains.trading.market import best_bets, breakout_scan, flow
+    from app.domains.trading.market import best_bets, breakout_scan, daily_scans, flow
 
     autotrade.quiesce()
     flow.quiesce()
+    daily_scans.quiesce()
     best_bets.quiesce()
     breakout_scan.quiesce()
 
@@ -111,6 +116,7 @@ def fresh_schema():
     yield
     autotrade.quiesce()
     flow.quiesce()
+    daily_scans.quiesce()
     best_bets.quiesce()
     breakout_scan.quiesce()
     session.reset_for_tests()
