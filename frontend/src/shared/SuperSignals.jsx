@@ -38,7 +38,16 @@ const POLL_IDLE_MS = 10 * 60_000;  // outside the desk's day only a new report c
 const PAGE = 40;                   // rows before "more" — a busy day is several hundred
 const FRESH_MS = 5 * 60_000;       // a new signal stays marked this long
 const SCOPE_KEY = 'superSignals.scope';
-const SCOPES = [['all', 'all'], ['open', 'open'], ['watch', '★ watchlist']];
+// id, label, and the label the narrow rail has room for
+const SCOPES = [['all', 'all'], ['open', 'open'], ['watch', '★ watchlist'],
+  ['pairs', '\u{1F44D}\u{1F44D} best pairs', '\u{1F44D}\u{1F44D} pairs']];
+const THUMBS = '\u{1F44D}\u{1F44D}';
+
+// A signal is "part of a best pair" when its signal type AND its ticker are a
+// pair on the daily report's best ticker + signal pairs -- keyed as the
+// best_pairs auto-trader keys them (type_key in autotrade.py).
+const pairKeyOf = (r) => `${r.agent || ''}|${r.setup || ''}|${r.grade || ''}|${r.direction || ''}`
+  + `::${r.ticker || ''}`;
 const OFFLINE = 'The signal desk’s service is not running on this machine '
   + '(task Vidura_SignalAgents_API). Signals and reports come back as soon as it is.';
 
@@ -214,6 +223,23 @@ export default function SuperSignals({
   const reportKey = data ? `${data.date}|${data.report?.available}` : '';
   useEffect(() => { if (!lite) loadReports(); }, [loadReports, reportKey, lite]);
 
+  // The best pairs, so a signal that is one of them can say so (THUMBS) and
+  // the "best pairs" filter can keep just those. The report rewrites the
+  // list, so it is read again whenever the session's report changes.
+  const [pairs, setPairs] = useState(null);       // pair key -> its row
+  useEffect(() => {
+    let alive = true;
+    vidura.superSignalsBestPairs()
+      .then((res) => {
+        if (!alive) return;
+        setPairs(new Map((res?.pairs || []).map((p) => [
+          `${p.type_key}::${p.ticker}`, { ...p, total: res.total }])));
+      })
+      .catch(() => { /* no marks until the list can be read */ });
+    return () => { alive = false; };
+  }, [reportKey]);
+  const pairOf = useCallback((r) => (pairs ? pairs.get(pairKeyOf(r)) || null : null), [pairs]);
+
   // ── the desk's switch ────────────────────────────────────────────────────
   // `ctl` is the press in flight, and what it waits to see: 'starting' until
   // the session reports the desk alive, 'stopping' until it reports it gone.
@@ -288,15 +314,19 @@ export default function SuperSignals({
     let list = data.signals;
     if (agent) list = list.filter((s) => s.agent === agent);
     if (scope === 'open') list = list.filter((s) => s.outcome === 'open');
+    if (scope === 'pairs') list = list.filter((s) => pairOf(s));
     return groupSignals(list);
-  }, [data, scope, agent]);
+  }, [data, scope, agent, pairOf]);
 
   const tally = useMemo(() => {
     if (!data) return null;
     if (scope === 'watch') return tallyOf(data.watchlist);
+    if (scope === 'pairs') {
+      return tallyOf(data.signals.filter((s) => (!agent || s.agent === agent) && pairOf(s)));
+    }
     if (agent) return (data.agents || []).find((a) => a.id === agent) || tallyOf([]);
     return data.totals;
-  }, [data, scope, agent]);
+  }, [data, scope, agent, pairOf]);
 
   const status = deskStatus(data);
   const titles = useMemo(
@@ -304,7 +334,8 @@ export default function SuperSignals({
   const recent = (reports || []).filter((r) => r.date !== data?.today);
   const todayReady = !!(data?.is_today && data.report?.available);
   const openCount = data ? data.totals.open : 0;
-  const counts = { all: data?.totals.signals, open: openCount, watch: data?.watchlist.length };
+  const counts = { all: data?.totals.signals, open: openCount, watch: data?.watchlist.length,
+    pairs: data && pairs ? data.signals.filter((s) => pairOf(s)).length : undefined };
 
   return (
     <section className={`ss tr-panel${compact ? ' ss--compact' : ''}${touch ? ' ss--touch' : ''}`}
@@ -355,10 +386,13 @@ export default function SuperSignals({
           {data.econ && <p className="ss-econ" title="macro events today">⚑ {data.econ}</p>}
 
           <div className="ss-seg" role="group" aria-label="which signals">
-            {SCOPES.map(([id, text]) => (
+            {SCOPES.map(([id, text, short]) => (
               <button key={id} type="button" className={scope === id ? 'on' : ''}
-                aria-pressed={scope === id} onClick={() => setScope(id)}>
-                {text}{counts[id] != null && <span className="n">{counts[id]}</span>}
+                aria-pressed={scope === id} onClick={() => setScope(id)}
+                title={id === 'pairs' ? 'signals whose type and ticker are one of the '
+                  + 'daily report\u2019s best ticker + signal pairs' : undefined}>
+                {compact && short ? short : text}
+                {counts[id] != null && <span className="n">{counts[id]}</span>}
               </button>
             ))}
           </div>
@@ -384,6 +418,10 @@ export default function SuperSignals({
                     <span className="ss-watching"> Watching {data.watches.length}:{' '}
                       {data.watches.map((w) => w.name).join(' · ')}</span>
                   )}</>
+              ) : scope === 'pairs' && data.signals.length > 0 ? (
+                pairs ? `None of ${data.is_today ? 'today\u2019s' : 'this session\u2019s'} signals `
+                  + 'is one of the best pairs yet.'
+                  : 'Reading the best pairs\u2026'
               ) : data.signals.length === 0 ? (
                 <>No signals yet{data.phase === 'pre-open' ? ' — the desk opens at 08:30 CST' : ''}.
                   {data.previous && (
@@ -403,6 +441,7 @@ export default function SuperSignals({
                 const long = g.direction !== 'SHORT';
                 const isOpen = openKey === g.key;
                 const isFresh = g.rows.some((r) => fresh[r.id]);
+                const best = g.rows.map(pairOf).find(Boolean) || null;
                 return (
                   <li key={g.key} className={`ss-sig${isFresh ? ' fresh' : ''}${isOpen ? ' x' : ''}`}>
                     <div className="ss-l1">
@@ -411,6 +450,11 @@ export default function SuperSignals({
                         aria-label={long ? 'long' : 'short'}>{long ? '▲' : '▼'}</span>
                       <button type="button" className="ss-tkr" onClick={() => onPick?.(g.ticker)}
                         title={`${g.ticker} — quote, levels, chart`}>{g.ticker}</button>
+                      {best && (
+                        <span className="ss-thumbs" role="img" aria-label="best pair"
+                          title={`best pair #${best.rank} of ${best.total}: ${best.signal || best.type_key}`
+                            + ` on ${best.ticker}`}>{THUMBS}</span>
+                      )}
                       <button type="button" className="ss-what" aria-expanded={isOpen}
                         onClick={() => setOpenKey(isOpen ? null : g.key)}
                         title={scope === 'watch' ? g.watch : `${titles[g.agent] || g.agent} · ${label(g.setup)}`}>
@@ -453,6 +497,15 @@ export default function SuperSignals({
                         {g.rows.length > 1 && (
                           <p className="ss-setups">{g.rows.length} setups on this bar:{' '}
                             {g.rows.map((r) => label(r.setup)).join(' · ')}</p>
+                        )}
+                        {best && (
+                          <p className="ss-note ss-thumbsnote">
+                            {THUMBS} best pair #{best.rank} of {best.total} over the report&rsquo;s
+                            {' '}sessions: {best.wins}&ndash;{best.losses}&ndash;{best.timeouts}
+                            {best.win_pct != null && ` \u00b7 ${Math.round(best.win_pct)}% win`}
+                            {best.net_r != null && ` \u00b7 ${rStr(best.net_r)}`}
+                            {best.edge != null && ` \u00b7 edge ${best.edge.toFixed(1)}`}
+                          </p>
                         )}
                         {(g.watch || scope === 'watch') && watchNote[g.watch] && (
                           <p className="ss-note">★ {watchNote[g.watch]}</p>
