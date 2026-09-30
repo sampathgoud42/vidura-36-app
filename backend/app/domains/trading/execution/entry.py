@@ -54,8 +54,14 @@ def open_managed(db, *, tenant_id: str, cred, symbol: str, side: str, buy_pct: f
                  tp_pct: float, sl_pct: float, delta_min: float, delta_max: float,
                  tolerance_pct: float, sandbox: bool, strategy: str,
                  expiration: str | None = None, zero_dte: bool = False,
-                 allow_add: bool = False, min_contracts: int = 1) -> Position:
+                 allow_add: bool = False, min_contracts: int = 1,
+                 order_type: str = "smart", discount_pct: float = 0.0) -> Position:
     """Pick, price, size and place one managed entry through orders.open_position.
+
+    ``order_type`` is how the buy is priced (selection.buy_price): "smart" --
+    what every entry did before there was a choice, and still the auto-trader's
+    -- "market", or "limit" at the mark less ``discount_pct``, withdrawn after
+    selection.LIMIT_CANCEL_S unfilled. The size is taken at that price.
 
     ``min_contracts`` refuses rather than rounds up: sizing below the floor
     means the account cannot carry this trade at the configured risk, and
@@ -70,10 +76,14 @@ def open_managed(db, *, tenant_id: str, cred, symbol: str, side: str, buy_pct: f
             f"no {side} on {symbol} {expiration} with a delta in {lo:+g}..{hi:+g} "
             f"and a two-sided quote", status_code=404)
 
-    limit_price = selection.smart_limit(float(opt.get("bid") or 0), float(opt["ask"]))
+    try:
+        price = selection.buy_price(order_type, float(opt.get("bid") or 0),
+                                    float(opt.get("ask") or 0), discount_pct)
+    except ValueError as exc:
+        raise ExecutionRefused(f"{opt['symbol']}: {exc}", status_code=409) from None
     buying_power = float(
         (venue_mod.balance(cred=cred, sandbox=sandbox) or {}).get("option_buying_power") or 0)
-    sizing = selection.size_contracts(buying_power, buy_pct, limit_price,
+    sizing = selection.size_contracts(buying_power, buy_pct, price.sizing_price,
                                       tolerance_pct=tolerance_pct)
     if sizing.contracts < 1:
         raise ExecutionRefused(f"sized to zero: {sizing.explain()}", status_code=409)
@@ -86,6 +96,8 @@ def open_managed(db, *, tenant_id: str, cred, symbol: str, side: str, buy_pct: f
         db, tenant_id=tenant_id, cred=cred, symbol=symbol, side=side,
         occ_symbol=opt["symbol"], underlying=symbol, strike=float(opt.get("strike") or 0),
         expiration=expiration, delta=opt.get("_delta"), contracts=sizing.contracts,
-        limit_price=limit_price, buy_pct=buy_pct, tolerance_pct=tolerance_pct,
+        limit_price=price.limit, buy_pct=buy_pct, tolerance_pct=tolerance_pct,
         tp_pct=tp_pct, sl_pct=sl_pct, sandbox=sandbox, strategy=strategy,
-        allow_add=allow_add, zero_dte=zero_dte)
+        allow_add=allow_add, zero_dte=zero_dte, order_type=price.order_type,
+        discount_pct=price.discount_pct, mark=price.mark,
+        cancel_after_s=selection.LIMIT_CANCEL_S if price.order_type == "limit" else None)

@@ -1274,6 +1274,7 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
 .tr-market-toggle .tr-chip { padding: 2px 8px; font-size: 10px; cursor: pointer; }
 .tr-discount-row { display: flex; gap: 4px; margin-top: 4px; }
 .tr-discount-row .tr-chip { padding: 2px 7px; font-size: 9px; cursor: pointer; }
+.tr-otnote { display: block; margin-top: 4px; font-size: 9.5px; line-height: 1.35; }
 
 /* super_signals: the signal types to trade, as the signal desk ranks them.
    Margins, not flex gap, for the older iPhone Safari 36 Trades still serves. */

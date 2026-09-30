@@ -206,22 +206,80 @@ def _check_one(db, tenant_id: str, pos: Position, events: list[str]) -> None:
     _check_open(db, cred, pos, events, sandbox)
 
 
+def _filled_quantity(order: dict) -> float:
+    """How much of the order has filled, per the venue (Tradier: exec_quantity)."""
+    try:
+        return abs(float(order.get("exec_quantity") or 0))
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _record_fill(pos: Position, order: dict, events: list[str],
+                 partial: float | None = None) -> None:
+    """The entry price, and -- for a partial fill whose rest was cancelled --
+    the size actually held, which is what the exits are then armed for."""
+    price = float(order.get("avg_fill_price") or 0)
+    if price <= 0 and pos.limit_price:
+        price = float(pos.limit_price)      # a limit fills at its limit or better
+    pos.entry_price = price
+    pos.opened_at = pos.opened_at or utcnow()
+    if partial is not None and 0 < partial < pos.contracts:
+        ordered = pos.contracts
+        pos.contracts = int(partial)
+        pos.note = (f"filled {pos.contracts} of {ordered} @ {price:.2f} before the "
+                    f"rest was cancelled; confirming the position before arming "
+                    f"exits ({ARM_DELAY_S}s)")
+        events.append(f"#{pos.id} partly filled: {pos.contracts} of {ordered} "
+                      f"@ {price:.2f}, the rest cancelled")
+        return
+    pos.note = (f"filled @ {price:.2f}; confirming the "
+                f"position before arming exits ({ARM_DELAY_S}s)")
+    events.append(f"#{pos.id} filled @ {price:.2f}")
+
+
 def _check_pending(db, cred, pos: Position, events: list[str],
                    sandbox: bool) -> None:
     if pos.entry_price is None:
         order = venue_mod.order_status(pos.buy_order_id, cred=cred, sandbox=sandbox)
         state = (order.get("status") or "").lower()
+        expired = bool(pos.buy_expires_at and utcnow() >= pos.buy_expires_at)
         if state == "filled":
-            pos.entry_price = float(order.get("avg_fill_price") or 0)
-            pos.opened_at = pos.opened_at or utcnow()
-            pos.note = (f"filled @ {pos.entry_price:.2f}; confirming the "
-                        f"position before arming exits ({ARM_DELAY_S}s)")
-            events.append(f"#{pos.id} filled @ {pos.entry_price:.2f}")
+            _record_fill(pos, order, events)
         elif state in ("canceled", "cancelled", "rejected", "expired"):
+            filled = _filled_quantity(order)
+            if filled > 0:
+                # Part of it filled before the rest was cancelled. Those
+                # contracts are held, and get their exits like any other fill
+                # -- calling this "failed" would leave them unmanaged.
+                _record_fill(pos, order, events, partial=filled)
+                return
             pos.status = "failed"
             pos.closed_at = utcnow()
-            pos.note = f"buy {state}; nothing at risk"
-            events.append(f"#{pos.id} buy {state}")
+            if expired and state in ("canceled", "cancelled"):
+                waited = int(((pos.buy_expires_at - pos.opened_at).total_seconds() // 60)
+                             if pos.opened_at else 0)
+                pos.note = (f"buy cancelled: the {pos.limit_price or 0:.2f} limit did not "
+                            f"fill in {waited} min; nothing at risk")
+                events.append(f"#{pos.id} limit {pos.limit_price or 0:.2f} unfilled "
+                              f"after {waited} min — cancelled")
+            else:
+                pos.note = f"buy {state}; nothing at risk"
+                events.append(f"#{pos.id} buy {state}")
+        elif expired:
+            # A limit that has not filled in its window is withdrawn. The
+            # cancel is only a request: the venue's answer is read on a later
+            # pass, and a fill that beat it is still a fill (above). Asked
+            # again each pass until the venue says it is done.
+            try:
+                venue_mod.cancel_order(pos.buy_order_id, cred=cred, sandbox=sandbox)
+            except Exception as exc:                    # noqa: BLE001
+                logger.warning("position %s: cancelling the unfilled buy failed: %s",
+                               pos.id, exc)
+            if "cancelling it" not in (pos.note or ""):
+                pos.note = (f"the {pos.limit_price or 0:.2f} limit did not fill in time "
+                            f"— cancelling it")
+                events.append(f"#{pos.id} limit {pos.limit_price or 0:.2f} unfilled "
+                              f"in its window — cancelling")
         return
 
     # Filled. Wait out the arm delay, then confirm the holding really exists.

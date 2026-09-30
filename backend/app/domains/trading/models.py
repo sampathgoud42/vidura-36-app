@@ -50,6 +50,14 @@ class Position(Base, TenantOwned, Timestamped):
     sl_price: Mapped[float | None] = mapped_column(Float)
 
     buy_order_id: Mapped[str | None] = mapped_column(String(64))
+    # How the buy was priced (selection.ORDER_TYPES): smart, market, or limit
+    # -- the mark less discount_pct. Null on rows placed before these existed.
+    order_type: Mapped[str | None] = mapped_column(String(8))
+    # The buy's own limit; null for a market order.
+    limit_price: Mapped[float | None] = mapped_column(Float)
+    discount_pct: Mapped[float | None] = mapped_column(Float)
+    # When a limit that has not filled is withdrawn (UTC, like opened_at).
+    buy_expires_at: Mapped[datetime | None] = mapped_column(DateTime)
     tp_order_id: Mapped[str | None] = mapped_column(String(64))
     # New in the rebuild: the stop that rests AT THE VENUE, so it survives
     # this process dying. Null means only the monitored stop is protecting

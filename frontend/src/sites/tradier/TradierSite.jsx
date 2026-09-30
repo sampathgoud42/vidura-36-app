@@ -1239,12 +1239,59 @@ function loadDeskDefaults() {
 
 const DISCOUNT_OPTIONS = [5, 10, 20, 40];
 
+// How a buy is priced -- the server's three (execution/selection.py):
+//   MKT    a market order: it takes the offer.
+//   LIMIT  the MARK (the middle of bid and ask) less the discount, to the
+//          cent -- mark 1.03 at -10% is 0.927, bid 0.93 -- cancelled if it
+//          has not filled in fifteen minutes.
+//   SMART  the desk's smart limit: the mid on a wide spread, the ask on a
+//          tight one. What every buy did before there was a choice.
+// Exported with the preview below, so 36 Trades' ticket offers and shows the
+// same three the same way.
+export const ORDER_TYPES = [['market', 'MKT'], ['limit', 'LIMIT'], ['smart', 'SMART']];
+
+// to the cent, halves up -- as the server rounds (0.945 -> 0.95)
+const toCents = (x) => Math.round((x + 1e-9) * 100) / 100;
+
+/** A mark to the cent, or to the tenth of a cent when it has one (1.035). */
+export const fmtMark = (m) => {
+  const s = Number(m).toFixed(3);
+  return s.endsWith('0') ? s.slice(0, -1) : s;
+};
+
+/** What an order type would bid on this quote. A preview: the server prices
+ * from the quote it reads as the order goes in. Null when the quote cannot
+ * carry it (no offer; or, for a limit, no two-sided quote to take a mark of). */
+export function orderPrice(otype, bid, ask, discount) {
+  const b = Number(bid);
+  const a = Number(ask);
+  if (!(a > 0)) return null;
+  if (otype === 'market') return { price: null, ask: a };
+  if (otype === 'smart') return { price: !(b > 0) || a - b <= 0.02 ? toCents(a) : toCents((a + b) / 2) };
+  if (!(b > 0) || a < b) return null;
+  const mark = (a + b) / 2;
+  return { mark, price: toCents((mark * (100 - discount)) / 100) };
+}
+
+/** The ticket's one line on what the chosen order type does. */
+export function orderNote(otype, discount) {
+  if (otype === 'market') return 'market \u00b7 takes the offer, at the going price';
+  if (otype === 'limit') {
+    return `limit ${discount}% under the mark \u00b7 cancels after 15 min if unfilled`;
+  }
+  return 'smart limit \u00b7 the mid on a wide spread, the ask on a tight one';
+}
+
+const orderTag = (otype, discount) => (otype === 'limit' ? `LIMIT \u2212${discount}%`
+  : otype === 'market' ? 'MKT' : 'SMART');
+
 function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, onClose }) {
   const named = !!open?.occ_symbol;
   const [side, setSide] = useState(open?.side === 'put' ? 'put' : 'call');
   const [zeroDte, setZeroDte] = useState(false);
   const [manualSym, setManualSym] = useState('');
-  const [market, setMarket] = useState(true);
+  // SMART first: it is what every buy was before there was a choice.
+  const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
   const [midDayWarn, setMidDayWarn] = useState(false);
   useEffect(() => {
@@ -1278,7 +1325,8 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
     occ_symbol: open.occ_symbol,
     side,
     zero_dte: zeroDte,
-    discount_pct: market ? 0 : discount,
+    order_type: otype,
+    discount_pct: otype === 'limit' ? discount : 0,
     ...desk,
   });
 
@@ -1347,15 +1395,14 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
             <input className="tr-input" type="number" min="1" max="99" value={desk.sl_pct}
               onWheel={(e) => e.currentTarget.blur()} onChange={set('sl_pct')} /></div>
           <div><span className="tr-label">Order type</span>
-            <div className="tr-market-toggle">
-              <button type="button"
-                className={`tr-chip ${market ? 'on' : ''}`}
-                onClick={() => setMarket(true)}>MKT</button>
-              <button type="button"
-                className={`tr-chip ${!market ? 'on' : ''}`}
-                onClick={() => setMarket(false)}>LIMIT</button>
+            <div className="tr-market-toggle" role="group" aria-label="order type">
+              {ORDER_TYPES.map(([id, text]) => (
+                <button key={id} type="button" aria-pressed={otype === id}
+                  className={`tr-chip ${otype === id ? 'on' : ''}`}
+                  onClick={() => setOtype(id)}>{text}</button>
+              ))}
             </div>
-            {!market && (
+            {otype === 'limit' && (
               <div className="tr-discount-row">
                 {DISCOUNT_OPTIONS.map((d) => (
                   <button key={d} type="button"
@@ -1366,6 +1413,7 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
                 ))}
               </div>
             )}
+            <span className="tr-note tr-otnote">{orderNote(otype, discount)}</span>
           </div>
         </div>
 
@@ -1406,7 +1454,7 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
               ? `${desk.buy_pct}% ±${desk.size_tol}% · TP ${desk.tp_pct}% · SL ${desk.sl_pct}%`
               : `delta ${signedBandLabel(side, desk.delta)} · ${desk.buy_pct}% ±${desk.size_tol}%`
                 + ` · TP ${desk.tp_pct}% · SL ${desk.sl_pct}%`}
-            {!market && ` · LIMIT −${discount}%`}
+            {` · ${orderTag(otype, discount)}`}
           </span>
           <span className="ml-auto" />
           <button type="button" className="tr-btn sm" onClick={onClose} disabled={busy}>
@@ -3674,6 +3722,7 @@ export default function TradierSite() {
         tolerance_pct: parseFloat(t.size_tol),
         tp_pct: parseFloat(t.tp_pct),
         sl_pct: parseFloat(t.sl_pct),
+        order_type: t.order_type || 'smart',
         discount_pct: t.discount_pct || 0,
       };
       if (t.occ_symbol) {
