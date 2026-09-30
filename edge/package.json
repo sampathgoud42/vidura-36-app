@@ -1,0 +1,16 @@
+{
+  "name": "vidura36-edge",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build:desk": "npm --prefix ../frontend run build",
+    "deploy": "npm run build:desk && wrangler deploy --env=",
+    "deploy:staging": "npm run build:desk && wrangler deploy --env staging",
+    "check": "wrangler deploy --env= --dry-run --outdir .wrangler/dry-run",
+    "tail": "wrangler tail --env="
+  },
+  "devDependencies": {
+    "wrangler": "^4.141.0"
+  }
+}

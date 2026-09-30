@@ -80,6 +80,14 @@ this machine, so when the machine sleeps the API stops answering. Every
 the sign-in screen and nothing else. Details, and the things worth reading
 before sharing the link, are in [TUNNEL.md](TUNNEL.md).
 
+The web app itself is served from Cloudflare's edge by a small Worker
+(`edge/`), so it loads fast and says plainly when the desk is offline. The
+API never passes through it. After a frontend change:
+
+```bash
+npm --prefix edge run deploy
+```
+
 ### First run on a fresh machine
 
 The database starts empty and **nobody can sign in until an operator exists**.
@@ -603,6 +611,7 @@ backend/app/
 backend/migrations/  Alembic
 backend/bot_best_pair/  the best-pairs bot: its own process, settings and launchers
 frontend/src/      the three worlds
+edge/              the Cloudflare Worker serving the web app at vidura36.app
 runtime/           vendored signal engines and bot scripts
 customers/<name>/  per-operator credentials (gitignored, never committed)
 var/               database, logs, backups (gitignored)

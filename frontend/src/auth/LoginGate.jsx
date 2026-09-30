@@ -69,10 +69,14 @@ export default function LoginGate({ children }) {
         }
         auth.clearToken();
         if (!cancelled) setPhase('out');
-      } catch {
+      } catch (e) {
         // The API is unreachable. Showing the form is the honest state:
-        // the sign-in attempt will report the real connection error.
-        if (!cancelled) setPhase('out');
+        // the sign-in attempt will report the real connection error. When
+        // Cloudflare has already said the desk's machine is not there (the
+        // page itself loads from the edge), the card says so up front.
+        if (cancelled) return;
+        if (e?.offline) setReason(e.detail);
+        setPhase('out');
       }
     })();
     return () => { cancelled = true; };

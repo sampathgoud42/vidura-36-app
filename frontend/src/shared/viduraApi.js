@@ -74,6 +74,20 @@ export class ApiError extends Error {
   }
 }
 
+// What Cloudflare answers in the desk's place when its machine is not there:
+// 530 when the tunnel has no connector, 502/52x when nothing answers behind
+// it. Always an HTML page, never the desk's JSON -- so "non-JSON response" was
+// true and told nobody anything. The edge Worker's sign-in says the same.
+const ORIGIN_DOWN = new Set([502, 503, 504, 520, 521, 522, 523, 524, 530]);
+export const DESK_OFFLINE = 'The desk is not answering: its computer may be asleep or '
+  + 'offline, or the desk may be restarting. Try again in a moment.';
+
+function offlineError(status) {
+  const e = new ApiError(status, DESK_OFFLINE);
+  e.offline = true;
+  return e;
+}
+
 // A key per operator GESTURE, so a double-tap or a retry after a timeout is
 // absorbed by the server instead of placing a second order.
 function newIdempotencyKey() {
@@ -144,7 +158,10 @@ async function req(method, path, { body, params, timeout = 30000,
     clearTimeout(timer);
   }
   const ct = resp.headers.get('content-type') || '';
-  if (!ct.includes('json')) throw new ApiError(resp.status, 'Backend not reachable (non-JSON response)');
+  if (!ct.includes('json')) {
+    if (ORIGIN_DOWN.has(resp.status)) throw offlineError(resp.status);
+    throw new ApiError(resp.status, 'Backend not reachable (non-JSON response)');
+  }
   const data = await resp.json();
   if (!resp.ok) {
     // A dead session is not this call site's problem to render. Sessions live

@@ -46,6 +46,12 @@ frontend/node_modules/
 frontend/dist/
 frontend/.vite/
 
+# --- edge: the Cloudflare Worker in front of the tunnel ----------------
+# Wrangler keeps its own state and dry-run bundles here. The Cloudflare login
+# itself lives in the user's home directory, never in this folder.
+edge/node_modules/
+edge/.wrangler/
+
 # --- bot station: per-run state the Kalshi bots write beside themselves ---
 # Ledgers, session state and scraped rankings are this machine's history,
 # not the project. The bots recreate every one of them on the next run.

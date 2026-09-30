@@ -52,6 +52,52 @@ live pointing at a server that is shutting down.
 
 ---
 
+## The web app is served from Cloudflare's edge
+
+A Cloudflare Worker, `vidura36-edge` (the `edge/` folder), sits in front of
+the tunnel on both hostnames. It carries a copy of the built desk and serves
+the web app's own paths from Cloudflare's edge: `/`, the three worlds,
+`/assets`, `/img`, `/guides` and the logo. They load fast on a phone, and they
+load even while this machine is asleep, so the sign-in card can say the desk
+is offline instead of Cloudflare's tunnel error page.
+
+**The API does not go through it.** Every `/api` path, and every path not on
+the Worker's route list, reaches the tunnel exactly as before. That is
+deliberate: a free Worker stops answering once it has used its 100,000
+requests for the day, and the desk polls its API constantly. Static assets
+are free and unmetered, so the edge costs the desk nothing and cannot cap it.
+The one API path the Worker takes is sign-in, which it rate-limits (ten
+attempts a minute per address) before the desk's own lock is ever reached.
+
+Deploy it after any frontend change. It builds the desk first, so the edge
+and this machine always serve the same build:
+
+```bash
+npm --prefix edge run deploy
+```
+
+A change confined to `frontend/` does not need the API restarted: the API
+reads `frontend/dist-v2` from disk on every request.
+
+Undo, if it ever misbehaves. Both leave the tunnel and its DNS untouched:
+
+```bash
+cd edge && npx wrangler rollback --env=
+```
+
+```bash
+cd edge && npx wrangler delete --env=
+```
+
+`rollback` returns to the previous deploy. `delete` removes the Worker and
+its routes, which puts vidura36.app back on the tunnel alone.
+
+The first deploy from a machine needs `npx wrangler login` in `edge/`, which
+opens a browser to authorise Wrangler on the Cloudflare account that owns
+vidura36.app. The login is kept in the user profile, never in this folder.
+
+---
+
 ## Read this before you share the link
 
 The tunnel puts a desk that can place **real options orders** on the public
