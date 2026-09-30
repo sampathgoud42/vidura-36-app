@@ -4,10 +4,15 @@
 #
 #   ./start.sh               set up a fresh copy, install what changed, build
 #                            the web app if it is out of date, start the API,
-#                            and open the tunnel
+#                            open the tunnel, and put a new build on
+#                            Cloudflare's edge once the edge has been deployed
+#                            (TUNNEL.md)
 #   ./start.sh --restart     stop everything first, then start it again
 #   ./start.sh --no-tunnel   keep it on this machine only (127.0.0.1:8791)
 #   ./start.sh --dev         also run the Vite dev server on 5199 (hot reload)
+#
+# It also says whether the signal desk's service is answering: Super Signals
+# and the best pair read from it, and it runs from a project of its own.
 #
 # ./stop.sh takes it all down. Status, the public URL and the audit are one
 # command each through tools/ - see README.md.

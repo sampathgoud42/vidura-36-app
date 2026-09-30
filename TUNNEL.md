@@ -69,15 +69,21 @@ are free and unmetered, so the edge costs the desk nothing and cannot cap it.
 The one API path the Worker takes is sign-in, which it rate-limits (ten
 attempts a minute per address) before the desk's own lock is ever reached.
 
-Deploy it after any frontend change. It builds the desk first, so the edge
-and this machine always serve the same build:
+Deploy it once, by hand. It builds the desk first, so the edge and this
+machine serve the same build, and it records which build it published
+(`var/edge.deployed`):
 
 ```bash
 npm --prefix edge run deploy
 ```
 
-A change confined to `frontend/` does not need the API restarted: the API
-reads `frontend/dist-v2` from disk on every request.
+From then on `start` keeps it current. Whenever the build it is running is
+not the one the edge has, it publishes it -- last, once the API is up, so the
+edge never serves a web app ahead of its API. It leaves the edge alone with
+`--no-tunnel` or `--dev`, and while Wrangler is logged out, and says so each
+time. `npm --prefix edge run deploy` still publishes a frontend change on its
+own; a change confined to `frontend/` does not need the API restarted, since
+the API reads `frontend/dist-v2` from disk on every request.
 
 Undo, if it ever misbehaves. Both leave the tunnel and its DNS untouched:
 
@@ -86,11 +92,13 @@ cd edge && npx wrangler rollback --env=
 ```
 
 ```bash
-cd edge && npx wrangler delete --env=
+npm --prefix edge run delete
 ```
 
-`rollback` returns to the previous deploy. `delete` removes the Worker and
-its routes, which puts vidura36.app back on the tunnel alone.
+`rollback` returns to the previous deploy until the next new build, which
+`start` publishes as usual. `delete` removes the Worker and its routes, which
+puts vidura36.app back on the tunnel alone, and clears the record, so `start`
+publishes nothing there until the next `npm --prefix edge run deploy`.
 
 The first deploy from a machine needs `npx wrangler login` in `edge/`, which
 opens a browser to authorise Wrangler on the Cloudflare account that owns

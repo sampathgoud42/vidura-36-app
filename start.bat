@@ -3,11 +3,15 @@ REM Start Vidura - everything it needs, in order - and publish it at
 REM https://vidura36.app
 REM
 REM   start.bat               set up a fresh copy, install what changed, build the
-REM                           web app if it is out of date, start the API, and
-REM                           open the tunnel
+REM                           web app if it is out of date, start the API, open
+REM                           the tunnel, and put a new build on Cloudflare's
+REM                           edge once the edge has been deployed (TUNNEL.md)
 REM   start.bat --restart     stop everything first, then start it again
 REM   start.bat --no-tunnel   keep it on this machine only (127.0.0.1:8791)
 REM   start.bat --dev         also run the Vite dev server on 5199 (hot reload)
+REM
+REM It also says whether the signal desk's service is answering: Super Signals
+REM and the best pair read from it, and it runs from a project of its own.
 REM
 REM stop.bat takes it all down. Status, the public URL and the audit are one
 REM command each through tools\ - see README.md.

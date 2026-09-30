@@ -7,6 +7,10 @@ REM own - stop them from the Bot Station. Take-profits rest at the venue and
 REM keep working while the desk is down; the stop-loss monitor does not (see
 REM DEPLOY.md, "What stopping does and does not do").
 REM
+REM Nor is anything that is not this machine's or not this project's: the web
+REM app on Cloudflare's edge keeps loading, its sign-in saying the desk is
+REM offline, and the signal desk's service keeps running on its own task.
+REM
 REM Only ever signals processes started from THIS folder, so an unrelated app on
 REM the machine is never touched.
 setlocal

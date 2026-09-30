@@ -8,7 +8,8 @@ not be tested from the same place. This module does the same job with the
 standard library, so every command behaves identically wherever the folder is
 copied.
 
-    python tools/appctl.py start      # everything: deps, web app, API, tunnel
+    python tools/appctl.py start      # everything: deps, web app, API, tunnel,
+                                      # and the edge's copy of the web app
     python tools/appctl.py start --restart   # stop, then start
     python tools/appctl.py start --no-tunnel # keep it on this machine
     python tools/appctl.py start --dev       # + Vite dev server on 5199
@@ -26,6 +27,7 @@ belonging to something unrelated can never be killed.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import signal
@@ -35,6 +37,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -563,12 +566,133 @@ def ensure_web_app(dev: bool = False) -> None:
                  else "the API runs with no web app"))
         return
     print("Web app  built into frontend/dist-v2")
-    # vidura36.app serves the web app from Cloudflare's edge (edge/, TUNNEL.md),
-    # and publishing there is a deploy -- not something a start does behind
-    # anyone's back. Until it is run, the edge serves the previous build.
-    if (ROOT / "edge" / "node_modules").is_dir():
-        print("         vidura36.app serves the web app from Cloudflare's edge -")
-        print("         publish this build there with:  npm --prefix edge run deploy")
+
+
+# --------------------------------------------------------------------------
+# the edge: vidura36.app's web app, served from Cloudflare (edge/, TUNNEL.md)
+# --------------------------------------------------------------------------
+# The first deploy is a deliberate act -- `npm --prefix edge run deploy`, after
+# `npx wrangler login` in edge/ -- and it leaves a record of the build it
+# published. From then on `start` keeps the edge on the current build: a build
+# that only this machine served would leave vidura36.app loading yesterday's
+# web app against today's API. `npm --prefix edge run delete` takes the Worker
+# down and the record with it, and `start` leaves the edge alone after that.
+
+EDGE = ROOT / "edge"
+EDGE_RECORD = VAR / "edge.deployed"
+
+
+def build_fingerprint() -> str | None:
+    """sha256 over dist-v2: each file's relative path, then its bytes.
+
+    edge/scripts/deployed.mjs computes the same thing for `npm run deploy`;
+    the two have to agree byte for byte, so change them together.
+    """
+    if not (DIST / "index.html").is_file():
+        return None
+    h = hashlib.sha256()
+    for rel, path in sorted((p.relative_to(DIST).as_posix(), p)
+                            for p in DIST.rglob("*") if p.is_file()):
+        h.update(rel.encode("utf-8") + b"\0")
+        h.update(path.read_bytes())
+        h.update(b"\0")
+    return h.hexdigest()
+
+
+def edge_record() -> str | None:
+    """The build the edge was last given, or None if it was never deployed."""
+    try:
+        return json.loads(EDGE_RECORD.read_text(encoding="utf-8")).get("build") or None
+    except (OSError, ValueError, AttributeError):
+        return None
+
+
+def _wrangler() -> Path | None:
+    exe = EDGE / "node_modules" / ".bin" / ("wrangler.cmd" if IS_WINDOWS else "wrangler")
+    return exe if exe.is_file() else None
+
+
+def ensure_edge(args) -> None:
+    """Put the current build on the edge, if the edge is in use and behind.
+
+    Never fatal, and never interactive: the desk is up either way, and the
+    edge keeps serving the build it has until a deploy succeeds.
+    """
+    wrangler = _wrangler()
+    if wrangler is None:
+        return                          # the edge's tooling is not on this machine
+    last = edge_record()
+    if last is None:
+        print("Edge     not deployed - vidura36.app is served through the tunnel "
+              "alone (first deploy: TUNNEL.md)")
+        return
+    current = build_fingerprint()
+    if current is None:
+        return
+    if current == last:
+        print("Edge     vidura36.app serves this build from Cloudflare's edge")
+        return
+    if args.dev or not args.tunnel:
+        why = "--dev" if args.dev else "--no-tunnel"
+        print(f"Edge     not updated ({why}) - vidura36.app still serves the previous build")
+        return
+    # Asked first: with no login, a deploy opens a browser to log in, which is
+    # no part of starting a desk. whoami never prompts (and exits 0 either way).
+    try:
+        who = subprocess.run([str(wrangler), "whoami"], cwd=str(EDGE),
+                             capture_output=True, text=True, encoding="utf-8",
+                             errors="replace", stdin=subprocess.DEVNULL, timeout=60)
+        signed_in = "not authenticated" not in (who.stdout + who.stderr).lower()
+    except (OSError, subprocess.TimeoutExpired):
+        signed_in = False
+    if not signed_in:
+        print("Edge     not updated - Wrangler is not logged in here "
+              "(npx wrangler login, in edge/); vidura36.app still serves the previous build")
+        return
+    print("Edge     publishing this build to vidura36.app...", flush=True)
+    try:
+        rc = subprocess.call([str(wrangler), "deploy", "--env="], cwd=str(EDGE),
+                             stdin=subprocess.DEVNULL, timeout=300)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        print(f"Edge     deploy could not run ({exc}) - vidura36.app still serves "
+              "the previous build")
+        return
+    if rc != 0:
+        print("Edge     deploy FAILED - vidura36.app still serves the previous build "
+              "(see above)")
+        return
+    EDGE_RECORD.write_text(json.dumps({
+        "build": current,
+        "deployed_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }) + "\n", encoding="utf-8")
+    print("Edge     vidura36.app now serves this build")
+
+
+# The signal desk: a separate project (vidura-super-signals) whose loopback
+# service feeds Super Signals, the best pair and both signal strategies. This
+# app never starts it -- it runs on its own task -- but a desk that comes up
+# without it shows those panels offline, so start says so plainly.
+SIGNALS_URL = os.environ.get("TBOT_SUPER_SIGNALS_URL", "http://127.0.0.1:8792")
+
+
+def signals_answering() -> bool:
+    url = SIGNALS_URL.rstrip("/") + "/api/session"
+    try:
+        # no proxy from the environment: the service is on loopback
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(url, timeout=3) as r:
+            return r.status == 200
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+
+
+def report_signals() -> None:
+    if signals_answering():
+        print(f"Signals  the signal desk answers on {SIGNALS_URL}")
+    else:
+        print(f"Signals  the signal desk is NOT answering on {SIGNALS_URL} - Super "
+              "Signals and the best pair\n         show offline until it runs "
+              "(task Vidura_SignalAgents_API, project vidura-super-signals)")
 
 
 # --------------------------------------------------------------------------
@@ -639,8 +763,13 @@ def cmd_start(args) -> int:
         print("Desk     no web app build - the API runs without one "
               "(install Node 18+, then start again)")
 
+    report_signals()
+
     if args.tunnel:
         _start_tunnel(args.port)
+
+    # Last, so the edge only ever gets a build whose API is already up.
+    ensure_edge(args)
 
     print(f"Docs     http://127.0.0.1:{args.port}/docs")
 
@@ -819,6 +948,11 @@ def cmd_stop(args) -> int:
     # as abandoning them (see _terminate). Say so, so nobody assumes otherwise.
     print("Bots     left running - a bot holds its own positions; stop it "
           "from the Bot Station")
+    # Not this machine's to stop: the web app stays up on Cloudflare, and its
+    # sign-in says the desk is offline until the next start.
+    if edge_record():
+        print("Edge     still serves the web app at vidura36.app; its sign-in says "
+              "the desk is offline")
     return 0
 
 
@@ -863,6 +997,17 @@ def cmd_status(args) -> int:
     # UI was fine with dist-v2 missing entirely.
     built = ROOT / "frontend" / "dist-v2" / "index.html"
     print(f"build    {'frontend/dist-v2 present - the API serves it' if built.is_file() else 'frontend/dist-v2 MISSING - no UI'}")
+
+    if _wrangler() is not None:
+        last = edge_record()
+        if last is None:
+            print("Edge     not deployed - vidura36.app is served through the tunnel alone")
+        elif last == build_fingerprint():
+            print("Edge     serving this build at vidura36.app")
+        else:
+            print("Edge     serving an older build - the next start publishes this one")
+    print(f"Signals  {'answering' if signals_answering() else 'NOT answering'} "
+          f"on {SIGNALS_URL}")
     return 0
 
 

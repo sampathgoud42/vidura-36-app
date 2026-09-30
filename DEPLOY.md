@@ -193,6 +193,12 @@ the build; each step is skipped when there is nothing to do. The tunnel line
 only appears on a machine with the tunnel's credential (TUNNEL.md); elsewhere,
 use `start.bat --no-tunnel`.
 
+Two more lines report what the desk depends on beyond this machine. `Signals`
+says whether the signal desk's service is answering (Super Signals and the
+best pair read from it; it runs from its own project). `Edge` says whether
+vidura36.app's web app on Cloudflare is this build -- once the edge has been
+deployed, `start` publishes each new build there itself (TUNNEL.md).
+
 Open <http://127.0.0.1:8791/>. The desk and the API are the same port and
 the same process — the page fetches `/api/v1` on its own origin, so there is
 nothing to configure.
@@ -211,7 +217,7 @@ before you type. Read it.
 | `start.bat --restart` | stop, then start |
 | `start.bat --no-tunnel` | start on this machine only |
 | `start.bat --dev` | also run the Vite dev server on 5199 (hot reload, for UI work) |
-| `stop.bat` | stop the tunnel, the dev server and the API; bots keep running |
+| `stop.bat` | stop the tunnel, the dev server and the API; bots keep running, and so does the web app on the edge |
 | `.venv\Scripts\python tools\appctl.py status` | what is running, which database, paper or live |
 | `.venv\Scripts\python tools\doctor.py` | the audit |
 
