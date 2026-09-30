@@ -1,0 +1,83 @@
+// vidura36.app's front door (src/index.js explains the design).
+//
+// Deploy with `npm run deploy` from this folder: it builds the desk first, so
+// the edge always carries the same build the API serves locally. A deploy
+// replaces only what this Worker serves; the tunnel, its DNS records and the
+// API are untouched. `npx wrangler rollback --env=` returns to the previous
+// deploy, and `npx wrangler delete --env=` puts vidura36.app back on the
+// tunnel alone.
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "vidura36-edge",
+  "main": "src/index.js",
+  "compatibility_date": "2026-09-01",
+
+  // The built desk -- the same folder the API serves on its own origin. Paths
+  // with no file behind them (/tradier-platform, /36-trade-desk/...) get
+  // index.html, as the API's own fallback gives them. Only sign-in runs the
+  // script first; every other routed request is a plain asset.
+  "assets": {
+    "directory": "../frontend/dist-v2",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/v1/auth/login"]
+  },
+
+  // Sign-in attempts per address per minute (src/index.js, signIn).
+  "ratelimits": [
+    {
+      "name": "LOGIN_LIMIT",
+      "namespace_id": "3601",
+      "simple": { "limit": 10, "period": 60 }
+    }
+  ],
+
+  // The web app's paths, on both hostnames -- and deliberately nothing else.
+  // Every path not listed here, the API above all, reaches the tunnel exactly
+  // as before this Worker existed (see src/index.js for why). A world or a
+  // public folder added to the desk later belongs on this list; until it is,
+  // the machine serves it, the same as today.
+  "routes": [
+    { "pattern": "vidura36.app/", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/index.html", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/assets/*", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/img/*", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/guides/*", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/vidura-logo.svg", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/tradier-platform*", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/36-trade-desk*", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/bot-station*", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/breakout-radar*", "zone_name": "vidura36.app" },
+    { "pattern": "vidura36.app/api/v1/auth/login", "zone_name": "vidura36.app" },
+
+    { "pattern": "www.vidura36.app/", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/index.html", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/assets/*", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/img/*", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/guides/*", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/vidura-logo.svg", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/tradier-platform*", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/36-trade-desk*", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/bot-station*", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/breakout-radar*", "zone_name": "vidura36.app" },
+    { "pattern": "www.vidura36.app/api/v1/auth/login", "zone_name": "vidura36.app" }
+  ],
+
+  // A staging copy on workers.dev, to see the app load from the edge before
+  // vidura36.app is touched: `npx wrangler deploy --env staging`. It has no
+  // tunnel behind it, so the app loads there and its API calls cannot.
+  "env": {
+    "staging": {
+      "name": "vidura36-edge-staging",
+      "workers_dev": true,
+      "routes": [],
+      "ratelimits": [
+        {
+          "name": "LOGIN_LIMIT",
+          "namespace_id": "3602",
+          "simple": { "limit": 10, "period": 60 }
+        }
+      ]
+    }
+  }
+}

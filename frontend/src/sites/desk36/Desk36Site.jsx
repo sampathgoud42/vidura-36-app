@@ -4,11 +4,14 @@ import React, {
 import { Link } from 'react-router-dom';
 import { api, auth, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
-import SuperSignals from '../../shared/SuperSignals.jsx';
+import SuperSignals, { BestPair } from '../../shared/SuperSignals.jsx';
 import BestBetsLink from '../../shared/BestBets.jsx';
+import { useExperience } from '../../shared/experience.js';
+import { ExperienceSwitch } from '../../shared/ExperienceControls.jsx';
 import { READING_GUIDE_URL } from '../../config.js';
 import {
-  AutoTradeForm, CommoditiesPanel, deskOwnerNote, HotScan, MiniChart, OptionsFlow, useMovers,
+  AutoStatus, AutoTradeForm, CommoditiesPanel, deskOwnerNote, HotScan, LiteChart, MiniChart,
+  OptionsFlow, useMovers,
 } from '../tradier/TradierSite.jsx';
 import '../../shared/quotePopup.css';
 import './desk36.css';
@@ -326,10 +329,12 @@ const fmtGex = (v) => {
   return `${sign}${Math.round(a / 1e3)}K`;
 };
 
-function useGexSeries() {
+function useGexSeries(enabled = true) {
   const [state, setState] = useState({ rows: [], date: null, stale: false });
 
   useEffect(() => {
+    // Lightweight has no board rows, so there is no SPY row to carry it.
+    if (!enabled) return undefined;
     let dead = false;
 
     const captured = (d) => (d?.hours || [])
@@ -367,7 +372,7 @@ function useGexSeries() {
     // more often than that.
     const id = setInterval(pull, 10 * 60 * 1000);
     return () => { dead = true; clearInterval(id); };
-  }, []);
+  }, [enabled]);
 
   return state;
 }
@@ -780,8 +785,12 @@ const POS_FILTERS = [['active', 'active'], ['', 'all'], ['tp_filled', 'tp wins']
  * own state and calls the SAME endpoints
  * (/tradier/positions, /positions/sweep, /positions/{id}/close), which keeps
  * the two views showing the same rows and the same actions.
+ *
+ * `lite` is the Lightweight board's form: open positions only and no filter
+ * chips. It keeps the same timer; `reloadKey` asks again at once on top of it
+ * (the board's refresh, or an order placed from it).
  */
-function PositionsPanel({ user, live, onError, onOk, blocked }) {
+function PositionsPanel({ user, live, onError, onOk, blocked, lite = false, reloadKey = 0 }) {
   const [page, setPage] = useState(null);
   const [status, setStatus] = useState('active');
   const [busy, setBusy] = useState(null);
@@ -809,7 +818,7 @@ function PositionsPanel({ user, live, onError, onOk, blocked }) {
       if (!dead && !blockedRef.current) load();
     }, 20000);
     return () => { dead = true; clearInterval(id); };
-  }, [load]);
+  }, [load, reloadKey]);
 
   const act = async (fn, key) => {
     setBusy(key);
@@ -822,20 +831,28 @@ function PositionsPanel({ user, live, onError, onOk, blocked }) {
   return (
     <div className="d36-pos">
       <div className="d36-posbar">
-        <span className="d36-poschips">
-          {POS_FILTERS.map(([v, label]) => (
-            <button key={label} type="button"
-              className={`d36-poschip ${status === v ? 'on' : ''}`}
-              onClick={() => setStatus(v)}>{label}</button>
-          ))}
-        </span>
+        {!lite && (
+          <span className="d36-poschips">
+            {POS_FILTERS.map(([v, label]) => (
+              <button key={label} type="button"
+                className={`d36-poschip ${status === v ? 'on' : ''}`}
+                onClick={() => setStatus(v)}>{label}</button>
+            ))}
+          </span>
+        )}
         <button type="button" className="d36-posrefresh" disabled={busy === 'sweep'}
           onClick={() => act(() => vidura.tradierSweep(user.user_id), 'sweep')}>
           {busy === 'sweep' ? '…' : '↻ sweep'}
         </button>
       </div>
 
-      {items.length === 0 ? <div className="d36-posempty" /> : items.map((p) => {
+      {/* Lightweight says what the empty space means: positions are one of
+          its five panels, and a blank box there reads as still loading. */}
+      {items.length === 0 ? (
+        <div className="d36-posempty">
+          {lite ? (page ? 'no open positions' : 'loading…') : null}
+        </div>
+      ) : items.map((p) => {
         const pl = p.live_pnl_usd ?? p.pnl_usd;
         return (
           <div className="d36-posrow" key={p.id}>
@@ -971,7 +988,16 @@ export default function Desk36Site() {
   const [manage, setManage] = useState(false);
   const [popup, setPopup] = useState(null);      // ticker levels / TV / buy
   const [bal, setBal] = useState(null);
-  const gexSeries = useGexSeries();
+  // Lightweight or Regular (shared/experience.js), fixed for the life of this
+  // board: switching remounts it. Lightweight's panels run on this board's own
+  // timers; on top of them, its refresh (liteKey) asks every panel again at
+  // once, and an order placed from it (orderKey) the positions and the
+  // balance, which are what an order changes.
+  const { lite } = useExperience();
+  const [liteKey, setLiteKey] = useState(0);
+  const [orderKey, setOrderKey] = useState(0);
+  const refreshLite = useCallback(() => setLiteKey((k) => k + 1), []);
+  const gexSeries = useGexSeries(!lite);
   const [logout, setLogout] = useState(false);
   const [venueAsk, setVenueAsk] = useState(false);
   // Both account ids, so the confirmation can name the one it is switching
@@ -1045,6 +1071,10 @@ export default function Desk36Site() {
     setBuy({ symbol: sym, side: String(raw).toLowerCase() === 'put' ? 'put' : 'call' });
   }, []);
   const closeBuy = useCallback(() => setBuy(null), []);
+  const orderPlaced = useCallback((msg) => {
+    setToast(msg);
+    setOrderKey((k) => k + 1);
+  }, []);
   const renameTicker = useCallback((sym, next) => {
     // Recharting a tile renames that ticker on the board too, so the two
     // halves never disagree. Functional form, so this closure does not have
@@ -1073,9 +1103,10 @@ export default function Desk36Site() {
     seedChartIntervals(tickers);
   }
 
-  // Prices: frequent and cheap.
+  // Prices: frequent and cheap. None of these three -- prices, readings, the
+  // board rows they feed -- is on the Lightweight board.
   useEffect(() => {
-    if (!user) return undefined;
+    if (!user || lite) return undefined;
     let dead = false;
     const pull = () => vidura.tradierQuotes(user.user_id, symbols)
       .then((r) => {
@@ -1089,11 +1120,11 @@ export default function Desk36Site() {
     pull();
     const id = setInterval(() => { if (!busyRef.current) pull(); }, QUOTE_MS);
     return () => { dead = true; clearInterval(id); };
-  }, [user, symbols, fail, ok]);
+  }, [user, symbols, fail, ok, lite]);
 
   // DMI: one timesales call per new symbol, so rarely.
   useEffect(() => {
-    if (!user) return undefined;
+    if (!user || lite) return undefined;
     let dead = false;
     const pull = () => api.get('/desk36/dmi', {
       params: { user_id: user.user_id, symbols, live }, timeout: 120000,
@@ -1106,7 +1137,7 @@ export default function Desk36Site() {
     pull();
     const id = setInterval(() => { if (!busyRef.current) pull(); }, DMI_MS);
     return () => { dead = true; clearInterval(id); };
-  }, [user, symbols, live]);
+  }, [user, symbols, live, lite]);
 
   // Balance follows the venue toggle, so the header always reports the
   // account a trade from this board would actually hit.
@@ -1119,7 +1150,8 @@ export default function Desk36Site() {
     pull();
     const id = setInterval(() => { if (!busyRef.current) pull(); }, 30000);
     return () => { dead = true; clearInterval(id); };
-  }, [user, live]);
+    // the keys: Lightweight's refresh, and an order placed from it
+  }, [user, live, liteKey, orderKey]);
 
   useEffect(() => {
     if (!user) return;
@@ -1138,7 +1170,7 @@ export default function Desk36Site() {
     pull();
     const id = setInterval(() => { if (!busyRef.current) pull(); }, 30000);
     return () => { dead = true; clearInterval(id); };
-  }, [user]);
+  }, [user, liteKey]);
   const autoOn = !!autoST?.active;
 
   // day_pl_net is the fee-adjusted figure the desk added; fall back to the
@@ -1288,18 +1320,22 @@ export default function Desk36Site() {
 
             A broadcast mark, NOT the robot: 🤖 is already the auto-trader
             two buttons along, and two robots in one 393px header meaning
-            different things is worse than no icon at all. */}
-        <Link to="/bot-station" className="d36-mark d36-bots"
-          title="Bot Station" aria-label="open the Bot Station">
-          <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"
-            fill="none" stroke="currentColor" strokeWidth="1.9"
-            strokeLinecap="round">
-            <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
-            <path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6" />
-            <path d="M5.4 5.4a9.4 9.4 0 0 0 0 13.2M18.6 5.4a9.4 9.4 0 0 1 0 13.2"
-              opacity="0.55" />
-          </svg>
-        </Link>
+            different things is worse than no icon at all.
+
+            Not in Lightweight, which Bot Station has no form of. */}
+        {!lite && (
+          <Link to="/bot-station" className="d36-mark d36-bots"
+            title="Bot Station" aria-label="open the Bot Station">
+            <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"
+              fill="none" stroke="currentColor" strokeWidth="1.9"
+              strokeLinecap="round">
+              <circle cx="12" cy="12" r="2.2" fill="currentColor" stroke="none" />
+              <path d="M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6" />
+              <path d="M5.4 5.4a9.4 9.4 0 0 0 0 13.2M18.6 5.4a9.4 9.4 0 0 1 0 13.2"
+                opacity="0.55" />
+            </svg>
+          </Link>
+        )}
         <h1 className="d36-title">
           36 Trade Desk
         </h1>
@@ -1379,9 +1415,12 @@ export default function Desk36Site() {
               <path d="M12.5 12 H21 M18 8.6 L21.4 12 L18 15.4" />
             </svg>
           </button>
-          <button type="button" className={`d36-iconbtn ${manage ? 'on' : ''}`}
-            onClick={() => setManage((v) => !v)} aria-label="edit tickers"
-            title="add or remove tickers">✎</button>
+          {/* the watchlist it edits is not on the Lightweight board */}
+          {!lite && (
+            <button type="button" className={`d36-iconbtn ${manage ? 'on' : ''}`}
+              onClick={() => setManage((v) => !v)} aria-label="edit tickers"
+              title="add or remove tickers">✎</button>
+          )}
         </div>
         {/* Buying power and today's P&L, on their own line inside the sticky
             header. Two numbers only — they are what you check before every
@@ -1408,9 +1447,28 @@ export default function Desk36Site() {
             </b>
           </span>
 
+          {/* Lightweight keeps itself current like the full board; this asks
+              every panel again right now, without waiting for its timer. */}
+          {lite && (
+            <span className="d36-literow">
+              <button type="button" className="d36-literefresh" onClick={refreshLite}
+                aria-label="refresh the board"
+                title="The board keeps itself current. This reloads the balance, the positions, the chart, the signals, the best pair and the auto-trader's state right now.">
+                ↻ refresh
+              </button>
+              <span className="d36-litelive" title="each panel refreshes on its own timer, as on the full board">
+                <span className="d36-livedot" aria-hidden="true" />auto-refresh
+              </span>
+            </span>
+          )}
+
+          <ExperienceSwitch />
+
           {/* Section tabs. Multi-select, and none selected means all — a
               filter that can be emptied into "show nothing" is a way to
-              make the board look broken. */}
+              make the board look broken. Lightweight has four sections and
+              no tabs. */}
+          {!lite && (
           <span className="d36-tabs">
             {SECTIONS.map(([id, label]) => (
               <button key={id} type="button"
@@ -1424,6 +1482,7 @@ export default function Desk36Site() {
               </button>
             ))}
           </span>
+          )}
         </div>
       </header>
 
@@ -1456,9 +1515,60 @@ export default function Desk36Site() {
       )}
       {toast && <div className="d36-toast">{toast}</div>}
 
-      {/* Order and visibility both come from SECTIONS, so the tabs, the
-          running order and what is rendered can never disagree. */}
-      {SECTIONS.map(([id]) => {
+      {/* Lightweight: the header's buy / auto / venue controls, then the one
+          chart (SPY until another ticker is picked), the open positions, the
+          best pair and the super signals -- the board's five panels, each
+          refreshing on its own timer.
+
+          Otherwise: order and visibility both come from SECTIONS, so the
+          tabs, the running order and what is rendered can never disagree. */}
+      {lite ? (
+        <>
+          <AutoStatus st={autoST} className="d36-autoline" />
+
+          <div className="d36-secthd">
+            <span className="d36-sectlabel">chart</span>
+            <span className="d36-charthint">tap the ticker to change it</span>
+          </div>
+          {user && (
+            <div className="d36-litechart">
+              <div className="d36-chartcell">
+                <LiteChart user={user} live={live} reloadKey={liteKey} blocked={busy}
+                  onError={onPanelErr} onBuy={buySym} />
+              </div>
+            </div>
+          )}
+
+          <div className="d36-secthd">
+            <span className="d36-sectlabel">positions</span>
+            <span className="d36-charthint">
+              {live ? 'live venue' : 'sandbox venue'} · open only
+            </span>
+          </div>
+          {user && (
+            <PositionsPanel user={user} live={live} lite reloadKey={liteKey + orderKey}
+              blocked={busy} onError={onPanelErr} onOk={onPanelOk} />
+          )}
+
+          <div className="d36-secthd">
+            <span className="d36-sectlabel">best pair</span>
+            <span className="d36-charthint">top of the daily report · 30 sessions</span>
+          </div>
+          <div className="d36-hot d36-signals">
+            <BestPair touch accent="#86efac" reloadKey={liteKey} paused={busy}
+              onPick={pickSym} onTrade={buySym} />
+          </div>
+
+          <div className="d36-secthd">
+            <span className="d36-sectlabel">super signals</span>
+            <span className="d36-charthint">today · 8 agents</span>
+          </div>
+          <div className="d36-hot d36-signals">
+            <Signals touch lite reloadKey={liteKey} accent="#86efac" paused={busy}
+              onPick={pickSym} onTrade={buySym} />
+          </div>
+        </>
+      ) : SECTIONS.map(([id]) => {
         if (!shows(id)) return null;
 
         if (id === 'main') return (
@@ -1676,7 +1786,7 @@ export default function Desk36Site() {
 
       {buy && user && (
         <BuySheet user={user} symbol={buy.symbol} side={buy.side} live={live}
-          onClose={closeBuy} onDone={setToast} />
+          onClose={closeBuy} onDone={lite ? orderPlaced : setToast} />
       )}
 
       {/* Venue switch, confirmed. The mark blinks between the two venues'

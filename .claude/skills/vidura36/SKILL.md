@@ -86,14 +86,22 @@ the machine.
 ### Full sequence (PowerShell)
 
 ```powershell
-# Step 1: Build frontend
-Set-Location D:\_projects\vidura-36-app\frontend
-npx vite build
+# Step 1: Build the frontend and deploy it to the edge. vidura36.app serves
+# the web app from a Cloudflare Worker (edge/, see TUNNEL.md), so a build
+# alone updates only this machine -- without this step the site keeps
+# serving the previous build. `npm run deploy` builds first, then deploys.
+Set-Location D:\_projects\vidura-36-app\edge
+npm run deploy
 
 # Step 2: Clean restart with named tunnel
 Set-Location D:\_projects\vidura-36-app
 python tools\appctl.py restart --tunnel
 ```
+
+A change confined to `frontend/` or `edge/` does not need Step 2: the API
+reads `frontend/dist-v2` from disk on every request, and a restart only signs
+everyone out and pauses the stop-loss monitor for its duration. Restart
+whenever anything under `backend/` changed.
 
 ### Verifying the restart
 
@@ -147,8 +155,8 @@ git push
 
 1. Make changes in both worlds (sync)
 2. Check 36 Trades mobile CSS rules (Safari compat)
-3. `npx vite build` in `frontend/`
-4. `python tools\appctl.py restart --tunnel` from project root
+3. `npm run deploy` in `edge/` (builds the frontend, then deploys it to the edge)
+4. `python tools\appctl.py restart --tunnel` from project root (backend changes only)
 5. Verify "named tunnel" in output
 6. Report [https://vidura36.app](https://vidura36.app)
 7. `git status` → stage → commit → push

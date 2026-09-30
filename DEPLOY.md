@@ -17,8 +17,9 @@ something does not come up.
 | Node.js | 18 or newer | no — only to rebuild the UI |
 | Internet | outbound HTTPS | yes, for Tradier, Kalshi and market data |
 
-Node is optional because the desk ships **pre-built** in `frontend/dist`,
-and the API serves it. You only need Node if you intend to change the UI.
+Node is optional when the folder is copied with its **pre-built** desk in
+`frontend/dist-v2`, which the API serves. With Node present, `start` builds
+the desk itself whenever its source is newer than the build.
 
 On Windows, install Python from python.org and tick **"Add python.exe to
 PATH"**. Verify before you start:
@@ -73,19 +74,23 @@ rsync -a --exclude .venv --exclude node_modules --exclude __pycache__ --exclude 
 
 ## Step 2 — Run setup
 
-From inside the copied folder:
+From inside the copied folder, with the system Python (this is the step that
+creates the virtualenv):
 
 ```bash
-setup.bat
+python tools\setup.py
 ```
 
-On Linux/macOS: `./setup.sh`
+On Linux/macOS: `python3 tools/setup.py`
 
 This creates `.venv`, installs the Python dependencies, creates `.env` from
 `.env.example` if you did not bring one, rebuilds the desk if Node is
-present, and finishes by running the self-containment audit.
+present, and finishes by running the self-containment audit. It starts
+nothing.
 
-It is safe to re-run at any time.
+It is safe to re-run at any time. `start.bat` would do all of this on its
+first run as well -- but it would then START the desk, and on a new PC the
+next two steps come before that.
 
 ---
 
@@ -94,7 +99,7 @@ It is safe to re-run at any time.
 Setup runs this for you; run it again whenever you want:
 
 ```bash
-doctor.bat
+.venv\Scripts\python tools\doctor.py
 ```
 
 It verifies six things, in the order a new machine tends to fail them:
@@ -106,8 +111,8 @@ It verifies six things, in the order a new machine tends to fail them:
   no user reads credentials from outside this copy
 - **BOTS** — every Bot Station script resolves inside this copy, and each
   operator has the Kalshi key id + `*.pem` the bots authenticate with
-- **LAUNCHERS** — the `.bat`/`.sh` pairs exist, with the line endings each OS
-  needs (LF for `.sh`, CRLF for `.bat`)
+- **LAUNCHERS** — `start` and `stop` exist for both OSes, with the line
+  endings each needs (LF for `.sh`, CRLF for `.bat`)
 - **DESK** — a built UI exists for the API to serve
 
 Its stricter companion resolves every bot's actual launch plan — working
@@ -156,7 +161,7 @@ TBOT_PAPER_ONLY=false
 The audit and `start` both announce which mode you are in:
 
 ```
-API      pid 11564  http://127.0.0.1:8790   [LIVE TRADING]
+API      pid 11564  http://127.0.0.1:8791   [LIVE TRADING]
 ```
 
 If you copied `.env` from a machine that had live unlocked, **the new PC is
@@ -171,12 +176,24 @@ start.bat
 ```
 
 ```
-API      pid 11564  http://127.0.0.1:8790   [paper only]
-Desk     http://127.0.0.1:8790/   (served by the API)
-Docs     http://127.0.0.1:8790/docs
+API      pid 11564  http://127.0.0.1:8791   [paper only]
+Desk     http://127.0.0.1:8791/   (served by the API)
+Tunnel   pid 11620  https://vidura36.app  (named tunnel 'tradier-bot')
+Docs     http://127.0.0.1:8791/docs
+
+Vidura is up.
+  anywhere      https://vidura36.app
+  this machine  http://127.0.0.1:8791/
+  stop it       stop.bat
 ```
 
-Open <http://127.0.0.1:8790/>. The desk and the API are the same port and
+Before the API, `start` installs any dependency `requirements.txt` or
+`package-lock.json` added and rebuilds the desk if its source is newer than
+the build; each step is skipped when there is nothing to do. The tunnel line
+only appears on a machine with the tunnel's credential (TUNNEL.md); elsewhere,
+use `start.bat --no-tunnel`.
+
+Open <http://127.0.0.1:8791/>. The desk and the API are the same port and
 the same process — the page fetches `/api/v1` on its own origin, so there is
 nothing to configure.
 
@@ -190,15 +207,17 @@ before you type. Read it.
 
 | command | what it does |
 | --- | --- |
-| `start.bat` | start detached; survives closing the terminal |
+| `start.bat` | everything above, detached; survives closing the terminal |
+| `start.bat --restart` | stop, then start |
+| `start.bat --no-tunnel` | start on this machine only |
 | `start.bat --dev` | also run the Vite dev server on 5199 (hot reload, for UI work) |
-| `stop.bat` | stop it |
-| `restart.bat` | stop, then start |
-| `status.bat` | what is running, which database, paper or live |
-| `doctor.bat` | the audit |
+| `stop.bat` | stop the tunnel, the dev server and the API; bots keep running |
+| `.venv\Scripts\python tools\appctl.py status` | what is running, which database, paper or live |
+| `.venv\Scripts\python tools\doctor.py` | the audit |
 
-`.sh` equivalents exist for Linux/macOS (`./start.sh`, …). Both are two-line
-wrappers around `tools/appctl.py`, so behaviour is identical on either OS.
+`start` and `stop` are the only launchers in the root; `./start.sh` and
+`./stop.sh` are the Linux/macOS pair. Both are thin wrappers around
+`tools/appctl.py`, so behaviour is identical on either OS.
 
 To run in the foreground with logs in the terminal:
 
@@ -213,26 +232,26 @@ To run in the foreground with logs in the terminal:
 Health, and which database it opened:
 
 ```bash
-curl http://127.0.0.1:8790/health
+curl http://127.0.0.1:8791/health
 ```
 
 Every other endpoint needs a session, so sign in first and keep the token:
 
 ```bash
-curl -s -X POST http://127.0.0.1:8790/api/v1/auth/login -H "Content-Type: application/json" -d "{\"username\":\"sampath\",\"password\":\"YOUR_PASSWORD\"}"
+curl -s -X POST http://127.0.0.1:8791/api/v1/auth/login -H "Content-Type: application/json" -d "{\"username\":\"sampath\",\"password\":\"YOUR_PASSWORD\"}"
 ```
 
 Then, with the `token` from that response, check the users came across:
 
 ```bash
-curl -H "X-API-Key: PASTE_TOKEN" http://127.0.0.1:8790/api/v1/users
+curl -H "X-API-Key: PASTE_TOKEN" http://127.0.0.1:8791/api/v1/users
 ```
 
 And with a `user_id` from that list, the real proof — a live call to Tradier
 using the shipped broker credentials:
 
 ```bash
-curl -H "X-API-Key: PASTE_TOKEN" "http://127.0.0.1:8790/api/v1/tradier/venue?user_id=PASTE_USER_ID"
+curl -H "X-API-Key: PASTE_TOKEN" "http://127.0.0.1:8791/api/v1/tradier/venue?user_id=PASTE_USER_ID"
 ```
 
 A response naming your sandbox and/or live account ids means the deployment
@@ -261,30 +280,33 @@ expire.
 
 | port | what |
 | --- | --- |
-| 8790 | API **and** desk |
+| 8791 | API **and** desk |
 | 5199 | Vite dev server, only with `start --dev` |
+| 8792 | the Super Signals desk's own service (a separate project) |
 
 Change the API port for one run — `cmd`:
 
 ```bash
-set TBOT_PORT=8791
+set TBOT_PORT=8793
 ```
 
 or PowerShell (note: PowerShell 5.1 has no `&&`, so run the two lines
 separately):
 
 ```bash
-$env:TBOT_PORT='8791'
+$env:TBOT_PORT='8793'
 ```
 
-then `start.bat`. Permanently, put `TBOT_PORT=8791` in `.env`.
+then `start.bat`. Permanently, put `TBOT_PORT=8793` in `.env`. The tunnel
+points at 8791 (`runtime/tunnel/config.yml`), so a desk moved off it is
+local-only until that file follows.
 
 `start` refuses to launch if the port is already taken rather than starting
 a server that fails to bind but keeps running every background loop.
 
 ### Reaching it from another machine
 
-The API binds `0.0.0.0`, so `http://<this-pc-ip>:8790/` works across the LAN
+The API binds `0.0.0.0`, so `http://<this-pc-ip>:8791/` works across the LAN
 once the firewall allows it. The login gate already covers this: every
 `/api` call needs a session, so a browser on the LAN gets the sign-in screen
 rather than a working desk.
@@ -298,37 +320,23 @@ put it behind a reverse proxy with TLS.
 
 ## Running it automatically
 
-**Windows — start at logon.** Task Scheduler → Create Task:
-
-- General → *Run whether user is logged on or not* is **not** needed; the
-  desk is a UI, so "run only when logged on" is usually right
-- Triggers → *At log on*
-- Actions → Start a program → Program: `D:\tradier-bot\start.bat`,
-  Start in: `D:\tradier-bot`
-
-`start.bat` is idempotent — if it is already running, it says so and exits 0.
-
-**Linux — systemd.** `/etc/systemd/system/tradier-bot.service`:
-
-```ini
-[Unit]
-Description=Tradier Bot
-After=network-online.target
-
-[Service]
-Type=exec
-WorkingDirectory=/opt/tradier-bot
-Environment=PYTHONPATH=/opt/tradier-bot/backend
-ExecStart=/opt/tradier-bot/.venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8790
-Restart=on-failure
-User=tradier
-
-[Install]
-WantedBy=multi-user.target
+```bash
+python tools\autostart.py install
 ```
 
-Use `ExecStart` directly rather than `start.sh`: systemd wants to own the
-process, and `start.sh` detaches.
+**Windows:** registers a Scheduled Task (`TradierBotDesk`) that runs
+`start.bat` at logon, unelevated. `start` is idempotent — if the desk is
+already up it says so and exits 0 — and a task never waits on a keypress the
+way a double-clicked window does. `install --no-tunnel` starts it at logon
+without publishing it; `remove` and `status` do what they say.
+
+**Linux/macOS:** the same command prints a systemd user unit (a oneshot that
+runs `start.sh`, with `stop.sh` as its stop) to install yourself, rather than
+writing into a system directory behind your back. Add
+`loginctl enable-linger $USER` if it should run without you logged in.
+
+Either way it runs the same `start` as a person does: dependencies, the web
+app, the API, then the tunnel.
 
 ---
 
@@ -389,9 +397,9 @@ roots wherever you like.
 **`python` is not recognised** — Python is not on PATH. Re-run the installer
 and tick "Add python.exe to PATH", or call it by full path.
 
-**`start` says the port is in use** — something else owns 8790. `status`
+**`start` says the port is in use** — something else owns 8791. `status`
 distinguishes the two cases ("stopped (port is in use by something else)").
-Use `TBOT_PORT=8791`, or stop the other app.
+Use `TBOT_PORT=8793`, or stop the other app.
 
 **The API does not come up within 45s** — read `var/api.out`. The most
 common cause on a fresh machine is a dependency that failed to install; re-run
@@ -404,7 +412,7 @@ the page was served by something other than the API — clear the saved base
 with `?api=off`.
 
 **Signed out for no apparent reason** — sessions are in memory, so any
-restart of the API ends them. Expected after `restart.bat`, a reboot, or a
+restart of the API ends them. Expected after `start.bat --restart`, a reboot, or a
 crash. Just sign in again.
 
 **"Incorrect username or password" with the right password** — the operator
@@ -466,7 +474,7 @@ Run these on the new PC, in order. The audit must exit clean, `start` must
 report a pid, and health must answer:
 
 ```bash
-doctor.bat
+.venv\Scripts\python tools\doctor.py
 ```
 
 ```bash
@@ -474,7 +482,7 @@ start.bat
 ```
 
 ```bash
-curl http://127.0.0.1:8790/health
+curl http://127.0.0.1:8791/health
 ```
 
 Then prove the launch plans, which `doctor` only checks loosely:

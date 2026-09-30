@@ -17,8 +17,11 @@ tunnel, so the address does not change between restarts -- unlike the random
 ## Starting it
 
 ```bash
-start.bat --tunnel
+start.bat
 ```
+
+`start` opens the tunnel after the API, every time; `start.bat --no-tunnel`
+is the deliberate way to keep the desk local.
 
 The tunnel config lives in the project, not in your home directory:
 
@@ -46,6 +49,52 @@ cloudflared tunnel --config runtime/tunnel/config.yml run tradier-bot
 
 `stop.bat` takes the tunnel down first, then the desk, so the link is never
 live pointing at a server that is shutting down.
+
+---
+
+## The web app is served from Cloudflare's edge
+
+A Cloudflare Worker, `vidura36-edge` (the `edge/` folder), sits in front of
+the tunnel on both hostnames. It carries a copy of the built desk and serves
+the web app's own paths from Cloudflare's edge: `/`, the four worlds,
+`/assets`, `/img`, `/guides` and the logo. They load fast on a phone, and they
+load even while this machine is asleep, so the sign-in card can say the desk
+is offline instead of Cloudflare's tunnel error page.
+
+**The API does not go through it.** Every `/api` path, and every path not on
+the Worker's route list, reaches the tunnel exactly as before. That is
+deliberate: a free Worker stops answering once it has used its 100,000
+requests for the day, and the desk polls its API constantly. Static assets
+are free and unmetered, so the edge costs the desk nothing and cannot cap it.
+The one API path the Worker takes is sign-in, which it rate-limits (ten
+attempts a minute per address) before the desk's own lock is ever reached.
+
+Deploy it after any frontend change. It builds the desk first, so the edge
+and this machine always serve the same build:
+
+```bash
+npm --prefix edge run deploy
+```
+
+A change confined to `frontend/` does not need the API restarted: the API
+reads `frontend/dist-v2` from disk on every request.
+
+Undo, if it ever misbehaves. Both leave the tunnel and its DNS untouched:
+
+```bash
+cd edge && npx wrangler rollback --env=
+```
+
+```bash
+cd edge && npx wrangler delete --env=
+```
+
+`rollback` returns to the previous deploy. `delete` removes the Worker and
+its routes, which puts vidura36.app back on the tunnel alone.
+
+The first deploy from a machine needs `npx wrangler login` in `edge/`, which
+opens a browser to authorise Wrangler on the Cloudflare account that owns
+vidura36.app. The login is kept in the user profile, never in this folder.
 
 ---
 
@@ -108,7 +157,7 @@ ingress:
   - service: http_status:404
 ```
 
-`start.bat --tunnel` picks that up automatically — it looks for a named
+`start.bat` picks that up automatically — it looks for a named
 tunnel before falling back to a quick one — and `desk.yourdomain.com` stays
 yours. Override the name with `TBOT_TUNNEL_NAME` if you keep several.
 
@@ -141,9 +190,9 @@ back after a reboot at an address you cannot predict.
 python tools\autostart.py install
 ```
 
-Registers a Scheduled Task (`TradierBotDesk`) that runs `start.bat --tunnel`
-at logon, unelevated. `start` is idempotent, so it is harmless if the desk is
-already up.
+Registers a Scheduled Task (`TradierBotDesk`) that runs `start.bat` at logon,
+unelevated. `start` is idempotent, so it is harmless if the desk is already
+up, and a task never waits on a keypress the way a double-clicked window does.
 
 ```bash
 python tools\autostart.py status
@@ -179,5 +228,6 @@ desk while away, set the machine never to sleep.
 **Sessions end at restart.** They are in-memory, so a reboot signs you out
 everywhere — including whatever phone you left logged in.
 
-**Diagnosing.** `var/tunnel.out` is cloudflared's own log. `status.bat` says
-whether the process is alive and what URL it published.
+**Diagnosing.** `var/tunnel.out` is cloudflared's own log.
+`.venv\Scripts\python tools\appctl.py status` says whether the process is
+alive and what URL it published.

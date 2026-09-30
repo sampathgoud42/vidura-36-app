@@ -10,5 +10,5 @@
 # bot and the desk see the same positions and never trade the same signal.
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)" || exit 1
 cd "$ROOT" || exit 1
-[ -x .venv/bin/python ] || { echo "No .venv here yet - run ./setup.sh first."; exit 1; }
+[ -x .venv/bin/python ] || { echo "No .venv here yet - run ./start.sh once first; it sets this copy up."; exit 1; }
 PYTHONPATH="$ROOT/backend${PYTHONPATH:+:$PYTHONPATH}" exec .venv/bin/python -m bot_best_pair "$@"

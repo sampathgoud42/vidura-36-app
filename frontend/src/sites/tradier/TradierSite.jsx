@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom';
 import { ApiError, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
 import SiteFooter from '../../shared/SiteFooter.jsx';
-import SuperSignals from '../../shared/SuperSignals.jsx';
+import SuperSignals, { BestPair } from '../../shared/SuperSignals.jsx';
 import BestBetsLink from '../../shared/BestBets.jsx';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
+import { useExperience } from '../../shared/experience.js';
 import '../../shared/worldHeader.css';
 import './tradier.css';
 
@@ -226,8 +227,12 @@ function saveChartInterval(symbol, v) {
    the server hands back is market-data-only and cannot touch the account.
 
    Tradier gives the session five minutes to CONNECT, so a dropped socket has
-   to fetch a fresh one rather than reuse the old id. */
-function useIndexStream(user, live, extras = []) {
+   to fetch a fresh one rather than reuse the old id.
+
+   withStrip=false is a socket for charts alone -- the Lightweight board's one
+   chart, which has no strip: only `extras` are subscribed, and the strip's
+   seed quotes and its timed BTC quote are left out. */
+function useIndexStream(user, live, extras = [], withStrip = true) {
   const [ticks, setTicks] = useState([]);
   // whatever the charts are showing rides the same socket — a symbol the
   // strip does not carry would otherwise never tick
@@ -268,11 +273,11 @@ function useIndexStream(user, live, extras = []) {
     }
     if (!aliveRef.current) return;
     sessRef.current = sess;
-    polledRef.current = sess.polled || [];
+    polledRef.current = withStrip ? (sess.polled || []) : [];
 
     // seed so the strip reads immediately, and outside market hours when no
     // tick will ever arrive
-    (sess.seed || []).forEach((s) => {
+    (withStrip ? (sess.seed || []) : []).forEach((s) => {
       const prev = bySymbol.current[s.symbol] || {};
       bySymbol.current[s.symbol] = {
         ...prev, label: s.label, symbol: s.symbol,
@@ -298,8 +303,8 @@ function useIndexStream(user, live, extras = []) {
       triesRef.current = 0;
       setState('live');
       ws.send(JSON.stringify({
-        symbols: [...new Set([...(sess.symbols || []).map((s) => s.symbol),
-          ...extrasRef.current])],
+        symbols: [...new Set([...(withStrip ? (sess.symbols || []) : [])
+          .map((s) => s.symbol), ...extrasRef.current])],
         sessionid: sess.sessionid,
         filter: ['quote', 'trade', 'summary'],
         linebreak: true,
@@ -362,14 +367,20 @@ function useIndexStream(user, live, extras = []) {
     };
     ws.onclose = retry;
     ws.onerror = () => { try { ws.close(); } catch { /* onclose retries */ } };
-  }, [user, live, paint]);
+  }, [user, live, paint, withStrip]);
 
   // a live socket can be re-pointed by resending the payload
   useEffect(() => {
+    // A ticker taken off a chart drops its last price with it: brought back
+    // while the market is shut, it would otherwise paint that old tick over
+    // the bar in progress as if it were current.
+    Object.keys(bySymbol.current).forEach((sym) => {
+      if (bySymbol.current[sym].extra && !extras.includes(sym)) delete bySymbol.current[sym];
+    });
     const ws = sockRef.current;
     if (!ws || ws.readyState !== 1 || !sessRef.current) return;
     ws.send(JSON.stringify({
-      symbols: [...new Set([...(sessRef.current.symbols || [])
+      symbols: [...new Set([...(withStrip ? (sessRef.current.symbols || []) : [])
         .map((s) => s.symbol), ...extras])],
       sessionid: sessRef.current.sessionid,
       filter: ['quote', 'trade', 'summary'],
@@ -403,9 +414,10 @@ function useIndexStream(user, live, extras = []) {
   // The entries the socket cannot carry. BTC is not a Tradier instrument, so
   // no subscription will ever tick it — it is refreshed on its own timer from
   // the keyless quotes service. A minute is right for a strip: fast enough
-  // that the number is current, slow enough that it is one request.
+  // that the number is current, slow enough that it is one request. No strip,
+  // no timer.
   useEffect(() => {
-    if (!user || !live) return undefined;
+    if (!user || !live || !withStrip) return undefined;
     let alive = true;
     const pull = async () => {
       for (const sym of polledRef.current) {
@@ -426,7 +438,7 @@ function useIndexStream(user, live, extras = []) {
     pull();
     const t = setInterval(() => { if (!document.hidden) pull(); }, 60_000);
     return () => { alive = false; clearInterval(t); };
-  }, [user, live, state, paint]);
+  }, [user, live, state, paint, withStrip]);
 
   const dotTitle = {
     live: 'streaming from Tradier (production market data)',
@@ -617,8 +629,11 @@ function regularSession(bars) {
 // Exported so other boards can render the same chart rather than growing a
 // second one that drifts: the pivot lines, the ADX/DI markers and the
 // interval memory all live here.
+//
+// `reloadKey` is a board-wide refresh (the Lightweight board's ↻): each move
+// reloads the bars at once, on top of the chart's own timer.
 export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy, blocked,
-  height = 210 }) {
+  height = 210, reloadKey = 0 }) {
   const [interval, setInterval_] = useState(() => loadChartInterval(symbol));
   const pickInterval = (v) => { setInterval_(v); saveChartInterval(symbol, v); };
   const [pivots, setPivots] = useState(null);
@@ -691,6 +706,15 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
     return () => clearTimeout(retryRef.current);
   }, [load]);
 
+  // A refresh redraws over the bars already on screen rather than blanking
+  // the tile first, so it is keyed apart from the load above.
+  const reloadRef = useRef(reloadKey);
+  useEffect(() => {
+    if (reloadRef.current === reloadKey) return;
+    reloadRef.current = reloadKey;
+    load();
+  }, [reloadKey, load]);
+
   useEffect(() => {
     if (!expanded) return undefined;
     const onKey = (e) => { if (e.key === 'Escape') setExpanded(false); };
@@ -752,7 +776,8 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
     if (!cv) return;
     const dpr = window.devicePixelRatio || 1;
     const w = box.w || cv.clientWidth || 320;
-    const h = box.h || cv.clientHeight || height;
+    // `height` may be a CSS length (LiteChart's), which is no fallback here
+    const h = box.h || cv.clientHeight || (typeof height === 'number' ? height : 0);
     cv.width = Math.round(w * dpr);
     cv.height = Math.round(h * dpr);
     const ctx = cv.getContext('2d');
@@ -3157,12 +3182,195 @@ export function OptionsFlow({ user, live, onPick, onError, onBuy, buying, blocke
   );
 }
 
+/* ── the Lightweight board ─────────────────────────────────────────────────
+   Five panels and nothing else (shared/experience.js): the execution controls
+   in the header, one large chart (SPY until another ticker is picked), the
+   open positions, the super signals and the best pair. Each keeps itself
+   current on the full desk's own timers; what makes the board light is
+   everything it leaves out. The pieces below are exported where 36 Trades'
+   Lightweight board renders the same thing. */
+
+// About half the window, within limits: the board's centrepiece rather than
+// one tile of nineteen, yet short enough on a laptop that the positions still
+// show beneath it. CSS rather than a measurement, because iOS Safari resizes
+// the window every time its toolbar slides, and vh stays put through that.
+const TALL_CHART = 'min(520px, max(280px, 50vh))';
+
+// The one chart's ticker: SPY until the operator picks another -- by clicking
+// the ticker in the chart's header, as on any desk tile -- then remembered per
+// browser. One key for both worlds' Lightweight boards: it is the same one
+// chart whichever world is showing it.
+const LITE_SYM_KEY = 'vidura.lite.chart.symbol';
+
+function loadLiteSymbol() {
+  try {
+    const v = localStorage.getItem(LITE_SYM_KEY);
+    if (v && /^[A-Z0-9.\-]{1,10}$/.test(v)) return v;
+  } catch { /* private mode: SPY every load */ }
+  return 'SPY';
+}
+
+// Two ways to hold its timer back: `blocked` outright (36 Trades, while a
+// sheet is open over the board), or `isBlocked`, the desk's error-tray check
+// -- the chart reports its failures under "<ticker> bars", so the key asked
+// about follows the ticker.
+export function LiteChart({ isBlocked, blocked, ...props }) {
+  const [symbol, setSymbol] = useState(loadLiteSymbol);
+  // MiniChart has already checked the ticker's shape before calling this.
+  const change = useCallback((next) => {
+    setSymbol(next);
+    try { localStorage.setItem(LITE_SYM_KEY, next); } catch { /* nothing to do */ }
+  }, []);
+  // Live the way the desk's tiles are: bars on the chart's own timer, and the
+  // price of the bar in progress pushed tick by tick over Tradier's stream
+  // (on the live venue -- the only one that streams). A socket of its own,
+  // carrying this chart's ticker and nothing else.
+  const extras = useMemo(() => [symbol], [symbol]);
+  const stream = useIndexStream(props.user, props.live, extras, false);
+  return (
+    <MiniChart {...props} symbol={symbol} onSymbol={change} stream={stream}
+      blocked={!!blocked || !!isBlocked?.(`${symbol} bars`)} height={TALL_CHART} />
+  );
+}
+
+// What the auto-trader is doing, in words: the AUTO button's colour says it
+// is armed, and this says what for -- strategy, scope, window, entries so far
+// -- rather than leaving that to a tooltip on a board this pared down.
+export function AutoStatus({ st, className = '' }) {
+  if (st?.active) {
+    const what = STRATEGY_LABELS[st.strategy] || String(st.strategy || '').replace(/_/g, ' ');
+    const pairs = (st.pairs || []).length;
+    const scope = st.strategy === 'best_pairs'
+      ? `${pairs} pair${pairs === 1 ? '' : 's'}` : st.tickers;
+    return (
+      <p className={`tr-autoline on ${className}`}>
+        <span className="dot" aria-hidden="true" />
+        auto-trader armed on {st.live ? 'LIVE' : 'SANDBOX'} · {what}
+        {scope ? ` · ${scope}` : ''}
+        {st.window ? ` · ${st.window} CST` : ''}
+        {st.placed ? ` · ${st.placed} placed` : ''}
+      </p>
+    );
+  }
+  if (st?.signal_desk_owner) {
+    return <p className={`tr-autoline ${className}`}>{deskOwnerNote(st.signal_desk_owner)}</p>;
+  }
+  return null;
+}
+
+/* The desk's positions table, cut to what an OPEN position needs: the
+   contract and its venue, size, entry, where it stands now, its exits, and
+   the way out. The board only ever asks for active positions, so there are no
+   filters and no history here; strategy, delta and the carry-over switch stay
+   on the full desk, though a position already carried over still says so.
+   The cells read exactly as the desk's do -- same fields, same rules. */
+function LitePositions({ items, loaded, targetBusy, onSweep, onClose, onTarget }) {
+  const provTitle = (p) => (p.exits_provisional
+    ? 'provisional — computed from the working limit; set on fill' : undefined);
+  return (
+    <div className="tr-panel">
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        <span className="tr-eyebrow" style={{ display: 'inline' }}>open positions</span>
+        {items.length > 0 && <span className="tr-note">{items.length}</span>}
+        <span className="ml-auto" />
+        <button type="button" className="tr-chip" onClick={onSweep}
+          title="run a monitor pass now, then reload the balance and these positions">
+          ↻ sweep now
+        </button>
+      </div>
+      <div className="tr-tablewrap">
+        <table className="tr-table">
+          <thead><tr>
+            <th>contract</th><th>venue</th><th>qty</th><th>entry</th><th>mark</th>
+            <th>p&amp;l</th><th>tp</th><th>sl</th><th>status</th><th></th>
+          </tr></thead>
+          <tbody>
+            {items.length === 0 && (
+              <tr><td colSpan={10} style={{ color: 'var(--tr-faint)' }}>
+                {loaded ? 'no open positions' : 'loading…'}
+              </td></tr>
+            )}
+            {items.map((p) => {
+              const realized = p.pnl_usd != null;
+              const pl = realized ? p.pnl_usd : p.live_pnl_usd;
+              return (
+                <tr key={p.id}>
+                  <td className="tr-mono" title={p.note || ''}>{p.occ_symbol}</td>
+                  <td>
+                    <span className={`tr-venue ${p.sandbox ? 'sbx' : 'live'}`}>
+                      {p.sandbox ? 'SANDBOX' : 'LIVE'}
+                    </span>
+                  </td>
+                  <td>{p.contracts}</td>
+                  <td title={p.entry_price == null && p.limit_price != null
+                    ? `buy working at ${p.limit_price.toFixed(2)} limit — not filled yet`
+                    : undefined}>
+                    {p.entry_price != null ? p.entry_price.toFixed(2)
+                      : p.limit_price != null
+                        ? <span className="tr-prov">@{p.limit_price.toFixed(2)}</span>
+                        : '—'}
+                  </td>
+                  <td className={p.exit_price == null && p.live_bid != null ? 'tr-livecell' : ''}>
+                    {p.exit_price != null ? p.exit_price.toFixed(2)
+                      : p.live_bid != null ? p.live_bid.toFixed(2) : '—'}
+                  </td>
+                  <td className={!realized && pl != null ? 'tr-livecell' : ''}
+                    title={realized ? 'realized' : 'unrealized, at the current bid'}
+                    style={{ color: pl > 0 ? 'var(--tr-green)' : pl < 0 ? 'var(--tr-red)' : undefined }}>
+                    {pl != null ? usd(pl) : '—'}
+                  </td>
+                  <td className={p.exits_provisional ? 'tr-prov' : ''} title={provTitle(p)}>
+                    {ACTIVE.has(p.status) ? (
+                      <TargetCell pos={p} busy={targetBusy === p.id}
+                        onSave={(px) => onTarget(p, px)} />
+                    ) : (p.tp_price != null ? p.tp_price.toFixed(2) : '—')}
+                  </td>
+                  <td className={p.exits_provisional ? 'tr-prov' : ''} title={provTitle(p)}>
+                    {p.sl_price != null ? p.sl_price.toFixed(2) : '—'}
+                  </td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <span className={`tr-tag ${p.status}`}>{p.status}</span>
+                    {p.carry_over && (
+                      <span className="tr-litecarry"
+                        title="carried over — no stop-loss and no end-of-day close; the take-profit still rests">
+                        🌙
+                      </span>
+                    )}
+                  </td>
+                  <td>
+                    {(p.status === 'open' || p.status === 'pending') && (
+                      <button type="button" className="tr-chip" onClick={() => onClose(p)}>✕ close</button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <p className="tr-note mt-3">
+        Marks and p&amp;l refresh on their own, as on the full desk. The take-profit rests on
+        the venue and the stop-loss is the API&apos;s own monitor, so both keep working with
+        this board closed.
+      </p>
+    </div>
+  );
+}
+
 export default function TradierSite() {
   // First: every loader below reports into this tray, and asks it whether it
   // is still allowed to poll. Declared here so the const is initialized before
   // any of them close over isBlocked.
   const { errors: deskErrors, push: pushErr, dismiss: dismissErr,
     clear: clearErrs, isBlocked } = useDeskErrors();
+  // Lightweight or Regular (shared/experience.js), fixed for the life of this
+  // board: switching remounts it, so every timer below starts over under the
+  // new rules rather than being told to stop.
+  const { lite } = useExperience();
+  // Lightweight's ↻: every self-loading panel reloads at once when this moves,
+  // on top of its own timer.
+  const [liteKey, setLiteKey] = useState(0);
+  const [liteBusy, setLiteBusy] = useState(false);
   const [user, setUser] = useState(null);
   const [bal, setBal] = useState(null);
   const [balErr, setBalErr] = useState(null);
@@ -3192,8 +3400,11 @@ export default function TradierSite() {
   // every tile's symbol rides the one socket
   const chartTickers = useMemo(
     () => [...new Set(Object.values(chartSyms).filter(Boolean))], [chartSyms]);
-  const stream = useIndexStream(user, live, chartTickers);
-  const movers = useMovers(user, 5);
+  // Lightweight opens neither this socket nor the movers: they feed the index
+  // strip and the tiles, none of which is on that board. Its one chart
+  // streams its own ticker on a socket of its own (LiteChart).
+  const stream = useIndexStream(user, live && !lite, chartTickers);
+  const movers = useMovers(lite ? null : user, 5);
   const [events, setEvents] = useState([]);
   const [busy, setBusy] = useState(false);
   const [openErr, setOpenErr] = useState(null);
@@ -3250,7 +3461,8 @@ export default function TradierSite() {
     poll();
     const t = setInterval(poll, 15_000);
     return () => { alive = false; clearInterval(t); };
-  }, [user, marketOffline]);
+    // liteKey: Lightweight's ↻ asks again at once (and restarts the timer)
+  }, [user, marketOffline, liteKey]);
 
   const toggleAutoTrade = async () => {
     if (!user || autoBusy) return;
@@ -3422,6 +3634,16 @@ export default function TradierSite() {
     enabled: !!user && !marketOffline && isMarketOpen(), blocked: isBlocked('positions'),
   });
 
+  // Lightweight's ↻: everything on the board, now, without waiting for the
+  // timers -- the same sweep-and-reload as "sweep now", plus every panel that
+  // loads for itself (chart, signals, best pair, auto-trader), which reload
+  // when liteKey moves.
+  const refreshLite = useCallback(async () => {
+    setLiteBusy(true);
+    setLiteKey((k) => k + 1);
+    try { await refresh(); } finally { setLiteBusy(false); }
+  }, [refresh]);
+
   // ── the one buy path ──────────────────────────────────────────────────
   // Every buy control on the desk opens the ticket; the ticket is the only
   // thing that places. Before, each call site built its own order and its own
@@ -3592,7 +3814,9 @@ export default function TradierSite() {
 
         <header className="mt-8 mb-6 tr-head">
           <div className="tr-head-left">
-            <span className="tr-eyebrow">tradier · options executor</span>
+            <span className="tr-eyebrow">
+              {lite ? 'tradier · lightweight' : 'tradier · options executor'}
+            </span>
             <h1 className="tr-title">Tradier <span className="vio">Options&nbsp;Desk</span><span className="tr-cursor">_</span></h1>
             <p className="mt-2 text-sm" style={{ color: 'var(--tr-dim)', maxWidth: '46rem' }}>
               Every position is managed until it exits.
@@ -3603,15 +3827,33 @@ export default function TradierSite() {
                 </span>
               )}
             </p>
+            {/* Out here rather than beside BUY: the balance panel shows no
+                controls until the balance loads, and the refresh has to be
+                reachable before then too. */}
+            {lite && (
+              <div className="tr-literow">
+                <button type="button" className="tr-chip tr-literefresh"
+                  onClick={refreshLite} disabled={liteBusy} aria-label="refresh the board"
+                  title="The board keeps itself current. This reloads the balance, the positions, the chart, the signals, the best pair and the auto-trader's state right now.">
+                  {liteBusy ? '↻ refreshing…' : '↻ refresh'}
+                </button>
+                <span className="tr-note">
+                  <span className="tr-livedot" /> auto-refresh · five panels, each on the full desk&apos;s timer
+                </span>
+              </div>
+            )}
             {/* the screeners: Best Bets (the 4-hour 21 EMA, asks the venue
-                only when opened) and BreakoutRadar, a world of its own */}
-            <div className="tr-headlinks">
-              <BestBetsLink accent="#5b6af0" live={live} onPick={setQuoteTicker} />
-              <Link to="/breakout-radar" className="bb-link"
-                title="BreakoutRadar: eight-rule breakout scans of the US and Indian markets">
-                📡 BreakoutRadar<span className="d">· US + India breakouts ›</span>
-              </Link>
-            </div>
+                only when opened) and BreakoutRadar, a world of its own.
+                Neither is one of the Lightweight board's five panels. */}
+            {!lite && (
+              <div className="tr-headlinks">
+                <BestBetsLink accent="#5b6af0" live={live} onPick={setQuoteTicker} />
+                <Link to="/breakout-radar" className="bb-link"
+                  title="BreakoutRadar: eight-rule breakout scans of the US and Indian markets">
+                  📡 BreakoutRadar<span className="d">· US + India breakouts ›</span>
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* balance — lives in the header's right half so the desk starts
@@ -3655,7 +3897,8 @@ export default function TradierSite() {
                     );
                   })()}
                 </div>
-                <GexInline />
+                {/* a minute-by-minute gamma feed: not on the Lightweight board */}
+                {!lite && <GexInline />}
                 <div className="tr-stat">
                   <div className="tr-venuectl">
                     <button type="button"
@@ -3699,9 +3942,31 @@ export default function TradierSite() {
                 )}
               </div>
             )}
+            {lite && <AutoStatus st={autoST} />}
           </div>
         </header>
 
+        {/* Lightweight: the chart, the open positions, the best pair and the
+            super signals -- with the execution controls above, the board's
+            five panels. Regular: the full desk, exactly as it was. */}
+        {lite ? (
+          <div className="tr-lite">
+            <div className="tr-lite-main">
+              <LiteChart user={user} live={live} reloadKey={liteKey}
+                onError={pushErr} onBuy={(s) => openTicket({ symbol: s })}
+                isBlocked={isBlocked} />
+              <LitePositions items={items} loaded={!!positions} targetBusy={targetBusy}
+                onSweep={refresh} onClose={doClose} onTarget={saveTarget} />
+            </div>
+            <aside className="tr-lite-side">
+              <BestPair compact accent="#5b6af0" reloadKey={liteKey} onPick={setQuoteTicker}
+                onTrade={(sym, side) => openTicket({ symbol: sym, side })} />
+              <SuperSignals compact lite reloadKey={liteKey} accent="#5b6af0"
+                onPick={setQuoteTicker}
+                onTrade={(sym, side) => openTicket({ symbol: sym, side })} />
+            </aside>
+          </div>
+        ) : (<>
         <div className="tr-streamrow">
           {venueInfo && !venueInfo.live?.configured && !live && (
             <span className="tr-note">live keys not configured</span>
@@ -3958,6 +4223,7 @@ export default function TradierSite() {
             </button>
           </div>
         )}
+        </>)}
 
         {quoteTicker && (
           <QuotePopup ticker={quoteTicker} accent="#5b6af0"

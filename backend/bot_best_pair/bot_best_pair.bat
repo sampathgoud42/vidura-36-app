@@ -12,7 +12,7 @@ setlocal
 cd /d "%~dp0..\.."
 set "RC=0"
 if not exist ".venv\Scripts\python.exe" (
-  echo No .venv here yet - run setup.bat first.
+  echo No .venv here yet - run start.bat once first; it sets this copy up.
   set "RC=1"
   goto :done
 )

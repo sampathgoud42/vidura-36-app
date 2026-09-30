@@ -1,6 +1,8 @@
 """One-time setup on a fresh machine.
 
-Run with the SYSTEM python (this is what creates the virtualenv):
+start.bat / ./start.sh run this themselves the first time, before anything
+else, so there is normally no need to call it. Run it by hand with the SYSTEM
+python (this is what creates the virtualenv):
 
     python tools/setup.py
 
@@ -78,6 +80,9 @@ def main() -> int:
             str(ROOT / "requirements.txt"), "-q"]) != 0:
         print("    FAILED to install backend dependencies")
         return 1
+    # What `start` compares requirements.txt against (tools/appctl.py), so
+    # it does not install the same thing again on its first run.
+    (VENV / ".requirements.stamp").touch()
     print("    backend dependencies installed")
 
     # ---- 2. machine configuration -------------------------------------
@@ -129,12 +134,13 @@ def main() -> int:
 
     start = "start.bat" if IS_WINDOWS else "./start.sh"
     stop = "stop.bat" if IS_WINDOWS else "./stop.sh"
+    py = r".venv\Scripts\python" if IS_WINDOWS else ".venv/bin/python"
     print(f"""
 Setup complete.
 
-    {start}          start the app        http://127.0.0.1:8790
-    {stop}           stop it
-    {'status.bat' if IS_WINDOWS else './status.sh'}         see what is running
+    {start:<10} start everything     http://127.0.0.1:8791
+    {stop:<10} stop it
+    {py} tools/appctl.py status    see what is running
 
 The desk and the API are the same port: the API serves the built UI.
 """)

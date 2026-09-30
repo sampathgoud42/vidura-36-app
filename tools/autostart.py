@@ -1,10 +1,11 @@
 """Register (or remove) an auto-start entry for the desk + tunnel.
 
     python tools/autostart.py install     # start at logon
+    python tools/autostart.py install --no-tunnel   # ...on this machine only
     python tools/autostart.py remove
     python tools/autostart.py status
 
-Windows: a Scheduled Task that runs `start.bat --tunnel` at logon.
+Windows: a Scheduled Task that runs `start.bat` at logon.
 Linux/macOS: prints the systemd unit or launchd plist to install, rather
 than writing into a system directory behind your back.
 
@@ -45,7 +46,12 @@ def win_install(tunnel: bool) -> int:
         return 1
     # /RL LIMITED, not HIGHEST: nothing here needs admin, and a task that
     # runs elevated is a bigger thing to have firing automatically.
-    cmd = f'"{start}"' + (" --tunnel" if tunnel else "")
+    #
+    # start publishes by default, so it is staying LOCAL that has to be
+    # spelled out. This used to append --tunnel for a public task and nothing
+    # for a local one -- which made `install --no-tunnel` register a task that
+    # published the desk anyway.
+    cmd = f'"{start}"' + ("" if tunnel else " --no-tunnel")
     r = _schtasks("/Create", "/TN", TASK_NAME, "/TR", cmd,
                   "/SC", "ONLOGON", "/RL", "LIMITED", "/F")
     if r.returncode != 0:
@@ -103,7 +109,7 @@ def posix_install(tunnel: bool) -> int:
     print("Install this as a user service, then enable it:\n")
     print(f"  # ~/.config/systemd/user/tradier-bot.service")
     print(SYSTEMD.format(root=ROOT, user=os.environ.get("USER", "youruser"),
-                         tunnel=" --tunnel" if tunnel else ""))
+                         tunnel="" if tunnel else " --no-tunnel"))
     print("  systemctl --user daemon-reload")
     print("  systemctl --user enable --now tradier-bot")
     print("  loginctl enable-linger $USER   # so it runs without you logged in")

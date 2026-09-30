@@ -1,0 +1,111 @@
+/* The Lightweight | Regular switch (shared/ExperienceControls.jsx). One control
+   in two headers: the shared world header, and 36 Trades' compact bar -- each
+   variant below is scoped to its host so it wears that header's size and
+   colours. Spacing is margin, not flex `gap` (older iPhone Safari). */
+
+.xp-switch {
+  display: inline-flex;
+  align-items: stretch;
+  flex: none;
+  border-radius: 999px;
+}
+.xp-switch button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-transform: uppercase;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+/* rounded ends on the buttons themselves, not overflow:hidden on the group --
+   that would also clip the widened tap targets below */
+.xp-switch button:first-child { border-radius: 999px 0 0 999px; }
+.xp-switch button:last-child { border-radius: 0 999px 999px 0; }
+.xp-switch-ic { display: block; flex: none; width: 14px; height: 14px; }
+.xp-switch-txt { margin-left: 5px; }
+
+/* ── in the shared world header (Tradier Platform, Bot Station) ─────────── */
+.vw-header .xp-switch {
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, var(--vw-accent) 32%, transparent);
+  background: color-mix(in srgb, var(--vw-accent) 6%, transparent);
+}
+.vw-header .xp-switch button {
+  min-width: 44px;
+  padding: 0 0.75rem;
+  color: color-mix(in srgb, var(--vw-accent) 72%, white);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.vw-header .xp-switch button + button {
+  border-left: 1px solid color-mix(in srgb, var(--vw-accent) 25%, transparent);
+}
+.vw-header .xp-switch button.on {
+  background: color-mix(in srgb, var(--vw-accent) 22%, transparent);
+  color: #fff;
+}
+@media (hover: hover) {
+  .vw-header .xp-switch button:not(.on):hover {
+    background: color-mix(in srgb, var(--vw-accent) 12%, transparent);
+  }
+}
+/* Short of a wide desk, only the mode you are in keeps its word -- the other
+   is its mark alone -- so the header still fits the row it did before the
+   switch joined it. Narrow phones: marks alone, like the header's other
+   labels. */
+@media (max-width: 1100px) {
+  .vw-header .xp-switch button:not(.on) .xp-switch-txt { display: none; }
+}
+@media (max-width: 480px) {
+  .vw-header .xp-switch-txt { display: none; }
+  .vw-header .xp-switch button { padding: 0 0.6rem; }
+}
+
+/* ── in 36 Trades' stats row ─────────────────────────────────────────────── */
+.d36 .xp-switch {
+  align-self: center;
+  height: 28px;
+  border: 1px solid var(--d36-line);
+}
+.d36 .xp-switch button {
+  position: relative;
+  min-width: 44px;
+  padding: 0 9px;
+  color: var(--d36-faint);
+  font-family: var(--d36-mono);
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+}
+/* 44pt of reach around a 28px control (Apple HIG) without a taller header:
+   each half is already 44px across, so only the height is extended */
+.d36 .xp-switch button::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -8px;
+  bottom: -8px;
+}
+.d36 .xp-switch button + button { border-left: 1px solid var(--d36-line); }
+.d36 .xp-switch button.on {
+  color: var(--d36-green);
+  background: rgba(134, 239, 172, 0.1);
+}
+.d36 .xp-switch-ic { width: 12px; height: 12px; }
+/* Phones: the marks alone. With its words the switch no longer fits beside
+   buying power and today's P&L, and a line of its own would make a header
+   that is already a quarter of an iPhone screen taller still. */
+@media (max-width: 480px) {
+  .d36 .xp-switch-txt { display: none; }
+  .d36 .xp-switch-ic { width: 13px; height: 13px; }
+}
