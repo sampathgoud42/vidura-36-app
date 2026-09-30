@@ -621,6 +621,25 @@ function regularSession(bars) {
   });
 }
 
+// Whether an element is on screen or within reach of it. Chart tiles load and
+// refresh by it: a Regular board carries eighteen, most of them below the fold,
+// and opening it loaded every one at once -- so the charts in view waited
+// behind the ones nobody was looking at, and every hidden tile kept polling.
+// `remountKey` re-attaches it when the element is rebuilt (a chart expanded to
+// full screen is). Without IntersectionObserver everything counts as in view.
+function useNearView(ref, remountKey) {
+  const [near, setNear] = useState(() => typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return undefined;
+    const io = new IntersectionObserver(([entry]) => setNear(entry.isIntersecting),
+      { rootMargin: '400px 0px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, remountKey]);
+  return near;
+}
+
 /* ── intraday candles: 15-minute bars from Tradier, live-updated ────────────
    Seeded from timesales because a socket only produces from the moment it
    connects. Streamed ticks do NOT append points — on a candle chart the live
@@ -679,9 +698,18 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
   const canvasRef = useRef(null);
   const geomRef = useRef(null);          // candle hit-boxes for the crosshair
 
+  // Loaded when the tile is first on screen or near it, refreshed only while
+  // it is, and brought up to date when it comes back into view.
+  const boxRef = useRef(null);
+  const near = useNearView(boxRef, expanded) || expanded;
+  const [seen, setSeen] = useState(near);
+  useEffect(() => { if (near) setSeen(true); }, [near]);
+  const lastLoadRef = useRef(0);
+
   const retryRef = useRef(null);
   const load = useCallback(async () => {
     if (!user) return;
+    lastLoadRef.current = Date.now();
     try {
       setSeed(await vidura.tradierTimesales(user.user_id, symbol, interval,
         live, interval === '1min' ? 1 : 5));
@@ -701,10 +729,17 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
   }, [user, symbol, interval, live, onError]);
 
   useEffect(() => {
+    if (!seen) return undefined;
     setSeed(null);
     load();
     return () => clearTimeout(retryRef.current);
-  }, [load]);
+  }, [load, seen]);
+
+  // Back in view after a minute or more away: catch up now, not at the next tick.
+  useEffect(() => {
+    if (near && seen && Date.now() - lastLoadRef.current > 60_000) load();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [near]);
 
   // A refresh redraws over the bars already on screen rather than blanking
   // the tile first, so it is keyed apart from the load above.
@@ -725,14 +760,15 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
   // Pivots come from the prior completed session, so once per symbol is
   // enough — they do not move while the chart is open.
   useEffect(() => {
+    if (!seen) return undefined;
     let alive = true;
     setPivots(null);
     vidura.superQuote(symbol)
       .then((q) => { if (alive) setPivots(q?.pivots || null); })
       .catch(() => { if (alive) setPivots(null); });
     return () => { alive = false; };
-  }, [symbol]);
-  usePolling(load, 60_000, { enabled: !!user && isMarketOpen(), blocked });
+  }, [symbol, seen]);
+  usePolling(load, 60_000, { enabled: !!user && isMarketOpen() && near, blocked });
 
   // everything fetched feeds the indicator; only the latest session is drawn
   const allBars = useMemo(() => regularSession(seed?.bars || []), [seed]);
@@ -1032,7 +1068,7 @@ export function MiniChart({ user, live, symbol, onSymbol, stream, onError, onBuy
   const shown = hover || (candles.length ? candles[candles.length - 1] : null);
 
   const chart = (
-    <div className={`tr-chart ${expanded ? 'fs' : ''}`}>
+    <div ref={boxRef} className={`tr-chart ${expanded ? 'fs' : ''}`}>
       <div className="tr-charthd">
         {editSym ? (
           <input className="tr-syminput" value={symDraft} autoFocus maxLength={10}

@@ -9,10 +9,26 @@ import { WorldGate, DefaultWorld } from './auth/WorldGate.jsx';
 
 // The desk is the whole app here, but it stays lazy: its bundle is large and
 // the branded loader is what the user sees while it arrives.
-const Tradier = lazy(() => import('./sites/tradier/TradierSite.jsx'));
-const Desk36 = lazy(() => import('./sites/desk36/Desk36Site.jsx'));
-const BotStation = lazy(() => import('./sites/botstation/BotStationSite.jsx'));
-const Breakout = lazy(() => import('./sites/breakout/BreakoutSite.jsx'));
+const WORLD_CODE = {
+  '/tradier-platform': () => import('./sites/tradier/TradierSite.jsx'),
+  '/36-trade-desk': () => import('./sites/desk36/Desk36Site.jsx'),
+  '/bot-station': () => import('./sites/botstation/BotStationSite.jsx'),
+  '/breakout-radar': () => import('./sites/breakout/BreakoutSite.jsx'),
+};
+const Tradier = lazy(WORLD_CODE['/tradier-platform']);
+const Desk36 = lazy(WORLD_CODE['/36-trade-desk']);
+const BotStation = lazy(WORLD_CODE['/bot-station']);
+const Breakout = lazy(WORLD_CODE['/breakout-radar']);
+
+// The world this address opens starts downloading now, alongside the sign-in
+// check, rather than after it: the lazy import only fired once the gates
+// above it had answered, a full round trip later. React.lazy then finds the
+// module already loaded (or on its way). A failure here is left to lazy,
+// which asks again and reports it where the page can show it.
+{
+  const here = Object.keys(WORLD_CODE).find((p) => window.location.pathname.startsWith(p));
+  if (here) WORLD_CODE[here]().catch(() => {});
+}
 
 function Loader() {
   return (
