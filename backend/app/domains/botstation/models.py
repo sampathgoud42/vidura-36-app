@@ -145,3 +145,67 @@ class BotTrade(Base, TenantOwned, Timestamped):
             name="status_known"),
         Index("ix_bot_trade_tenant_bot_opened", "tenant_id", "bot_key", "opened_at"),
     )
+
+
+class SignalTrade(Base, TenantOwned, Timestamped):
+    """One position taken by hand from a DMI signal on the Bot Station, on the
+    asset's Kalshi fifteen-minute market, and watched until it is out.
+
+    The row IS the watch. The background loop reads every ``watching`` row on
+    each pass, so a trade survives a restart of this process: the take-profit
+    and the stop-loss resume from here rather than from memory. Nothing rests
+    on the exchange -- entries and exits are immediate-or-cancel -- so there is
+    no order to reconcile against this row, only the position.
+    """
+
+    __tablename__ = "signal_trade"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+
+    # The confirmation's own id, sent by the form. A confirmation that arrives
+    # twice -- a double click, a retry after a dropped response -- is one
+    # trade, not two; it is also the exchange's idempotency key for the buy.
+    request_id: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    asset: Mapped[str] = mapped_column(String(16), nullable=False)   # btc, gold15
+    series: Mapped[str] = mapped_column(String(24), nullable=False)  # KXBTC15M
+    ticker: Mapped[str] = mapped_column(String(64), nullable=False)
+    signal: Mapped[str] = mapped_column(String(4), nullable=False)   # call | put
+    # Whether 5m agreed when it was confirmed (the strip's check mark).
+    confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    side: Mapped[str] = mapped_column(String(3), nullable=False)     # yes | no
+
+    contracts: Mapped[float] = mapped_column(Float, nullable=False)  # asked for
+    filled: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    entry_c: Mapped[float | None] = mapped_column(Float)
+    tp_c: Mapped[float | None] = mapped_column(Float)
+    sl_c: Mapped[float | None] = mapped_column(Float)
+    # When the quarter closes: past it the position is left to settle.
+    close_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    order_id: Mapped[str | None] = mapped_column(String(64))
+
+    status: Mapped[str] = mapped_column(String(16), nullable=False,
+                                        default="watching")
+    exited: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    exit_c: Mapped[float | None] = mapped_column(Float)
+    note: Mapped[str | None] = mapped_column(String(255))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "request_id", name="tenant_request"),
+        CheckConstraint("side in ('yes','no')", name="side_known"),
+        CheckConstraint("signal in ('call','put')", name="signal_known"),
+        #   watching   held, take-profit and stop-loss live
+        #   tp / sl    sold on that exit
+        #   expired    still held when the quarter closed; left to settle
+        #   closed     no longer held, and not by this desk (sold elsewhere)
+        #   unfilled   the buy found nobody to sell to; nothing was bought
+        #   unwatched  a RISKY buy: bought whatever the bid, and nothing
+        #              watches it -- no take-profit, no stop-loss
+        CheckConstraint(
+            "status in ('watching','tp','sl','expired','closed','unfilled',"
+            "'unwatched')",
+            name="status_known"),
+        Index("ix_signal_trade_tenant_status", "tenant_id", "status"),
+    )

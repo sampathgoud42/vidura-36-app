@@ -1,6 +1,6 @@
 """The loops that have to run whether or not anybody is looking at the desk.
 
-Two of them, and the first one is the reason this module exists at all:
+Three of them, and the first one is the reason this module exists at all:
 
   risk monitor   sweeps every operator's live positions, records fills, arms
                  exits, and fires the monitored stop. It also writes the
@@ -8,6 +8,10 @@ Two of them, and the first one is the reason this module exists at all:
                  entry.
   reconciler     closes ledger rows the bots opened and never finished,
                  against what actually happened at Kalshi.
+  signal trades  the take-profit and stop-loss of every position bought from
+                 a Bot Station DMI signal, on Kalshi's fifteen-minute markets.
+                 Every two seconds: a quarter-hour market moves too fast for
+                 the risk monitor's ten.
 
 ``monitor.sweep_all_tenants`` existed and was called by NOTHING. The risk
 heartbeat table had zero rows in it, which is exactly what a monitor that has
@@ -109,16 +113,26 @@ def _sweep_ledger() -> None:
     reconcile.sweep_all_tenants(apply=True)
 
 
+def _sweep_signal_trades() -> None:
+    from app.domains.botstation import signal_trade
+
+    signal_trade.sweep_all_tenants()
+
+
 _LOOPS: dict[str, _Loop] = {}
 
 
 def start_all() -> None:
-    """Start both loops. Idempotent, so a reload does not double them up."""
+    """Start every loop. Idempotent, so a reload does not double them up."""
+    from app.domains.botstation import signal_trade
+
     if not _LOOPS:
         _LOOPS["risk-monitor"] = _Loop("risk-monitor", MONITOR_INTERVAL_S,
                                        _sweep_stops)
         _LOOPS["reconciler"] = _Loop("reconciler", RECONCILE_INTERVAL_S,
                                      _sweep_ledger)
+        _LOOPS["signal-trades"] = _Loop("signal-trades", signal_trade.POLL_S,
+                                        _sweep_signal_trades)
     for loop in _LOOPS.values():
         loop.start()
 

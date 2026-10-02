@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ApiError, ensureUser, vidura } from '../../shared/viduraApi.js';
 import SiteFooter from '../../shared/SiteFooter.jsx';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
 import LiveModeNotice, { useLiveLock } from '../../shared/LiveModeNotice.jsx';
+import { deskTime } from '../../shared/cst.js';
 import '../../shared/worldHeader.css';
 import './botstation.css';
 
@@ -705,7 +707,7 @@ function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
 // `load` is what differs, plus the title and how a row is labelled. Everything
 // about how a reading is DISPLAYED is shared, which is the part that has to
 // stay consistent across the desk.
-function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2 }) {
+function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2, onSignal }) {
   const [snap, setSnap] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -808,13 +810,17 @@ function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2 }) {
                   marked when it agrees, rather than folded into the rule —
                   widening what fires a trade is a trading change, not a
                   display one. */}
-              <span className="sig" style={{ color: sideColor(r.signal) }}
-                title={r.signal
+              {/* A link to trade it: CALL buys YES and PUT buys NO on the
+                  asset's Kalshi 15-minute market, after a confirmation.
+                  "mixed" opens the same form, to say why there is nothing. */}
+              <button type="button" className="sig sig-btn" style={{ color: sideColor(r.signal) }}
+                onClick={() => onSignal?.(r, label, accent)}
+                title={`${r.signal
                   ? `1m and 2m agree${r.m5_confirms ? '; 5m confirms' : '; 5m does not confirm'}`
-                  : '1m and 2m disagree — no clear signal'}>
+                  : '1m and 2m disagree — no clear signal'} — click to trade it on Kalshi`}>
                 {r.signal ? sideLabel(r.signal) : 'mixed'}
                 {r.signal && r.m5_confirms && <span className="slope" title="5m confirms">✓</span>}
-              </span>
+              </button>
             </div>
           );
         })}
@@ -1042,13 +1048,27 @@ function LuckPanel() {
     // The engine's own gates, now the operator's. Seeded with what the
     // long shot used to inherit silently: 3c wide, closing within 72h.
     max_spread_c: '3', max_hours: '72',
+    // NO sides only: every leg read as "this does not happen", game props
+    // included. Props are thin and quoted wide, so the volume floor is set
+    // aside and the spread gate opens to 15c while it is on.
+    no_side: false,
   });
+  // The spread the operator had before NO-side widened it, put back when
+  // they switch it off again.
+  const spreadBefore = useRef('3');
   const [preview, setPreview] = useState(null);
   const [keep, setKeep] = useState(() => new Set());
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const setNoSide = (e) => {
+    const on = e.target.checked;
+    setForm((f) => {
+      if (on) spreadBefore.current = f.max_spread_c;
+      return { ...f, no_side: on, max_spread_c: on ? '15' : (spreadBefore.current || '3') };
+    });
+  };
   const n = (v, d) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
 
   // The scan runs well past the tunnel's ~100s ceiling, so the server hands
@@ -1072,9 +1092,10 @@ function LuckPanel() {
         min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
         min_leg_c: n(form.min_leg_c, 60),
         max_leg_c: n(form.max_leg_c, 98),
-        min_volume_usd: n(form.min_volume_usd, 0),
-        max_spread_c: n(form.max_spread_c, 3),
+        min_volume_usd: form.no_side ? 0 : n(form.min_volume_usd, 0),
+        max_spread_c: n(form.max_spread_c, form.no_side ? 15 : 3),
         max_hours: n(form.max_hours, 72),
+        no_side_only: !!form.no_side,
       });
       const out = await awaitJob(job.job_id);
       if (out && out.ok) {
@@ -1175,11 +1196,28 @@ function LuckPanel() {
                   value={form.max_leg_c} onChange={set('max_leg_c')}
                   title="dearest leg to accept, in cents — above this the outcome is already decided" />
               </label>
+              {/* NO side only. Off, the ticket backs whichever side of a market
+                  is the stronger one. On, every leg is a NO -- "Ecuador do
+                  not win", "Penn St. do not win by over 7.5" -- and the game
+                  props behind each fixture (spreads, totals, both teams to
+                  score) come into it, which the volume floor and a 3c spread
+                  gate would otherwise keep out almost entirely. */}
+              <label className="bs-luckrow bs-lucknoside"
+                title="only NO sides: every market — game props included — read as 'this does not happen'; min volume is ignored and the spread gate opens to 15c">
+                <span className="lbl">NO side</span>
+                <input type="checkbox" checked={form.no_side} onChange={setNoSide}
+                  aria-label="NO side only" />
+                <span className="txt">only · game props, any volume</span>
+              </label>
               <label className="bs-luckrow">
                 <span className="lbl">Min vol</span>
                 <input className="bs-input" type="number" min="0" step="500"
-                  value={form.min_volume_usd} onChange={set('min_volume_usd')}
-                  title="minimum dollar volume per leg" />
+                  value={form.no_side ? '' : form.min_volume_usd}
+                  placeholder={form.no_side ? 'ignored' : ''}
+                  disabled={form.no_side}
+                  onChange={set('min_volume_usd')}
+                  title={form.no_side ? 'ignored while NO side only is on'
+                    : 'minimum dollar volume per leg'} />
                 <i>$</i>
               </label>
               {/* The two gates the long shot used to inherit from the
@@ -1216,14 +1254,14 @@ function LuckPanel() {
             {busy === 'preview' ? (
               <p className="bs-luck-note">
                 Reading every live market and its sub-events
-                {elapsed ? ` \u00b7 ${Math.round(elapsed)}s` : ''}\u2026
+                {elapsed ? ` \u00b7 ${Math.round(elapsed)}s` : ''}…
                 this takes a couple of minutes.
               </p>
             ) : null}
             {error && !sheet ? <p className="bs-luck-err">{error}</p> : null}
             {result && result.placed ? (
               <p className="bs-luck-ok">
-                PLACED \u2014 {result.legs_used} legs, {result.contracts} contracts
+                PLACED — {result.legs_used} legs, {result.contracts} contracts
                 {result.filled_c != null ? ` at ${result.filled_c}c` : ''}
                 {result.cost_usd != null ? ` \u00b7 $${result.cost_usd}` : ''}
                 {result.contracts ? ` \u00b7 max payout $${Math.round(result.contracts).toLocaleString()}` : ''}
@@ -1239,7 +1277,7 @@ function LuckPanel() {
             <header className="bs-modal-hd">
               <h2>SELECT LEGS</h2>
               <button type="button" className="close"
-                onClick={() => { if (!busy) setSheet(false); }}>\u00d7</button>
+                onClick={() => { if (!busy) setSheet(false); }}>×</button>
             </header>
             <p className="bs-luck-note">
               {chosen.length} of {preview.legs.length} kept
@@ -1249,8 +1287,11 @@ function LuckPanel() {
                 : ` \u00b7 \u2264${preview.max_spread_c}c wide`}
               {preview.max_hours == null ? null
                 : `, closing within ${preview.max_hours}h`}
+              {preview.no_side_only
+                ? ' \u00b7 NO sides only, game props in, any volume \u2014 one leg per game, highest price first'
+                : null}
               {' \u00b7 '}buys at market, spending
-              ${n(form.min_usd, 5).toFixed(2)}\u2013${n(form.max_usd, 7.5).toFixed(2)}
+              ${n(form.min_usd, 5).toFixed(2)}–${n(form.max_usd, 7.5).toFixed(2)}
             </p>
 
             <div className="bs-luck-actions">
@@ -1290,14 +1331,15 @@ function LuckPanel() {
                       <td className="num">{i + 1}</td>
                       <td title={l.event}>{l.market}</td>
                       {/* A leg taken from the other side of its market is
-                          the opposite bet, and the outcome text already says
-                          "NOT X" -- the chip is so it cannot be skim-read as
-                          a backing of the team it names. */}
+                          the opposite bet. The chip says so, the way the
+                          exchange writes it ("No · Ecuador to win"), so the
+                          text beside it is the outcome itself: "NO" next to
+                          "NOT Ecuador" read as a double negative. */}
                       <td>
                         {l.side === 'no'
                           ? <span className="chip pl" style={{ marginRight: 5 }}>NO</span>
                           : null}
-                        {l.outcome}
+                        {l.side === 'no' ? String(l.outcome || '').replace(/^NOT\s+/, '') : l.outcome}
                       </td>
                       <td className="dim">{l.sport}</td>
                       <td className="num">{l.price_c}c</td>
@@ -1352,7 +1394,8 @@ function LuckPanel() {
                 </div>
                 <p className="bs-luck-note">
                   Live → Eligible is your leg price, spread and horizon.
-                  Eligible → On volume is the min-volume floor.
+                  Eligible → On volume is the min-volume floor
+                  {preview.no_side_only ? ' (set aside on this NO-side ticket)' : ''}.
                   On volume → In collection is Kalshi's: a parlay can only be
                   built from events one collection carries, and the one
                   hosting the most legs is the one used.
@@ -1367,11 +1410,18 @@ function LuckPanel() {
 }
 
 
-function CommoditiesStrip() {
+// The boards' loaders, made ONCE. DmiStrip fetches whenever its loader
+// changes, and an arrow written inline was a new loader on every render of
+// the station -- whose clock re-renders it every second -- so both boards
+// were fetched every second instead of every minute.
+const loadCommodityBoard = (force) => vidura.commodityDmiSignals(force);
+const loadCryptoBoard = (force) => vidura.cryptoDmiSignals(force);
+
+function CommoditiesStrip({ onSignal }) {
   return (
     <DmiStrip
-      title="COMMODITIES" icon="🛢"
-      load={(force) => vidura.commodityDmiSignals(force)}
+      title="COMMODITIES" icon="🛢" onSignal={onSignal}
+      load={loadCommodityBoard}
       labelFor={(r) => ({ label: BOT_BY_KEY[r.bot]?.label || r.label || r.bot,
                           accent: BOT_BY_KEY[r.bot]?.accent })}
     />
@@ -1386,14 +1436,497 @@ const CRYPTO_ACCENT = {
   doge: '#c2a633', xrp: '#25a768',
 };
 
-function CryptoStrip() {
+function CryptoStrip({ onSignal }) {
   return (
     <DmiStrip
-      title="CRYPTO" icon="₿"
-      load={(force) => vidura.cryptoDmiSignals(force)}
+      title="CRYPTO" icon="₿" onSignal={onSignal}
+      load={loadCryptoBoard}
       labelFor={(r) => ({ label: r.label || r.bot.toUpperCase(),
                           accent: CRYPTO_ACCENT[r.bot] })}
     />
+  );
+}
+
+// ── move money: cash between Kalshi's exchange shards ──────────────────────
+// Kalshi keeps cash per shard, and an order spends only the cash on its
+// market's shard: every 15-minute market settles on shard 2. This moves cash
+// between shards inside the operator's own account, after the amount, the
+// direction and a confirmation -- shard 0 to 2 by default, ⇄ to swap.
+function MoveMoneyCell() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bs-cell"><span className="k">Kalshi shards</span>
+      <button type="button" className="bs-btn bs-move-btn" onClick={() => setOpen(true)}
+        title="move cash between Kalshi exchange shards — 15-minute markets spend only shard 2">
+        ⇄ MOVE MONEY
+      </button>
+      {open && <MoveMoneySheet onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
+function MoveMoneySheet({ onClose }) {
+  const [snap, setSnap] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState('load');
+  const [from, setFrom] = useState(0);
+  const [to, setTo] = useState(2);
+  const [amount, setAmount] = useState('');
+  const [result, setResult] = useState(null);
+  // One key per confirmation; a fresh one after each move that lands.
+  const keyRef = useRef(newConfirmationKey());
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+
+  const load = useCallback(async () => {
+    setBusy('load'); setErr('');
+    try {
+      const d = await vidura.kalshiShards();
+      if (alive.current) setSnap(d);
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && busy !== 'move') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [busy, onClose]);
+
+  const shards = snap?.shards || [];
+  const held = (n) => shards.find((s) => s.shard === n)?.usd;
+  const usdTxt = (v) => (v == null ? '—' : `$${Number(v).toFixed(Number(v) < 1 && Number(v) > 0 ? 4 : 2)}`);
+  const amt = Number(amount);
+  const valid = Number.isFinite(amt) && amt > 0 && from !== to
+    && held(from) != null && amt <= held(from) + 1e-9;
+  const problem = !amount ? '' : !(Number.isFinite(amt) && amt > 0) ? 'enter an amount above $0'
+    : from === to ? 'the source and destination are the same shard'
+      : held(from) != null && amt > held(from) + 1e-9 ? `shard ${from} holds ${usdTxt(held(from))}` : '';
+
+  const swap = () => { setFrom(to); setTo(from); setResult(null); };
+
+  const move = async () => {
+    if (!valid || busy) return;
+    const money = `$${amt.toFixed(2)}`;
+    const ok = await confirmDialog({
+      title: `Move ${money} from shard ${from} to shard ${to}?`,
+      body: `Kalshi's intra-account transfer, inside your own account: shard ${from} `
+        + `(${usdTxt(held(from))}) → shard ${to} (${usdTxt(held(to))}). It is sent once and `
+        + 'never retried; Kalshi processes it within a few seconds.',
+      confirmText: `Move ${money}`,
+      cancelText: 'Cancel',
+    });
+    if (!ok) return;
+    setBusy('move'); setErr(''); setResult(null);
+    try {
+      const out = await vidura.kalshiShardTransfer(
+        { usd: Math.round(amt * 100) / 100, source_shard: from, destination_shard: to },
+        keyRef.current);
+      if (!alive.current) return;
+      setResult(out);
+      if (out && out.moved) {
+        keyRef.current = newConfirmationKey();
+        setAmount('');
+        if (out.shards) setSnap({ shards: out.shards, transfers: out.transfers || snap?.transfers || [] });
+      }
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  };
+
+  const options = shards.length ? shards.map((s) => s.shard) : [0, 1, 2, 3];
+  return createPortal(
+    <div className="bs-luck-scrim" onClick={() => { if (busy !== 'move') onClose(); }}>
+      <div className="bs-luck-sheet bs-sigsheet bs-movesheet" role="dialog" aria-modal="true"
+        aria-label="move money between Kalshi shards" onClick={(e) => e.stopPropagation()}>
+        <header className="bs-modal-hd">
+          <h2>MOVE MONEY · KALSHI SHARDS</h2>
+          <button type="button" className="bs-refresh" onClick={load} disabled={!!busy}
+            aria-label="refresh the balances" title="re-read the balances">
+            <span className={busy === 'load' ? 'spin' : ''} aria-hidden="true">↻</span>
+          </button>
+          <button type="button" className="close" disabled={busy === 'move'} onClick={onClose}>×</button>
+        </header>
+
+        <div className="bs-shards">
+          {shards.map((s) => (
+            <div key={s.shard} className={`bs-shard ${s.shard === from ? 'from' : ''} ${s.shard === to ? 'to' : ''}`}>
+              <span className="n">shard {s.shard}</span>
+              <b>{usdTxt(s.usd)}</b>
+              {s.purpose ? <span className="p">{s.purpose}</span> : null}
+            </div>
+          ))}
+          {!shards.length && busy === 'load' ? <p className="bs-luck-note">reading the balances…</p> : null}
+        </div>
+
+        <div className="bs-move-row">
+          <label className="bs-move-field">
+            <span>from</span>
+            <select className="bs-input" value={from} disabled={busy === 'move'}
+              onChange={(e) => { setFrom(Number(e.target.value)); setResult(null); }}>
+              {options.map((n) => <option key={n} value={n}>shard {n}</option>)}
+            </select>
+          </label>
+          <button type="button" className="bs-btn bs-swap" onClick={swap} disabled={busy === 'move'}
+            aria-label="swap source and destination" title="swap source and destination">⇄</button>
+          <label className="bs-move-field">
+            <span>to</span>
+            <select className="bs-input" value={to} disabled={busy === 'move'}
+              onChange={(e) => { setTo(Number(e.target.value)); setResult(null); }}>
+              {options.map((n) => <option key={n} value={n}>shard {n}</option>)}
+            </select>
+          </label>
+          <label className="bs-move-field amt">
+            <span>amount $</span>
+            <input className="bs-input" type="number" min="0.01" step="0.01" inputMode="decimal"
+              placeholder="15.00" value={amount} disabled={busy === 'move'}
+              onChange={(e) => { setAmount(e.target.value); setResult(null); }} />
+          </label>
+          {held(from) != null ? (
+            <button type="button" className="bs-linkbtn" disabled={busy === 'move'}
+              onClick={() => setAmount(String(Math.floor(held(from) * 100) / 100))}>max</button>
+          ) : null}
+        </div>
+
+        {problem ? <p className="bs-luck-err">⚠ {problem}</p> : null}
+        {err ? <p className="bs-luck-err">⚠ {err}</p> : null}
+        {result && result.moved === true ? (
+          <p className="bs-luck-ok">
+            MOVED ${Number(result.usd).toFixed(2)} · shard {result.source} → shard {result.destination}
+            {' · '}{result.status || 'accepted'}{result.transfer_id ? ` · ${result.transfer_id}` : ''}
+          </p>
+        ) : null}
+        {result && result.moved === false ? <p className="bs-luck-err">⚠ {result.detail}</p> : null}
+        {result && result.moved == null && result.detail ? <p className="bs-luck-err">⚠ {result.detail}</p> : null}
+
+        <div className="bs-luck-actions">
+          <button type="button" className="bs-btn live" onClick={move} disabled={!valid || !!busy}>
+            {busy === 'move' ? 'MOVING…'
+              : `MOVE ${Number.isFinite(amt) && amt > 0 ? `$${amt.toFixed(2)}` : ''} · SHARD ${from} → ${to}`}
+          </button>
+          <button type="button" className="bs-btn" onClick={onClose} disabled={busy === 'move'}>CLOSE</button>
+        </div>
+
+        {(snap?.transfers || []).length ? (
+          <div className="bs-move-hist">
+            <div className="hd">latest transfers</div>
+            {snap.transfers.slice(0, 6).map((t) => (
+              <div key={t.id || `${t.at}-${t.usd}`} className="row">
+                <span>{t.at ? `${deskTime(t.at)} CST` : '—'}</span>
+                <span>shard {t.from} → {t.to}</span>
+                <b>{usdTxt(t.usd)}</b>
+                <span className={`st ${t.status}`}>{t.status}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ── signal trades: a strip's CALL/PUT, bought on its Kalshi 15-minute market ─
+// The two strips and what was traded from them. A signal is a link: it opens
+// a confirmation of exactly what would be bought, and only that form's button
+// reaches the account. The API re-checks everything at that moment -- the
+// signal, the quarter, the bid range -- and then watches the position for its
+// take-profit and stop-loss, every two seconds, until it is out.
+function SignalStrips() {
+  const [open, setOpen] = useState(null);           // { row, label, accent }
+  const [placed, setPlaced] = useState(0);
+  const onSignal = useCallback((row, label, accent) => setOpen({ row, label, accent }), []);
+  return (
+    <>
+      <CommoditiesStrip onSignal={onSignal} />
+      <CryptoStrip onSignal={onSignal} />
+      <SignalTrades refreshKey={placed} />
+      {open && (
+        <SignalTradeSheet {...open} onClose={() => setOpen(null)}
+          onPlaced={() => setPlaced((k) => k + 1)} />
+      )}
+    </>
+  );
+}
+
+const SIG_TEXT = { call: 'CALL', put: 'PUT' };
+const mmss = (secs) => {
+  const s = Math.max(0, Math.floor(secs));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+const cents = (v) => (v == null ? '—' : `${Number(v).toFixed(Number.isInteger(Number(v)) ? 0 : 1)}c`);
+
+function newConfirmationKey() {
+  try { return `sig-${crypto.randomUUID()}`; } catch { /* older webview */ }
+  return `sig-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function SignalTradeSheet({ row, label, accent, onClose, onPlaced }) {
+  const signal = row.signal || null;                 // 'call' | 'put' | null (mixed)
+  const [pv, setPv] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(signal ? 'preview' : '');
+  const [qty, setQty] = useState('10');
+  const [result, setResult] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [readAt, setReadAt] = useState(null);
+  // ONE key per confirmation: a retry of this same form is the same order.
+  const keyRef = useRef(newConfirmationKey());
+
+  // The quote, read when the form opens and again on ↻. A fifteen-minute
+  // market moves while the form is open, and a bid read a minute ago is not
+  // the one an order would meet. The contracts typed are kept: only the first
+  // read fills in the default.
+  const alive = useRef(true);
+  const seeded = useRef(false);
+  // Set on every mount, not only cleared on unmount: React re-runs effects
+  // (fast refresh, strict mode), and a flag left false never cleared `busy`
+  // -- the form sat with both buttons disabled.
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+  const loadPreview = useCallback(async () => {
+    if (!signal) return;
+    setBusy('preview'); setErr('');
+    try {
+      const d = await vidura.signalTradePreview({ asset: row.bot, signal, confirms: !!row.m5_confirms });
+      if (!alive.current) return;
+      setPv(d);
+      setReadAt(Date.now());
+      if (!seeded.current && d && d.contracts) {
+        seeded.current = true;
+        setQty(String(d.contracts));
+      }
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  }, [row.bot, signal, row.m5_confirms]);
+  useEffect(() => { loadPreview(); }, [loadPreview]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    const onKey = (e) => { if (e.key === 'Escape' && busy !== 'place') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => { clearInterval(t); window.removeEventListener('keydown', onKey); };
+  }, [busy, onClose]);
+
+  const n = Number(qty);
+  const count = Number.isFinite(n) ? Math.max(1, Math.min(pv?.max_contracts || 100, Math.round(n))) : 0;
+  const maxCost = pv?.max_entry_c != null ? (count * pv.max_entry_c) / 100 : null;
+  const left = pv?.close_time ? (Date.parse(pv.close_time) - now) / 1000 : null;
+  const inRange = pv?.bid_c != null && pv.bid_c > 35 && pv.bid_c < 70;
+  const shortCash = pv?.shard_cash_usd != null && maxCost != null && pv.shard_cash_usd < maxCost;
+  const sideWord = pv?.side === 'no' ? 'NO' : 'YES';
+  // The API refuses an out-of-range bid itself; the form does not offer it
+  // either, so the button can never disagree with the check beside the bid.
+  const canPlace = !!pv?.ok && inRange && !busy && count >= 1 && !(result && result.placed)
+    && (left == null || left > 60);
+
+  // RISKY-BUY: the same market buy, whatever the bid, and nothing watches it
+  // afterwards -- no take-profit, no stop-loss. Still needs a market, a price
+  // to buy at and a minute left, and it asks once more before it spends.
+  const canRisky = !!signal && !!pv?.ticker && pv?.ask_c != null && !busy && count >= 1
+    && !(result && result.placed) && (left == null || left > 60);
+
+  const send = async (risky) => {
+    setBusy('place'); setErr(''); setResult(null);
+    try {
+      const out = await vidura.signalTradePlace({
+        asset: row.bot, signal, confirms: !!row.m5_confirms,
+        ticker: pv.ticker, contracts: count, risky,
+      }, keyRef.current);
+      setResult(out);
+      if (out && out.placed) onPlaced?.();
+    } catch (e) {
+      setErr(errText(e));
+    } finally { setBusy(''); }
+  };
+
+  const place = async () => {
+    if (!canPlace) return;
+    await send(false);
+  };
+
+  const placeRisky = async () => {
+    if (!canRisky) return;
+    const ok = await confirmDialog({
+      title: `RISKY-BUY ${count} ${sideWord} on ${pv.ticker}?`,
+      body: `Buys at market whatever the bid (now ${cents(pv.bid_c)}, ask ${cents(pv.ask_c)}), `
+        + `paying up to ${cents(pv.max_entry_c)}. Nothing watches it afterwards: no `
+        + 'take-profit and no stop-loss. It is held until you sell it or the quarter settles.',
+      confirmText: `Risky-buy ${count} ${sideWord}`,
+      cancelText: 'Cancel',
+    });
+    if (ok) await send(true);
+  };
+
+  const sigColor = signal === 'call' ? 'var(--bs-good, #2fd35b)' : signal === 'put' ? 'var(--bs-crit, #ff4d4d)' : 'var(--bs-ink-3)';
+  return (
+    <div className="bs-luck-scrim" onClick={() => { if (busy !== 'place') onClose(); }}>
+      <div className="bs-luck-sheet bs-sigsheet" role="dialog" aria-modal="true"
+        aria-label={`trade the ${label} signal`} onClick={(e) => e.stopPropagation()}>
+        <header className="bs-modal-hd">
+          <h2>
+            <span style={{ color: accent }}>{label}</span>{' · '}
+            <span style={{ color: sigColor }}>
+              {signal ? SIG_TEXT[signal] : 'mixed'}{signal && row.m5_confirms ? ' ✓' : ''}
+            </span>
+          </h2>
+          <button type="button" className="close" disabled={busy === 'place'} onClick={onClose}>×</button>
+        </header>
+
+        {!signal ? (
+          <p className="bs-luck-err bs-sig-invalid">
+            NOT a valid signal — 1m and 2m disagree (mixed), so there is no direction to trade.
+          </p>
+        ) : null}
+
+        {signal && busy === 'preview' && !pv ? (
+          <p className="bs-luck-note">Reading the current Kalshi 15-minute market…</p>
+        ) : null}
+
+        {signal && pv && pv.valid_signal !== false && pv.ticker ? (
+          <dl className="bs-sig-grid">
+            <dt>Order</dt>
+            <dd>
+              <b>BUY {sideWord}</b> at market
+              <span className="dim"> · {signal === 'call' ? 'CALL → YES (finishes up)' : 'PUT → NO (does not finish up)'}</span>
+            </dd>
+            <dt>Market</dt>
+            <dd>
+              <b>{pv.ticker}</b>
+              <span className="dim">{pv.title ? ` · ${pv.title}` : ''}</span>
+              <span className="dim">{left != null ? ` · closes in ${mmss(left)}` : ''}</span>
+            </dd>
+            <dt>Current bid</dt>
+            <dd>
+              <b>{cents(pv.bid_c)}</b>
+              <span className="dim"> · ask {cents(pv.ask_c)}</span>
+              <span className={`bs-sig-chk ${inRange ? 'ok' : 'bad'}`}>
+                {inRange ? '✓ inside 35–70c' : '✗ must be strictly between 35 and 70c'}
+              </span>
+              <button type="button" className="bs-refresh bs-sig-refresh" onClick={loadPreview}
+                disabled={!!busy || !!(result && result.placed)}
+                aria-label="refresh the bid and ask"
+                title={`re-read the bid and ask now${readAt ? ` — last read ${Math.max(0, Math.round((now - readAt) / 1000))}s ago` : ''}`}>
+                <span className={busy === 'preview' ? 'spin' : ''} aria-hidden="true">↻</span>
+              </button>
+            </dd>
+            <dt>Take profit</dt>
+            <dd><b>+{pv.tp_pct}%</b><span className="dim"> · ≈ {cents(pv.tp_c)} on the price paid</span></dd>
+            <dt>Stop loss</dt>
+            <dd><b>−{pv.sl_pct}%</b><span className="dim"> · ≈ {cents(pv.sl_c)} on the price paid</span></dd>
+            <dt>Contracts</dt>
+            <dd>
+              <input className="bs-input" type="number" min="1" max={pv.max_contracts || 100}
+                value={qty} disabled={!!busy || !!(result && result.placed)}
+                onChange={(e) => setQty(e.target.value)} />
+              <span className="dim">
+                {maxCost != null ? ` · at most $${maxCost.toFixed(2)} (fills now at up to ${cents(pv.max_entry_c)}, or not at all)` : ''}
+              </span>
+            </dd>
+            {pv.shard_cash_usd != null ? (
+              <>
+                <dt>Shard cash</dt>
+                <dd className={shortCash ? 'warn' : ''}>
+                  ${Number(pv.shard_cash_usd).toFixed(2)} on Kalshi shard {pv.exchange_index}
+                  {shortCash
+                    ? ' — this market settles there and the API spends only that shard\'s cash, so Kalshi will likely refuse the order'
+                    : ''}
+                </dd>
+              </>
+            ) : null}
+          </dl>
+        ) : null}
+
+        {pv && !pv.ok && pv.detail ? <p className="bs-luck-err">⚠ {pv.detail}</p> : null}
+        {err ? <p className="bs-luck-err">⚠ {err}</p> : null}
+        {result && !result.placed ? <p className="bs-luck-err">⚠ {result.detail || 'not placed'}</p> : null}
+        {result && result.placed && result.trade ? (
+          result.trade.status === 'unwatched' ? (
+            <p className="bs-luck-ok bs-sig-risky-ok">
+              RISKY-BUY PLACED — {result.trade.filled} {result.trade.side.toUpperCase()} at {cents(result.trade.entry_c)}
+              {' · '}no take-profit, no stop-loss — nothing watches it
+            </p>
+          ) : (
+            <p className="bs-luck-ok">
+              PLACED — {result.trade.filled} {result.trade.side.toUpperCase()} at {cents(result.trade.entry_c)}
+              {' · '}take-profit {cents(result.trade.tp_c)} · stop-loss {cents(result.trade.sl_c)} · watching
+            </p>
+          )
+        ) : null}
+
+        <div className="bs-luck-actions">
+          {signal ? (
+            <button type="button" className="bs-btn live" onClick={place} disabled={!canPlace}>
+              {busy === 'place' ? 'PLACING…' : `PLACE MARKET ORDER — ${count} ${sideWord}`}
+            </button>
+          ) : null}
+          {signal ? (
+            <button type="button" className="bs-btn risky" onClick={placeRisky} disabled={!canRisky}
+              title="buy at market whatever the bid, with no take-profit or stop-loss watching it">
+              RISKY-BUY
+            </button>
+          ) : null}
+          <button type="button" className="bs-btn" onClick={onClose} disabled={busy === 'place'}>
+            {result && result.placed ? 'DONE' : 'CANCEL'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const TRADE_STATUS = {
+  watching: '● watching', tp: 'take-profit', sl: 'stop-loss',
+  expired: 'held to settle', closed: 'closed elsewhere', unfilled: 'not filled',
+  unwatched: 'risky · no monitor',
+};
+
+function SignalTrades({ refreshKey }) {
+  const [trades, setTrades] = useState([]);
+  const load = useCallback(async () => {
+    try { setTrades((await vidura.signalTrades()).trades || []); } catch { /* the strips still work */ }
+  }, []);
+  useEffect(() => { load(); }, [load, refreshKey]);
+  const watching = trades.some((t) => t.status === 'watching');
+  useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) load(); }, watching ? 4000 : 30000);
+    return () => clearInterval(t);
+  }, [load, watching]);
+  if (!trades.length) return null;
+  return (
+    <div className="bs-commodities bs-sigtrades">
+      <div className="bs-commodities-hd">
+        <span className="lbl">⚡ SIGNAL TRADES</span>
+        <span className="note">Kalshi 15m · TP +20% · SL −40% · watched every 2s</span>
+      </div>
+      <div className="bs-commodities-rows">
+        {trades.slice(0, 8).map((t) => (
+          <div key={t.id} className={`bs-commrow bs-sigrow ${t.status}`} title={t.note || ''}>
+            <span className="tkr">{String(t.asset).toUpperCase().replace(/15$/, '')}</span>
+            <span className="tf">{SIG_TEXT[t.signal] || t.signal} → {String(t.side).toUpperCase()}</span>
+            <span className="last">{t.filled ? `${t.filled}@${cents(t.entry_c)}` : '—'}</span>
+            <span className="tf">TP {cents(t.tp_c)} · SL {cents(t.sl_c)}</span>
+            <span className={`st ${t.status}`}>
+              {TRADE_STATUS[t.status] || t.status}{t.exit_c != null ? ` ${cents(t.exit_c)}` : ''}
+            </span>
+            <span className="tf">{deskTime(t.opened_at)} CST</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -3057,6 +3590,7 @@ export default function BotStationSite() {
               {pvTotal !== null ? usd(pvTotal) : '—'}</span></div>
           <div className="bs-cell"><span className="k">Cash / Positions</span>
             <span className="v">{pv ? `${usd(pv.cash_usd)} · ${usd(pv.positions_usd)}` : '—'}</span></div>
+          <MoveMoneyCell />
           <div className="bs-cell"><span className="k">3H P&L</span>
             <span className="v" style={{ color: plColor(pnlWin?.h3) }}>{pnlWin ? usd(pnlWin.h3) : '—'}</span></div>
           <div className="bs-cell"><span className="k">6H P&L</span>
@@ -3196,8 +3730,7 @@ export default function BotStationSite() {
               operator={user?.username} onPick={setConsole} onLogs={setLogsFor}
               onSunDblClick={() => setLaunchAll(true)} />
             <div className="bs-strips">
-              <CommoditiesStrip />
-              <CryptoStrip />
+              <SignalStrips />
             </div>
           </div>
 

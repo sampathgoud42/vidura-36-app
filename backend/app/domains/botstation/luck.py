@@ -34,6 +34,47 @@ _RUNTIME = None
 _PREVIEWS: dict[str, dict] = {}
 PREVIEW_TTL_S = 900
 
+# The NO-side ticket's spread gate, when the operator sets none. It is built
+# from game props -- spreads, totals, both-teams-to-score, correct scores --
+# and those quote wider than a headline winner market: at the regular 3c gate
+# almost none of them is eligible, which is the board this ticket is for.
+NO_SIDE_SPREAD_C = 15
+
+
+def _game_key(market) -> tuple[str, str]:
+    """The game a market belongs to, across all of its series.
+
+    Kalshi lists one fixture's winner, spread, total and props as separate
+    events in separate series -- KXNCAAFGAME-26OCT03PSUNW and
+    KXNCAAFSPREAD-26OCT03PSUNW -- that share everything after the series:
+    the date and the two teams. That suffix is the game. The event-level
+    rule in the filters cannot see it, since every prop is its own event.
+    """
+    event = market.event_ticker or market.ticker
+    return ((market.sport or "").lower(),
+            event.split("-", 1)[1] if "-" in event else event)
+
+
+def _one_per_game(candidates) -> list:
+    """The strongest leg of each game: the highest NO price inside the band.
+
+    A NO-side ticket reads every prop of a fixture, and those are one bet
+    asked several ways -- "Ecuador do not win" already implies "Ecuador do
+    not win by two" -- so the exchange refuses the pair as duplicated legs,
+    and when it would not, both still lose together. One leg per game keeps
+    the ticket spread across games, the way the slips it is modelled on are.
+    """
+    best: dict[tuple[str, str], Any] = {}
+    for c in candidates:
+        key = _game_key(c.market)
+        held = best.get(key)
+        if held is None or ((c.market.implied_probability or 0.0),
+                            c.market.volume_usd) > (
+                (held.market.implied_probability or 0.0),
+                held.market.volume_usd):
+            best[key] = c
+    return list(best.values())
+
 
 def _runtime():
     """The parlay bot's own scanner, imported once."""
@@ -66,7 +107,8 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
             min_volume_usd: float = 0.0,
             max_spread_c: int | None = None,
             max_hours: int | None = None,
-            sports: list[str] | None = None, owner: str = "") -> dict:
+            sports: list[str] | None = None, no_side_only: bool = False,
+            owner: str = "") -> dict:
     """Choose the legs and describe them. Buys nothing, creates nothing.
 
     ``owner`` is the operator the preview is for: only they can place it.
@@ -84,18 +126,34 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
 
     None means the engine's own default, so there is one place either number
     is written down.
+
+    ``no_side_only`` builds the ticket from NO sides alone: every market --
+    headline winners and every game prop, spreads, totals, both teams to
+    score -- read as "this does not happen", and nothing backed outright.
+    Props are thin and quoted wide, so the volume floor does not apply and an
+    unset spread gate is NO_SIDE_SPREAD_C rather than the engine's 3c. Legs
+    are taken one per game and ranked on price, highest first: with volume
+    ignored, the price inside the operator's band is what is left to choose
+    on.
     """
     from app.domains.botstation.parley import engine, filters
     from app.domains.botstation.parley.models import ComboOrder
 
-    spread_c = (filters.MAX_SPREAD_C if max_spread_c is None
-                else max(0, int(max_spread_c)))
+    if max_spread_c is not None:
+        spread_c = max(0, int(max_spread_c))
+    else:
+        spread_c = NO_SIDE_SPREAD_C if no_side_only else filters.MAX_SPREAD_C
     hours = (filters.MAX_HOURS_TO_EXPIRY if max_hours is None
              else max(1, int(max_hours)))
 
     runtime = _runtime()
     markets, scores = runtime._load_markets(
         cred, sports or [], include_sub_events=True)
+    offered = markets
+    if no_side_only:
+        # Every market from its NO side and from nothing else. A market that
+        # cannot be bought on that side -- no quote there -- is not offered.
+        offered = [no for no in (m.as_no() for m in markets) if no is not None]
 
     frac = max(1, int(min_leg_c)) / 100.0
     # The CEILING was never offered, so it silently used the engine's 98%.
@@ -104,9 +162,12 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
     # any real chance -- it just shortens the payout.
     ceiling = min(99, max(int(min_leg_c) + 1, int(max_leg_c))) / 100.0
     candidates, _rejected = filters.eligible_legs(
-        markets, scores=scores, tracker=filters.PositionTracker(),
+        offered, scores=scores, tracker=filters.PositionTracker(),
         tennis_min=frac, other_min=frac, soccer_min=frac,
         max_leg=ceiling, max_spread_c=spread_c, max_hours=hours,
+        # The sides are already decided on a NO-side ticket. Offering soccer
+        # from both would put a YES leg back on it.
+        soccer_no_side=not no_side_only,
         # Tennis on the same terms as every other sport. This ticket sets one
         # bar for the whole board, and the score rule -- written for legs
         # bought as near-certainties at 90c -- was quietly deleting tennis
@@ -129,7 +190,7 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
     # legs and no reason, and the bot looks like it has a sport list.
     eligible_by_sport = _by_sport(candidates)
 
-    floor = max(0.0, float(min_volume_usd))
+    floor = 0.0 if no_side_only else max(0.0, float(min_volume_usd))
     if floor:
         candidates = [c for c in candidates if c.market.volume_usd >= floor]
     volume_by_sport = _by_sport(candidates)
@@ -140,8 +201,15 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
                 "detail": "no open collection can host these legs"}
     hosted_by_sport = _by_sport(candidates)
 
-    candidates.sort(key=lambda c: (c.market.volume_usd, c.market.volume),
-                    reverse=True)
+    if no_side_only:
+        # After the collection, not before: a game whose best prop the
+        # collection cannot host may still have a leg it can.
+        candidates = _one_per_game(candidates)
+        candidates.sort(key=lambda c: ((c.market.implied_probability or 0.0),
+                                       c.market.volume_usd), reverse=True)
+    else:
+        candidates.sort(key=lambda c: (c.market.volume_usd, c.market.volume),
+                        reverse=True)
     picked = candidates[:max(2, int(max_legs))]
     if len(picked) < int(min_legs):
         return {"ok": False, "scanned": len(markets),
@@ -165,6 +233,11 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         # they were shown and approved.
         "max_spread_c": spread_c,
         "max_hours": hours,
+        # The side of every leg, as shown. The re-check at placing reads the
+        # board afresh, and a fresh read is YES-side: without this a NO leg
+        # would be re-checked, and bought, as the opposite bet.
+        "sides": {c.ticker: c.market.side for c in picked},
+        "max_leg": ceiling,
         "owner": owner,
     }
     return {
@@ -179,6 +252,7 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         # rather than the operator having to remember what they typed.
         "max_spread_c": spread_c,
         "max_hours": hours,
+        "no_side_only": no_side_only,
         # The QUOTE, not just the price. price_c is the bid, and a bid on its
         # own cannot be judged: 89 is a different leg at 89/91 than it is at
         # 89/97, and the second is what a spread gate exists to keep out. The
@@ -277,11 +351,24 @@ def place(cred, token: str, *, tenant_slug: str = "",
 
     runtime = _runtime()
     markets, scores = runtime._load_markets(cred, [], include_sub_events=True)
+    # Each leg on the side it was shown on. The board reads YES-side, and a
+    # leg previewed as "Ecuador do not win" must be re-checked -- and bought
+    # -- as that, never as its opposite.
+    sides = held.get("sides") or {}
+    shown = []
+    for market in markets:
+        if market.ticker not in wanted:
+            continue
+        if sides.get(market.ticker) == "no":
+            market = market.as_no()
+            if market is None:                          # no longer quoted there
+                continue
+        shown.append(market)
     # The price bar is deliberately wide here: these legs already passed it
     # once. What is being re-checked is that they are still LIVE and still
     # quoted, not whether they would be chosen again.
     candidates, _ = filters.eligible_legs(
-        [m for m in markets if m.ticker in wanted], scores=scores,
+        shown, scores=scores,
         tracker=filters.PositionTracker(),
         tennis_min=0.01, other_min=0.01, soccer_min=0.01,
         # On the preview's own gates, not the engine's. A leg admitted by a
@@ -290,6 +377,10 @@ def place(cred, token: str, *, tenant_slug: str = "",
         # the re-check must not apply a rule the selection did not.
         max_spread_c=int(held.get("max_spread_c", filters.MAX_SPREAD_C)),
         max_hours=int(held.get("max_hours", filters.MAX_HOURS_TO_EXPIRY)),
+        max_leg=float(held.get("max_leg", filters.MAX_LEG_PROBABILITY)),
+        # The sides were fixed when the legs were shown; offering soccer from
+        # both again could swap a leg for its opposite.
+        soccer_no_side=False,
         tennis_needs_score=False, tennis_lock_c=None)
 
     if len(candidates) < int(min_legs):

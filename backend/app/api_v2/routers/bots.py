@@ -124,6 +124,174 @@ def crypto_signals(force: bool = Query(default=False),
                 "age_s": None}
 
 
+# ---- signal trades: a strip's CALL/PUT, bought on its 15-minute market ------
+#
+# Declared here, before every /{bot_key}/... route, so these literal paths are
+# matched first: /{bot_key}/trades would otherwise read "signal-trade" as a
+# bot. See domains/botstation/signal_trade.py for the trading rules.
+
+class SignalPreviewRequest(BaseModel):
+    asset: str = Field(min_length=1, max_length=16)
+    # "call" | "put". Anything else -- the strip's "mixed" -- is not a signal,
+    # and the preview says so rather than this model refusing it: the form
+    # opens on mixed precisely to show that answer.
+    signal: str | None = Field(default=None, max_length=8)
+    confirms: bool = False
+
+
+class SignalPlaceRequest(BaseModel):
+    asset: str = Field(min_length=1, max_length=16)
+    signal: str = Field(min_length=1, max_length=8)
+    confirms: bool = False
+    ticker: str = Field(min_length=3, max_length=64)
+    contracts: int = Field(default=10, ge=1, le=100)
+    # RISKY-BUY: bought whatever the bid, and nothing watches it.
+    risky: bool = False
+
+
+@router.post("/signal-trade/preview", operation_id="previewSignalTrade")
+@deps.tenant_scoped
+def signal_trade_preview(payload: SignalPreviewRequest,
+                         tenant: Tenant = Depends(deps.current_tenant),
+                         db: DbSession = Depends(deps.get_db)) -> dict:
+    """What a signal would buy, right now: the asset's current fifteen-minute
+    market, the side (CALL is YES, PUT is NO), its bid against the 35-70c
+    range, the take-profit and stop-loss, and the cash on the shard it settles
+    on. Sends nothing."""
+    from app.domains.botstation import signal_trade
+    from app.domains.botstation.venue import KalshiUnavailable
+
+    cred = _kalshi_cred(db, tenant)
+    try:
+        return signal_trade.preview(cred, asset=payload.asset,
+                                    signal=payload.signal,
+                                    confirms=payload.confirms)
+    except KalshiUnavailable as exc:
+        raise HTTPException(status_code=424, detail=str(exc)) from None
+    except Exception:                                   # noqa: BLE001
+        logger.info("signal trade preview: Kalshi unreachable for %s", tenant.slug)
+        raise HTTPException(status_code=424,
+                            detail="Kalshi could not be reached") from None
+
+
+@router.post("/signal-trade/place", operation_id="placeSignalTrade")
+@deps.tenant_scoped
+def signal_trade_place(payload: SignalPlaceRequest,
+                       idempotency_key: str | None = Header(
+                           default=None, alias="Idempotency-Key"),
+                       tenant: Tenant = Depends(deps.current_tenant),
+                       db: DbSession = Depends(deps.get_db),
+                       kr=Depends(deps.keyring)) -> dict:
+    """Buy the confirmed signal at market and start watching it. REAL MONEY.
+
+    Everything the form showed is checked again first -- the signal, the
+    quarter, the bid range, the time left -- and a refusal says which.
+
+    The Idempotency-Key is required and is the CONFIRMATION's: the form mints
+    one when it opens and sends it on every attempt, so a retry after a lost
+    response returns the first answer instead of buying twice."""
+    from app.domains.botstation import signal_trade
+    from app.domains.botstation.venue import KalshiUnavailable
+
+    key = (idempotency_key or "").strip()
+    if not 8 <= len(key) <= 64:
+        raise HTTPException(status_code=422,
+                            detail="an Idempotency-Key header (8-64 characters) "
+                                   "is required to place a signal trade")
+    cred = _kalshi_cred(db, tenant)
+    tradier = None
+    try:
+        # The same credential the commodity board reads with, so the signal
+        # re-checked here is the one the strip showed.
+        tradier = tenants.load_credential(db, tenant.id, "tradier_sandbox", kr)
+    except Exception:                                   # noqa: BLE001
+        pass
+    try:
+        return signal_trade.place(
+            db, cred, tenant=tenant, asset=payload.asset, signal=payload.signal,
+            ticker=payload.ticker, contracts=payload.contracts,
+            request_id=key, confirms=payload.confirms,
+            tradier_cred=tradier, risky=payload.risky)
+    except signal_trade.SignalTradeRefused as exc:
+        return {"placed": False, "detail": str(exc)}
+    except KalshiUnavailable as exc:
+        raise HTTPException(status_code=424, detail=str(exc)) from None
+
+
+@router.get("/signal-trades", operation_id="listSignalTrades")
+@deps.tenant_scoped
+def signal_trades(tenant: Tenant = Depends(deps.current_tenant),
+                  db: DbSession = Depends(deps.get_db)) -> dict:
+    """This operator's signal trades: the ones being watched, then the most
+    recent finished ones, with what each one did."""
+    from app.domains.botstation import signal_trade
+
+    return {"trades": signal_trade.trades(db, tenant)}
+
+
+# ---- Kalshi shards: where the account's cash sits, and moving it ------------
+#
+# Every 15-minute market settles on shard 2 and spends only that shard's cash.
+# These read the balances per shard and move cash between them, inside the
+# operator's own account. See domains/botstation/shards.py.
+
+class ShardTransferRequest(BaseModel):
+    usd: float = Field(gt=0, le=100_000)
+    source_shard: int = Field(default=0, ge=0, le=100)
+    destination_shard: int = Field(default=2, ge=0, le=100)
+
+
+@router.get("/kalshi/shards", operation_id="getKalshiShards")
+@deps.tenant_scoped
+def kalshi_shards(tenant: Tenant = Depends(deps.current_tenant),
+                  db: DbSession = Depends(deps.get_db)) -> dict:
+    """Cash on each of this operator's Kalshi exchange shards, and the latest
+    transfers between them (Kalshi's own included)."""
+    from app.domains.botstation import shards
+    from app.domains.botstation.venue import KalshiUnavailable
+
+    cred = _kalshi_cred(db, tenant)
+    try:
+        return shards.snapshot(cred)
+    except KalshiUnavailable as exc:
+        raise HTTPException(status_code=424, detail=str(exc)) from None
+    except Exception:                                   # noqa: BLE001
+        raise HTTPException(status_code=424,
+                            detail="Kalshi could not be reached") from None
+
+
+@router.post("/kalshi/shards/transfer", operation_id="transferKalshiShardCash")
+@deps.tenant_scoped
+def kalshi_shard_transfer(payload: ShardTransferRequest,
+                          idempotency_key: str | None = Header(
+                              default=None, alias="Idempotency-Key"),
+                          tenant: Tenant = Depends(deps.current_tenant),
+                          db: DbSession = Depends(deps.get_db)) -> dict:
+    """Move cash between two of this operator's Kalshi shards. REAL MONEY,
+    inside the operator's own account.
+
+    The Idempotency-Key is the confirmation's: the exchange's transfer takes
+    none of its own and is never retried, so this key is what keeps a repeated
+    confirmation from moving the money twice."""
+    from app.domains.botstation import shards
+    from app.domains.botstation.venue import KalshiUnavailable
+
+    key = (idempotency_key or "").strip()
+    if not 8 <= len(key) <= 64:
+        raise HTTPException(status_code=422,
+                            detail="an Idempotency-Key header (8-64 characters) "
+                                   "is required to move money")
+    cred = _kalshi_cred(db, tenant)
+    try:
+        return shards.transfer(cred, usd=payload.usd, source=payload.source_shard,
+                               destination=payload.destination_shard, key=key,
+                               owner=tenant.id)
+    except shards.TransferRefused as exc:
+        return {"moved": False, "detail": str(exc)}
+    except KalshiUnavailable as exc:
+        raise HTTPException(status_code=424, detail=str(exc)) from None
+
+
 @router.get("/{bot_key}/config", operation_id="getBotConfig")
 def bot_config(bot_key: str,
                _: Tenant = Depends(deps.current_tenant)) -> dict:
@@ -572,6 +740,9 @@ class LuckPreviewRequest(BaseModel):
     # default lives in one place rather than being restated here.
     max_spread_c: int | None = Field(default=None, ge=0, le=99)
     max_hours: int | None = Field(default=None, ge=1, le=720)
+    # Every leg from its NO side, game props included; the volume floor is
+    # ignored and an omitted spread gate is 15c rather than 3c.
+    no_side_only: bool = False
 
 
 class LuckPlaceRequest(BaseModel):
@@ -621,7 +792,8 @@ def luck_preview(payload: LuckPreviewRequest,
                                  max_leg_c=payload.max_leg_c,
                                  min_volume_usd=payload.min_volume_usd,
                                  max_spread_c=payload.max_spread_c,
-                                 max_hours=payload.max_hours),
+                                 max_hours=payload.max_hours,
+                                 no_side_only=payload.no_side_only),
             "status": "running"}
 
 

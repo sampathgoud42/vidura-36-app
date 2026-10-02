@@ -51,6 +51,7 @@ TENANT_READ_PATHS = [
     "/api/v1/tradier/flow",
     "/api/v1/tradier/commodities",
     "/api/v1/bots/crypto/signals",
+    "/api/v1/bots/kalshi/shards",
     "/api/v1/bots/statuses",
     "/api/v1/tradier/timesales",
     "/api/v1/desk36/dmi",
@@ -218,6 +219,40 @@ def test_flattening_closes_only_the_operators_own_positions(
     still_there = client.get(f"/api/v1/tradier/positions/{bobs}", headers=bob.headers)
     assert still_there.status_code == 200
     assert still_there.json()["status"] in ("pending", "open")
+
+
+def test_a_signal_trade_belongs_to_the_operator_who_placed_it(client, alice, bob):
+    """A signal trade is a live position and its exits. Bob's list does not
+    show Alice's, and Bob replaying Alice's confirmation key places nothing
+    against hers -- the key is looked up inside his own scope, so it is
+    simply a new request of his (refused here: there is no signal)."""
+    from datetime import datetime, timedelta, timezone
+
+    from app.domains.botstation.models import SignalTrade
+    from app.platform.db.repository import TenantRepository
+    from app.platform.db.session import session_scope
+
+    with session_scope() as db:
+        TenantRepository(db, alice.tenant_id).add(SignalTrade(
+            request_id="alice-confirmation-1", asset="btc", series="KXBTC15M",
+            ticker="KXBTC15M-26OCT021530-30", signal="call", side="yes",
+            contracts=10, filled=10, entry_c=52, tp_c=63, sl_c=31,
+            close_at=(datetime.now(timezone.utc).replace(tzinfo=None)
+                      + timedelta(minutes=10)),
+            status="watching"))
+
+    mine = client.get("/api/v1/bots/signal-trades", headers=alice.headers).json()
+    theirs = client.get("/api/v1/bots/signal-trades", headers=bob.headers).json()
+    assert [t["ticker"] for t in mine["trades"]] == ["KXBTC15M-26OCT021530-30"]
+    assert theirs["trades"] == []
+
+    replay = client.post(
+        "/api/v1/bots/signal-trade/place",
+        json={"asset": "btc", "signal": "mixed", "ticker": "KXBTC15M-26OCT021530-30"},
+        headers={**bob.headers, "Idempotency-Key": "alice-confirmation-1"})
+    assert replay.status_code in (200, 424)
+    assert "KXBTC15M-26OCT021530-30" not in str(
+        client.get("/api/v1/bots/signal-trades", headers=bob.headers).json())
 
 
 def test_a_luck_job_and_preview_belong_to_the_operator_who_made_them(client, alice, bob):
@@ -466,6 +501,16 @@ COVERED_BY_NAMED_TESTS = {
         "test_a_luck_job_and_preview_belong_to_the_operator_who_made_them",
     "/api/v1/bots/luck/job/{job_id}":
         "test_a_luck_job_and_preview_belong_to_the_operator_who_made_them",
+    "/api/v1/bots/signal-trade/place":
+        "test_a_signal_trade_belongs_to_the_operator_who_placed_it",
+    "/api/v1/bots/signal-trades":
+        "test_a_signal_trade_belongs_to_the_operator_who_placed_it",
+    # A quote for the asset's current market: read through the operator's own
+    # key, stored nowhere, and naming nobody.
+    "/api/v1/bots/signal-trade/preview": "no tenant-addressable identifier",
+    # Cash moved inside the CALLER's own Kalshi account, through the caller's
+    # own key; a shard index names no one. The read beside it is in the sweep.
+    "/api/v1/bots/kalshi/shards/transfer": "no tenant-addressable identifier",
 
     # These carry NO tenant-addressable identifier. There is no parameter to
     # point at another operator, so the session is the only thing that can
