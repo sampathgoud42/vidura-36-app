@@ -1906,9 +1906,11 @@ function SignalTradeSheet({ row, label, accent, onClose, onPlaced }) {
               </button>
             </dd>
             <dt>Take profit</dt>
-            <dd><b>+{pv.tp_pct}%</b><span className="dim"> · ≈ {cents(pv.tp_c)} on the price paid</span></dd>
+            {/* Estimates from the ask. The real targets are set once filled,
+                from the order's total cost: its fills plus the fees. */}
+            <dd><b>+{pv.tp_pct}%</b><span className="dim"> · ≈ {cents(pv.tp_c)} · on the total cost, fees in</span></dd>
             <dt>Stop loss</dt>
-            <dd><b>−{pv.sl_pct}%</b><span className="dim"> · ≈ {cents(pv.sl_c)} on the price paid</span></dd>
+            <dd><b>−{pv.sl_pct}%</b><span className="dim"> · ≈ {cents(pv.sl_c)} · on the total cost, fees in</span></dd>
             <dt>Contracts</dt>
             <dd>
               <input className="bs-input" type="number" min="1" max={pv.max_contracts || 100}
@@ -1938,12 +1940,12 @@ function SignalTradeSheet({ row, label, accent, onClose, onPlaced }) {
         {result && result.placed && result.trade ? (
           result.trade.status === 'unwatched' ? (
             <p className="bs-luck-ok bs-sig-risky-ok">
-              RISKY-BUY PLACED — {result.trade.filled} {result.trade.side.toUpperCase()} at {cents(result.trade.entry_c)}
+              RISKY-BUY PLACED — {result.trade.filled} {result.trade.side.toUpperCase()} at {cents(result.trade.entry_c)} each, fees in
               {' · '}no take-profit, no stop-loss — nothing watches it
             </p>
           ) : (
             <p className="bs-luck-ok">
-              PLACED — {result.trade.filled} {result.trade.side.toUpperCase()} at {cents(result.trade.entry_c)}
+              PLACED — {result.trade.filled} {result.trade.side.toUpperCase()} at {cents(result.trade.entry_c)} each, fees in
               {' · '}take-profit {cents(result.trade.tp_c)} · stop-loss {cents(result.trade.sl_c)} · watching
             </p>
           )

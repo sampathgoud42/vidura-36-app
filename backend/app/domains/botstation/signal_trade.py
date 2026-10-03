@@ -229,18 +229,67 @@ def filled_count(order: dict | None) -> float:
     return 0.0
 
 
-def _avg_price_c(order: dict, filled: float, fallback: float) -> float:
-    """What the fill averaged, in cents, from the exchange's own cost figure;
-    the limit when it does not say."""
-    body = order.get("order") if isinstance(order.get("order"), dict) else order
-    for key in ("taker_fill_cost_dollars", "fill_cost_dollars"):
+def _order_id(order) -> str:
+    body = order.get("order") if isinstance((order or {}).get("order"), dict) else (order or {})
+    return str(body.get("order_id") or "")
+
+
+def order_costs(client, order_id: str) -> dict | None:
+    """What an order really cost, from the exchange's own record of it.
+
+    The V2 create response does not carry it -- an order id, a fill count
+    and at most an average price -- which is how every signal trade came to
+    be booked at its LIMIT: SOL bought at 51c and 43c was recorded at 54c and
+    44c, and its take-profit and stop-loss were measured from those. The
+    order's record has the fill cost and the fees, in dollars.
+
+    The cost is of the contracts the order ACQUIRED. For a buy that is the
+    side bought; for a sale it is the OTHER side -- on one book, selling NO
+    is buying YES -- so a sale's price on the side sold is 100 less the cost
+    per contract. None when the record cannot be read or shows no fill.
+    """
+    if not order_id:
+        return None
+    try:
+        d = client.request("GET", f"/portfolio/orders/{order_id}")
+    except Exception as exc:                            # noqa: BLE001
+        logger.warning("signal trade: order %s could not be read back (%s)",
+                       order_id, type(exc).__name__)
+        return None
+    body = d.get("order") if isinstance(d.get("order"), dict) else d
+
+    def num(key: str) -> float:
         try:
-            cost = float(body.get(key) or 0)
+            return float(body.get(key) or 0)
         except (TypeError, ValueError):
-            cost = 0.0
-        if cost > 0 and filled > 0:
-            return round(cost / filled * 100.0, 2)
-    return float(fallback)
+            return 0.0
+
+    filled = num("fill_count_fp") or num("fill_count")
+    cost = num("taker_fill_cost_dollars") + num("maker_fill_cost_dollars")
+    if filled <= 0 or cost <= 0:
+        return None
+    return {"filled": filled, "cost_usd": cost,
+            "fees_usd": num("taker_fees_dollars") + num("maker_fees_dollars")}
+
+
+def _response_fill(order: dict, side: str, limit_c: float) -> tuple[float, float]:
+    """(price, fee) per contract in cents on ``side``, from the create
+    response alone -- only when the order's record could not be read.
+
+    Its average is a price on the YES book, as every V2 order price is: a NO
+    side's is 100 less. With no average at all, the limit -- a buy can only
+    have paid less, a sale only have got more.
+    """
+    body = order.get("order") if isinstance(order.get("order"), dict) else order
+    try:
+        book_c = float(body.get("average_fill_price")) * 100.0
+    except (TypeError, ValueError):
+        return float(limit_c), 0.0
+    try:
+        fee_c = float(body.get("average_fee_paid") or 0) * 100.0
+    except (TypeError, ValueError):
+        fee_c = 0.0
+    return round(book_c if side == "yes" else 100.0 - book_c, 2), round(fee_c, 4)
 
 
 def _refusal(exc: Exception) -> str:
@@ -443,16 +492,19 @@ def place(db, cred, *, tenant, asset: str, signal: str | None, ticker: str,
             logger.warning("signal trade %s %s x%d refused: %s",
                            side, ticker, count, reason)
             return {"placed": False, "detail": reason}
+        # Read back while the connection is open: the response says how
+        # many filled, not what they cost.
+        costs = (order_costs(client, _order_id(order))
+                 if filled_count(order) > 0 else None)
     finally:
         client.close()
 
-    filled = filled_count(order)
+    filled = costs["filled"] if costs else filled_count(order)
     row = SignalTrade(
         request_id=request_id, asset=(asset or "").strip().lower(),
         series=spec.series, ticker=ticker, signal=sig, confirmed=bool(confirms),
         side=side, contracts=float(count), filled=filled,
-        close_at=_naive_utc(close),
-        order_id=str((order.get("order_id") if isinstance(order, dict) else "") or ""),
+        close_at=_naive_utc(close), order_id=_order_id(order),
     )
     if filled <= 0:
         row.status = "unfilled"
@@ -463,19 +515,32 @@ def place(db, cred, *, tenant, asset: str, signal: str | None, ticker: str,
         db.commit()
         return {"placed": False, "trade": serialize(row), "detail": row.note}
 
-    entry = _avg_price_c(order, filled, limit_c)
+    # TOTAL COST -- the fills plus the fees on them, the figure Kalshi's own
+    # position card shows as COST -- is what the take-profit and the
+    # stop-loss are measured from, per contract.
+    if costs:
+        fill_usd, fees_usd = costs["cost_usd"], costs["fees_usd"]
+    else:
+        price_c, fee_c = _response_fill(order, side, limit_c)
+        fill_usd, fees_usd = filled * price_c / 100.0, filled * fee_c / 100.0
+    paid_usd = fill_usd + fees_usd
+    entry = round(paid_usd / filled * 100.0, 2)
     row.entry_c = entry
+    bought = (f"bought {filled:g} {side.upper()} for ${paid_usd:.2f} "
+              f"({entry:g}c each, fees included)"
+              + ("" if costs else " — the order could not be read back, "
+                                  "so the cost is estimated"))
     if risky:
         row.status = "unwatched"
-        row.note = (f"RISKY-BUY: bought {filled:g} {side.upper()} at {entry:g}c "
-                    f"(bid was {'none' if bid is None else f'{bid:g}c'}); no "
+        row.note = (f"RISKY-BUY: {bought}, bid was "
+                    f"{'none' if bid is None else f'{bid:g}c'}; no "
                     "take-profit or stop-loss watches it")
     else:
         row.tp_c = tp_price(entry)
         row.sl_c = sl_price(entry)
         row.status = "watching"
-        row.note = (f"bought {filled:g} {side.upper()} at {entry:g}c; "
-                    f"take-profit {row.tp_c:g}c, stop-loss {row.sl_c:g}c")
+        row.note = (f"{bought}; take-profit {row.tp_c:g}c, "
+                    f"stop-loss {row.sl_c:g}c")
     repo.add(row)
     db.commit()
 
@@ -487,9 +552,11 @@ def place(db, cred, *, tenant, asset: str, signal: str | None, ticker: str,
         entries.record_entry(
             tenant_slug=tenant.slug, bot_key=BOT_KEY, bot_version="v1",
             ticker=ticker, external_id=row.order_id or f"sig15-{request_id}",
-            contracts=filled, entry_price_c=entry,
+            contracts=filled,
+            entry_price_c=round(fill_usd / filled * 100.0, 2),
             market_title=spec.series, outcome=side.upper(),
-            entry_usd=round(filled * entry / 100.0, 4), is_live=True,
+            entry_usd=round(fill_usd, 4), fees_usd=round(fees_usd, 4),
+            is_live=True,
             raw={"signal_trade_id": row.id, "signal": sig, "tp_c": row.tp_c,
                  "sl_c": row.sl_c, "risky": bool(risky),
                  "close_at": serialize(row)["close_at"]})
@@ -528,16 +595,32 @@ def _exit(client, row, *, reason: str, limit_c: float, have: float) -> None:
         logger.info("signal trade %s: %s exit at %sc found nobody; retrying",
                     row.id, reason, int(limit_c))
         return
-    price = _avg_price_c(order, sold, limit_c)
+    # What the sale actually fetched, not its limit: an immediate-or-cancel
+    # sell takes the best bid there is, which is often well above it.
+    costs = order_costs(client, _order_id(order))
+    if costs:
+        sold = costs["filled"]
+        price_c = 100.0 - costs["cost_usd"] / sold * 100.0
+        fee_c = costs["fees_usd"] / sold * 100.0
+    else:
+        price_c, fee_c = _response_fill(order, row.side, limit_c)
+    # Kept AFTER fees, as the entry is kept with them, so the two compare as
+    # Kalshi's card does: what came back against what it cost.
+    net_c = price_c - fee_c
     prior = row.exited or 0.0
-    row.exit_c = round(((row.exit_c or 0.0) * prior + price * sold) / (prior + sold), 2)
+    row.exit_c = round(((row.exit_c or 0.0) * prior + net_c * sold) / (prior + sold), 2)
     row.exited = prior + sold
     if sold + 1e-9 >= have:
         row.status = reason
         row.closed_at = _naive_utc(_now())
         word = "take-profit" if reason == "tp" else "stop-loss"
-        row.note = f"{word}: sold {row.exited:g} at {row.exit_c:g}c (bought at {row.entry_c:g}c)"
-    logger.info("signal trade %s: %s sold %g at %gc", row.id, reason, sold, price)
+        got = row.exit_c * row.exited / 100.0
+        paid = (row.entry_c or 0.0) * row.exited / 100.0
+        row.note = (f"{word}: sold {row.exited:g} for ${got:.2f} after fees "
+                    f"({row.exit_c:g}c each) against ${paid:.2f} paid: "
+                    f"{'+' if got >= paid else '-'}${abs(got - paid):.2f}")
+    logger.info("signal trade %s: %s sold %g at %gc (%gc after fees)",
+                row.id, reason, sold, round(price_c, 2), round(net_c, 2))
 
 
 # A position read as flat is not believed at once. The portfolio endpoint can
