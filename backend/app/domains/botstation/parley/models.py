@@ -65,6 +65,11 @@ class MarketState(BaseModel):
     # is it, is it inside the band -- and those answers differ by side. One
     # field here means none of them has to learn about sides.
     side: Literal["yes", "no"] = "yes"
+    # A headline match-winner market ("Alcaraz to beat Sinner") as the
+    # scanner's own detectors judge it -- not a set, a total, an exact score
+    # or a tournament outright. Set only by the scanner, which has the raw
+    # market those detectors read; False everywhere else.
+    headline: bool = False
     volume: int = 0
     # Volume in DOLLARS, which is what "biggest market" means to an operator.
     # Contracts alone rank a penny market above a dollar one for the same
@@ -88,6 +93,11 @@ class MarketState(BaseModel):
     # September (when the race does). It is the close that frees the capital,
     # so it is the close this horizon is measured against.
     closes_at: str | None = None
+    # When Kalshi expects it to settle. Kept beside the close for the one
+    # market where the close says nothing about when the money comes back: a
+    # tennis match closes a fortnight out -- the latest date, for a match that
+    # is rained off -- and settles when it ends, hours away.
+    settles_at: str | None = None
 
     @field_validator("ticker", "event_ticker", "outcome", "title", mode="before")
     @classmethod
@@ -202,6 +212,8 @@ class MarketState(BaseModel):
             closes_at=(raw.get("close_ts") or raw.get("close_time")
                        or raw.get("expected_expiration_ts")
                        or raw.get("expected_expiration_time")),
+            settles_at=(raw.get("expected_expiration_ts")
+                        or raw.get("expected_expiration_time")),
         )
 
 

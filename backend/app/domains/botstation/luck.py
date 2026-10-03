@@ -21,9 +21,13 @@ from __future__ import annotations
 import importlib.util
 import json
 import logging
+import os
+import subprocess
 import sys
+import threading
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -137,6 +141,194 @@ def sports_in_play(cred) -> list[dict]:
     return found
 
 
+# ---- tennis ---------------------------------------------------------------
+#
+# A tennis leg on this ticket is the match FAVOURITE's, and only when it is
+#   above TENNIS_ANY_C, or
+#   above TENNIS_LEADING_C while ahead on the scoreboard.
+# That replaces every tennis gate the regular engine has (the price lock, a
+# set won with a lead in the next). The gates that are not about tennis --
+# the leg price band, the spread, the horizon, the volume floor, Kalshi's
+# own combination rules -- apply to it like any other leg.
+TENNIS_ANY_C = 85
+TENNIS_LEADING_C = 75
+
+# Who the favourite is comes from the ATP/WTA/ITF rankings first -- the
+# sports bot's own rule set (predict_v3.determine_favorite) -- and the price
+# only when the rankings cannot say. They are scraped again when older than
+# this, while the board is being read.
+RANKINGS_MAX_AGE_S = 5 * 24 * 3600
+RANKINGS_SCRAPE_TIMEOUT_S = 300
+_RANKINGS_LOCK = threading.Lock()
+
+
+def _tennis_lib():
+    """The runtime's tennis package: the rankings CSV and the favourite rules
+    the sports bot already plays by -- shared, not copied."""
+    from app.core.config import get_settings
+
+    root = get_settings().source_repo / "prediction-trade" / "sports"
+    if str(root) not in sys.path:
+        sys.path.insert(0, str(root))
+    from tennis import predict_v3, tennis_live_score
+    return tennis_live_score, predict_v3
+
+
+def _rankings_age_s() -> float:
+    try:
+        live_score, _ = _tennis_lib()
+        return time.time() - live_score._rankings_csv_path().stat().st_mtime
+    except Exception:                                   # noqa: BLE001
+        return float("inf")
+
+
+def _rankings_at() -> str | None:
+    """When the rankings CSV was written, for the sheet to say."""
+    try:
+        live_score, _ = _tennis_lib()
+        stamp = live_score._rankings_csv_path().stat().st_mtime
+    except Exception:                                   # noqa: BLE001
+        return None
+    return datetime.fromtimestamp(stamp, tz=timezone.utc).isoformat()
+
+
+def refresh_rankings_if_stale(max_age_s: float = RANKINGS_MAX_AGE_S) -> str:
+    """Scrape the ATP/WTA/ITF rankings again when the CSV is older than
+    ``max_age_s``: the runtime's own scraper, run as a script with this
+    Python (ATP/WTA from ESPN's JSON, ITF from the ITF's -- no browser).
+    One scrape at a time: a second caller waits for it."""
+    if _rankings_age_s() < max_age_s:
+        return "fresh"
+    if not _RANKINGS_LOCK.acquire(blocking=False):
+        with _RANKINGS_LOCK:
+            return "refreshed by another scan"
+    try:
+        if _rankings_age_s() < max_age_s:
+            return "fresh"
+        live_score, _ = _tennis_lib()
+        tennis_dir = os.path.dirname(os.path.abspath(live_score.__file__))
+        started = time.time()
+        try:
+            proc = subprocess.run(
+                [sys.executable, os.path.join("web", "sofascore_rankings.py")],
+                cwd=tennis_dir, capture_output=True, text=True,
+                encoding="utf-8", errors="replace",
+                timeout=RANKINGS_SCRAPE_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            logger.warning("luck: rankings scrape timed out after %ss",
+                           RANKINGS_SCRAPE_TIMEOUT_S)
+            return "timed out"
+        except OSError as exc:
+            logger.warning("luck: rankings scrape could not start: %s", exc)
+            return "failed"
+        tail = " | ".join((proc.stdout or "").strip().splitlines()[-3:])
+        logger.info("luck: rankings scrape exited %s in %.0fs: %s",
+                    proc.returncode, time.time() - started, tail)
+        return "refreshed" if proc.returncode == 0 else "failed"
+    finally:
+        _RANKINGS_LOCK.release()
+
+
+def _ranked(live_score, name: str, ranks: dict, tours: dict) -> tuple[int | None, str | None]:
+    """A player's rank and tour: the exact name, else the ONE ranked player
+    with the same surname and first initial.
+
+    Not the shared rank_for, which takes any word of three letters or more
+    the two names have in common: "Sarah Van Emst" came back as Botic Van De
+    Zandschulp, ATP 41 -- enough to make someone the favourite by ranking
+    who is not.
+    """
+    key = live_score._norm(name)
+    if key not in ranks:
+        parts = key.replace("-", " ").split()
+        if len(parts) < 2:
+            return None, None
+        hits = [k for k in ranks
+                if len(k.split()) >= 2 and k.replace("-", " ").split()[-1] == parts[-1]
+                and k[:1] == parts[0][:1]]
+        if len(hits) != 1:
+            return None, None
+        key = hits[0]
+    return ranks.get(key), tours.get(key)
+
+
+def _tennis_favourites(markets) -> dict[str, str]:
+    """Each match's favourite: ticker -> how it was decided, "ranking" or
+    "price". Match-winner markets only, two players to an event."""
+    from app.domains.botstation.parley import filters
+
+    pairs: dict[str, list] = {}
+    for m in markets:
+        if filters.is_tennis(m.sport) and m.headline and m.side == "yes":
+            pairs.setdefault(m.event_ticker or m.ticker, []).append(m)
+    if not pairs:
+        return {}
+    try:
+        live_score, predict = _tennis_lib()
+        ranks = live_score.load_rankings_csv()
+        tours = live_score.load_rank_tours()
+    except Exception as exc:                            # noqa: BLE001
+        logger.warning("luck: tennis rankings unavailable (%s); favourites "
+                       "go by price", type(exc).__name__)
+        live_score = predict = None
+        ranks, tours = {}, {}
+    favourites: dict[str, str] = {}
+    for pair in pairs.values():
+        if len(pair) != 2:
+            continue
+        a, b = pair
+        side = None
+        if predict is not None:
+            names = (a.outcome or "", b.outcome or "")
+            (rank_a, tour_a), (rank_b, tour_b) = (
+                _ranked(live_score, n, ranks, tours) for n in names)
+            # No original odds: the scan sees only live prices, and handing
+            # those in would let the score, not the players, pick the
+            # favourite. The rankings decide; the price only when they cannot.
+            side = predict.determine_favorite(
+                names, {}, (rank_a, rank_b), rank_tours=(tour_a, tour_b))
+        if side in ("A", "B"):
+            favourites[(a if side == "A" else b).ticker] = "ranking"
+        elif (a.bid_c or 0) != (b.bid_c or 0):
+            favourites[max(pair, key=lambda m: m.bid_c or 0).ticker] = "price"
+    return favourites
+
+
+def _leading(score) -> bool:
+    """Ahead on the scoreboard: more sets, or level on sets and more games
+    in the set being played. A finished match or one not in play is not led."""
+    if score.completed or not score.live:
+        return False
+    if score.sets_won != score.opponent_sets_won:
+        return score.sets_won > score.opponent_sets_won
+    current = score.current_set_index
+    return current >= 0 and score.lead_in(current) > 0
+
+
+def _tennis_rule(favourites: dict[str, str]):
+    """The favourite's match-winner leg above TENNIS_ANY_C, or above
+    TENNIS_LEADING_C while leading. For filters.eligible_legs."""
+    def rule(market, score) -> tuple[bool, str]:
+        if not market.headline or market.side != "yes":
+            return False, "tennis: only a match winner's YES side is taken"
+        how = favourites.get(market.ticker)
+        if how is None:
+            return False, "tennis: not the favourite"
+        bid = market.bid_c or 0
+        if bid > TENNIS_ANY_C:
+            return True, f"tennis favourite by {how} at {bid}c"
+        if bid <= TENNIS_LEADING_C:
+            return False, (f"tennis favourite at {bid}c, not above "
+                           f"{TENNIS_LEADING_C}c")
+        if score is None:
+            return False, (f"tennis favourite at {bid}c with no live score "
+                           "to show a lead")
+        if not _leading(score):
+            return False, f"tennis favourite at {bid}c is not ahead"
+        return True, f"tennis favourite by {how}, leading, at {bid}c"
+    return rule
+
+
 def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
             min_leg_c: int = 60, max_leg_c: int = 98,
             min_volume_usd: float = 0.0,
@@ -176,6 +368,10 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
 
     ``sports`` narrows the scan to those sports, as `sports_in_play` names
     them. Empty or omitted is every sport.
+
+    A tennis leg is a match favourite's -- by the ATP/WTA/ITF rankings, else
+    by price -- above TENNIS_ANY_C, or above TENNIS_LEADING_C while leading;
+    on a NO-side ticket too, as YES, the only side Kalshi takes tennis on.
     """
     from app.domains.botstation.parley import engine, filters
     from app.domains.botstation.parley.models import ComboOrder
@@ -189,14 +385,31 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
     # ticket a quicker scan. Empty is every sport, one that opened since the
     # desk listed them included.
     wanted = sorted({s.strip().lower() for s in (sports or []) if s and s.strip()})
+    # Tennis favourites go by the rankings, scraped again -- alongside the
+    # board scan rather than before it -- when they are over five days old.
+    tennis_in = not wanted or "tennis" in wanted
+    scrape = None
+    if tennis_in and _rankings_age_s() >= RANKINGS_MAX_AGE_S:
+        scrape = threading.Thread(target=refresh_rankings_if_stale,
+                                  name="luck-rankings", daemon=True)
+        scrape.start()
     runtime = _runtime()
     markets, scores = runtime._load_markets(
-        cred, wanted, include_sub_events=True)
+        cred, wanted, include_sub_events=True,
+        tennis_score_floor=TENNIS_LEADING_C / 100.0)
+    if scrape is not None:
+        scrape.join(timeout=RANKINGS_SCRAPE_TIMEOUT_S)
+    favourites = _tennis_favourites(markets) if tennis_in else {}
     offered = markets
     if no_side_only:
         # Every market from its NO side and from nothing else. A market that
         # cannot be bought on that side -- no quote there -- is not offered.
-        offered = [no for no in (m.as_no() for m in markets) if no is not None]
+        # Tennis is the exception: Kalshi takes its matches on the YES side
+        # only, and a favourite's YES is the same bet as NOT the other player.
+        offered = [no for no in (m.as_no() for m in markets
+                                 if not filters.is_tennis(m.sport))
+                   if no is not None]
+        offered += [m for m in markets if filters.is_tennis(m.sport)]
 
     frac = max(1, int(min_leg_c)) / 100.0
     # The CEILING was never offered, so it silently used the engine's 98%.
@@ -211,18 +424,13 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         # The sides are already decided on a NO-side ticket. Offering soccer
         # from both would put a YES leg back on it.
         soccer_no_side=not no_side_only,
-        # Tennis on the same terms as every other sport. This ticket sets one
-        # bar for the whole board, and the score rule -- written for legs
-        # bought as near-certainties at 90c -- was quietly deleting tennis
-        # from it: scores are only ever fetched for legs above 90%, so a
-        # tennis leg at the operator's own 60c bar was refused for lacking a
-        # score nobody had gone to look for.
+        # Tennis by this ticket's own rule -- the favourite, above 85c, or
+        # above 75c while leading -- in place of every tennis gate the
+        # regular engine has: the price lock, the need for a score, the
+        # set-won-and-a-lead conditions. The band, spread and horizon above
+        # still apply to it.
+        tennis_rule=_tennis_rule(favourites),
         tennis_needs_score=False,
-        # And no price waiver here. The regular engine waives its gates for a
-        # tennis leg above 93c because at that price the quote has settled the
-        # question; this ticket is built from long odds, and a waiver that
-        # also waived the CEILING would put 99c legs in a combo bought for
-        # its payout.
         tennis_lock_c=None)
 
     # Counted at every stage, by sport. Nothing here filters ON sport -- the
@@ -312,6 +520,7 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         "max_hours": hours,
         "no_side_only": no_side_only,
         "sports": wanted,
+        "tennis_rankings_at": _rankings_at() if tennis_in else None,
         # Kalshi accepted these exact legs as one combination. Legs can be
         # dropped on the sheet and the rest still stand: a side rule, an
         # event limit or a duplicate pair cannot be broken by taking a leg
@@ -510,6 +719,9 @@ def place(cred, token: str, *, tenant_slug: str = "",
         # The sides were fixed when the legs were shown; offering soccer from
         # both again could swap a leg for its opposite.
         soccer_no_side=False,
+        # A tennis leg was judged by this ticket's own rule when it was shown;
+        # the regular engine's tennis gates must not refuse it now.
+        tennis_rule=lambda market, score: (True, "previewed"),
         tennis_needs_score=False, tennis_lock_c=None)
 
     if len(candidates) < int(min_legs):

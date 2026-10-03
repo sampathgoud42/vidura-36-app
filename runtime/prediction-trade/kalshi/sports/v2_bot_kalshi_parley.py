@@ -493,7 +493,8 @@ def _regular_tickers(cred) -> set[str]:
         return set()
 
 
-def _load_markets(cred, wanted: list[str], include_sub_events: bool = False):
+def _load_markets(cred, wanted: list[str], include_sub_events: bool = False,
+                  tennis_score_floor: float | None = None):
     """Every LIVE sports market, and the score for every live tennis one.
 
     Kept in this file rather than the engine because it is I/O shape, not a
@@ -579,6 +580,8 @@ def _load_markets(cred, wanted: list[str], include_sub_events: bool = False):
                             continue
 
                     state = MarketState.from_kalshi(raw, sport=sport, live=True)
+                    state.headline = bool(_is_main_match(enriched)
+                                          and _is_head_to_head(enriched))
                     # Dollar turnover, for ranking. volume_fp is contracts;
                     # multiplying by the last traded price is what makes a
                     # 90c market and a 5c market comparable.
@@ -600,11 +603,13 @@ def _load_markets(cred, wanted: list[str], include_sub_events: bool = False):
 
         # Scores ONLY for tennis legs that already clear the price bar. Each is
         # three more HTTP calls, and asking about a match whose price has
-        # already disqualified it spends them for nothing.
+        # already disqualified it spends them for nothing. A caller whose bar
+        # is lower -- the luck ticket takes a LEADING favourite from 75c --
+        # says so, or its legs would have no score to lead with.
         for state in markets:
             if not filters.is_tennis(state.sport):
                 continue
-            ok, _why = filters.meets_odds_floor(state)
+            ok, _why = filters.meets_odds_floor(state, tennis_score_floor)
             if not ok:
                 continue
             score = tennis.state_for(fetch, state.ticker, state.outcome)

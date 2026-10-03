@@ -1367,6 +1367,10 @@ function LuckPanel() {
               {/* The server had Kalshi accept these exact legs before the
                   sheet opened; dropping any of them cannot undo that. */}
               {preview.confirmed ? ' \u00b7 Kalshi accepted this combination' : null}
+              {preview.tennis_rankings_at && preview.legs.some((l) => l.sport === 'tennis')
+                ? ` \u00b7 tennis favourites by the rankings of ${new Date(preview.tennis_rankings_at)
+                  .toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Chicago' })}`
+                : null}
               {' \u00b7 '}buys at market, spending
               ${n(form.min_usd, 5).toFixed(2)}–${n(form.max_usd, 7.5).toFixed(2)}
             </p>
@@ -1481,6 +1485,10 @@ function LuckPanel() {
                   takes, and the one hosting the most legs is the one used.
                   Some events take YES legs only (tennis, NBA and MLB among
                   them), so a NO-side ticket loses those here.
+                  Tennis is the match favourite alone — by ATP/WTA/ITF
+                  ranking, else by price — above 85c, or above 75c while
+                  leading on the scoreboard, and on YES even on a NO-side
+                  ticket; its horizon is when the match settles.
                 </p>
               </details>
             )}
