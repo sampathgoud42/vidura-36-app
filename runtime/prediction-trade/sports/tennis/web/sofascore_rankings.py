@@ -163,17 +163,71 @@ def parse_itf_json(data: dict) -> list[dict]:
     return rows
 
 
+# The ITF API serves at most this many per request: ask for more and it falls
+# back to its default page of TEN (10/03: take=500 returned 10 players, and
+# the CSV that replaced a 1,000-row one held 20). So it is read in pages.
+ITF_PAGE = 100
+
+
 def fetch_itf_circuit(circuit: str, referer: str, take: int) -> list[dict]:
     """Fetch one ITF circuit (MT men / WT women) singles rankings via the public
-    JSON API. Synchronous (fast, no browser); raises on HTTP/JSON failure."""
-    url = (f"{ITF_API}?circuitCode={circuit}&matchTypeCode=S"
-           f"&take={take}&skip=0&isOrderAscending=true")
-    req = urllib.request.Request(url, headers={
-        "User-Agent": UA, "Accept": "application/json",
-        "X-Requested-With": "XMLHttpRequest", "Referer": referer})
-    with urllib.request.urlopen(req, timeout=ITF_TIMEOUT_S) as resp:
-        data = json.loads(resp.read().decode("utf-8", errors="replace"))
-    return parse_itf_json(data)
+    JSON API, ``take`` players in pages of ITF_PAGE. Synchronous (fast, no
+    browser); raises on HTTP/JSON failure."""
+    rows: list[dict] = []
+    skip = 0
+    while len(rows) < take:
+        size = min(ITF_PAGE, take - len(rows))
+        url = (f"{ITF_API}?circuitCode={circuit}&matchTypeCode=S"
+               f"&take={size}&skip={skip}&isOrderAscending=true")
+        req = urllib.request.Request(url, headers={
+            "User-Agent": UA, "Accept": "application/json",
+            "X-Requested-With": "XMLHttpRequest", "Referer": referer})
+        with urllib.request.urlopen(req, timeout=ITF_TIMEOUT_S) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+        page = data.get("items") or []
+        rows.extend(parse_itf_json(data))
+        skip += len(page)
+        if len(page) < size or skip >= int(data.get("totalItems") or 0):
+            break
+    return rows
+
+
+# ── ATP / WTA from ESPN's public rankings JSON ────────────────────────────────
+# SofaScore answers automated visits with a bot challenge now (10/03: no
+# embedded rankings in the page, and its API 403s with "challenge" even from
+# inside the page), so ATP and WTA are read from ESPN first -- the same feed
+# tennis_live_score.get_player_rankings uses -- and SofaScore is only tried
+# when ESPN gives nothing. ESPN lists the top 150 of each tour.
+ESPN_RANK_URL = "https://site.api.espn.com/apis/site/v2/sports/tennis/{league}/rankings"
+
+
+def fetch_espn_tour(tour: str) -> list[dict]:
+    """ATP or WTA singles rankings from ESPN, as CSV rows; [] on any failure."""
+    try:
+        req = urllib.request.Request(ESPN_RANK_URL.format(league=tour.lower()),
+                                     headers={"User-Agent": UA,
+                                              "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=ITF_TIMEOUT_S) as resp:
+            data = json.loads(resp.read().decode("utf-8", errors="replace"))
+    except Exception as e:
+        print(f"[{tour}] ESPN error: {e}", file=sys.stderr)
+        return []
+    rows: list[dict] = []
+    seen: set = set()
+    for grp in data.get("rankings") or []:
+        for e in grp.get("ranks") or []:
+            ath = e.get("athlete") or {}
+            name = (ath.get("displayName") or "").strip() if isinstance(ath, dict) else ""
+            rank = _to_int(e.get("current"))
+            if not name or rank is None or (rank, name) in seen:
+                continue
+            seen.add((rank, name))
+            flag = ath.get("flag") if isinstance(ath.get("flag"), dict) else {}
+            rows.append({"tour": tour, "rank": rank, "player": name,
+                         "country": (flag.get("alt") or "").strip(),
+                         "points": _to_int(e.get("points"))})
+    rows.sort(key=lambda r: r["rank"])
+    return rows
 
 
 async def fetch_itf(take: int = ITF_TAKE) -> list[dict]:
@@ -311,6 +365,19 @@ def _existing_rows_for_tour(tour: str) -> list[dict]:
     return out
 
 
+def _kept_if_shrunk(tour: str, rows: list[dict]) -> list[dict]:
+    """``rows``, unless they are under half of what the CSV already holds for
+    ``tour`` -- then the CSV's rows. A source that answers with a fraction of
+    its list (the ITF API's ten, 10/03) must not overwrite a full one: the
+    archive that could have restored it is pruned after fifteen days."""
+    existing = _existing_rows_for_tour(tour)
+    if rows and len(rows) * 2 < len(existing):
+        print(f"[{tour}] only {len(rows)} players against {len(existing)} on "
+              f"disk — kept the existing rows", file=sys.stderr)
+        return existing
+    return rows or existing
+
+
 def archive_and_prune() -> None:
     """
     Copy today's CSV to ``archive_data/tennis_rankings_MMDDYYYY.csv`` (same-day
@@ -354,6 +421,19 @@ async def run(tours: Optional[list[str]] = None) -> int:
     # ATP/WTA rows are written BEFORE ITF so a dual-ranked player resolves to
     # their WTA/ATP entry (loaders keep the first occurrence).
     all_rows: list[dict] = []
+
+    # ESPN first for ATP/WTA (see fetch_espn_tour); the browser is launched
+    # only for a tour ESPN could not fill.
+    loop = asyncio.get_event_loop()
+    from_espn: dict[str, list[dict]] = {}
+    for tour in browser_tours:
+        rows = await loop.run_in_executor(None, fetch_espn_tour, tour)
+        if rows:
+            print(f"[{tour}] ESPN: {len(rows)} players")
+            from_espn[tour] = rows
+    for tour in [t for t in browser_tours if t in from_espn]:
+        all_rows.extend(_kept_if_shrunk(tour, from_espn[tour]))
+    browser_tours = [t for t in browser_tours if t not in from_espn]
 
     if browser_tours:
         # Lazy import so ITF-only runs / parse helpers work without Playwright.
@@ -400,13 +480,13 @@ async def run(tours: Optional[list[str]] = None) -> int:
                                   f"rows from the CSV", file=sys.stderr)
                         else:
                             empty_browser_tours.append(tour)
-                    all_rows.extend(rows)
+                    all_rows.extend(_kept_if_shrunk(tour, rows))
             finally:
                 await context.close()
                 await browser.close()
 
     if want_itf:
-        all_rows.extend(await fetch_itf())
+        all_rows.extend(_kept_if_shrunk("ITF", await fetch_itf()))
 
     if empty_browser_tours:
         print(f"[WARN] {'/'.join(empty_browser_tours)} returned 0 rows and no existing "
