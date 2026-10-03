@@ -1301,6 +1301,9 @@ function LuckPanel() {
               {preview.no_side_only
                 ? ' \u00b7 NO sides only, game props in \u2014 one leg per game, highest price first'
                 : null}
+              {/* The server had Kalshi accept these exact legs before the
+                  sheet opened; dropping any of them cannot undo that. */}
+              {preview.confirmed ? ' \u00b7 Kalshi accepted this combination' : null}
               {' \u00b7 '}buys at market, spending
               ${n(form.min_usd, 5).toFixed(2)}–${n(form.max_usd, 7.5).toFixed(2)}
             </p>
@@ -1411,8 +1414,10 @@ function LuckPanel() {
                   Live → Eligible is your leg price, spread and horizon.
                   Eligible → On volume is the min-volume floor.
                   On volume → In collection is Kalshi's: a parlay can only be
-                  built from events one collection carries, and the one
-                  hosting the most legs is the one used.
+                  built from events one collection carries, on the sides it
+                  takes, and the one hosting the most legs is the one used.
+                  Some events take YES legs only (tennis, NBA and MLB among
+                  them), so a NO-side ticket loses those here.
                 </p>
               </details>
             )}

@@ -19,6 +19,7 @@ order.
 from __future__ import annotations
 
 import importlib.util
+import json
 import logging
 import sys
 import time
@@ -102,13 +103,17 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
             max_hours: int | None = None,
             sports: list[str] | None = None, no_side_only: bool = False,
             owner: str = "") -> dict:
-    """Choose the legs and describe them. Buys nothing, creates nothing.
+    """Choose the legs, have the exchange accept them, describe them. Buys
+    nothing.
 
     ``owner`` is the operator the preview is for: only they can place it.
 
-    Returns a token the caller passes back to `place`. Nothing is created on
-    the exchange here -- not even the combined market -- so a preview nobody
-    confirms leaves no trace.
+    Returns a token the caller passes back to `place`. The one thing created
+    on the exchange is the combined market for the legs shown (see
+    `_confirm`): Kalshi has no other way left to say whether it accepts a
+    combination, and a ticket it would refuse must never reach the sheet.
+    No order, no position, nothing spent -- a preview nobody confirms leaves
+    an empty combined market behind and nothing else.
 
     ``max_spread_c`` and ``max_hours`` are the two gates the regular parlay
     engine sets for itself and this ticket has no reason to share. A long
@@ -200,11 +205,23 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
     else:
         candidates.sort(key=lambda c: (c.market.volume_usd, c.market.volume),
                         reverse=True)
+    # Then each event's own limit -- one of its markets, on nearly every
+    # event -- with the ranking above deciding which of an event's legs stays.
+    candidates = engine.within_event_limits(
+        engine.collection_terms(cred, collection), candidates)
     picked = candidates[:max(2, int(max_legs))]
     if len(picked) < int(min_legs):
         return {"ok": False, "scanned": len(markets),
                 "detail": f"only {len(picked)} legs clear the bar, "
                           f"{min_legs} required",
+                "funnel": _funnel(markets, eligible_by_sport,
+                                  volume_by_sport, hosted_by_sport,
+                                  _by_sport(picked))}
+
+    picked, combo_ticker, refused = _confirm(cred, runtime, collection,
+                                             picked, int(min_legs))
+    if refused:
+        return {"ok": False, "scanned": len(markets), "detail": refused,
                 "funnel": _funnel(markets, eligible_by_sport,
                                   volume_by_sport, hosted_by_sport,
                                   _by_sport(picked))}
@@ -228,6 +245,7 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         # would be re-checked, and bought, as the opposite bet.
         "sides": {c.ticker: c.market.side for c in picked},
         "max_leg": ceiling,
+        "combo_ticker": combo_ticker,
         "owner": owner,
     }
     return {
@@ -243,6 +261,12 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         "max_spread_c": spread_c,
         "max_hours": hours,
         "no_side_only": no_side_only,
+        # Kalshi accepted these exact legs as one combination. Legs can be
+        # dropped on the sheet and the rest still stand: a side rule, an
+        # event limit or a duplicate pair cannot be broken by taking a leg
+        # away.
+        "confirmed": True,
+        "combo_ticker": combo_ticker,
         # The QUOTE, not just the price. price_c is the bid, and a bid on its
         # own cannot be judged: 89 is a different leg at 89/91 than it is at
         # 89/97, and the second is what a spread gate exists to keep out. The
@@ -297,6 +321,69 @@ def _funnel(markets, eligible: dict, volume: dict, hosted: dict,
              "hosted": hosted.get(sport, 0),
              "picked": picked.get(sport, 0)}
             for sport, n in sorted(live.items(), key=lambda kv: -kv[1])]
+
+
+def _confirm(cred, runtime, collection: str, picked: list,
+             min_legs: int) -> tuple[list, str, str]:
+    """Have the exchange accept this exact combination before it is shown.
+
+    Kalshi publishes some of its rules -- the events a collection hosts, the
+    ones that take YES only, how many of an event's markets may go in -- and
+    those are applied while the legs are chosen. Not all of them: two legs
+    that say the same thing ("wins" and "wins by over 0.5") are refused as
+    duplicates, and only the exchange knows that rule whole. Its lookup
+    endpoint is gone, so the way to ask is to resolve the combination:
+    create-or-return, no order, nothing spent, and placing the same legs
+    later returns the same combined market.
+
+    Legs it names as duplicates are dropped, the thinner first, and it is
+    asked again -- the rule `place` has always used. Returns the legs it
+    accepted, the combined market's ticker and no reason; or the reason not.
+    """
+    from app.domains.botstation import venue as kalshi
+    from app.domains.botstation.parley import engine
+    from app.services.kalshi_client import KalshiApiError
+
+    legs = list(picked)
+    for _ in range(12):
+        try:
+            market = kalshi.combined_market(cred, collection,
+                                            engine.selected_markets(legs))
+        except Exception as exc:                        # noqa: BLE001
+            cause = exc.__cause__
+            # A refusal is the exchange's answer. Anything else -- no answer,
+            # a rate limit, a rejected key -- is no answer at all, and its
+            # body is not repeated: a 401's can carry the key id.
+            if not (isinstance(cause, KalshiApiError)
+                    and 400 <= cause.status_code < 500
+                    and cause.status_code not in (401, 403, 429)):
+                return legs, "", ("Kalshi could not be asked whether it "
+                                  "accepts this combination -- try again")
+            named = runtime._redundant_legs(str(exc))
+            clash = [c for c in legs if c.ticker in named]
+            if not named or len(clash) < 2 or len(legs) <= min_legs:
+                return legs, "", ("Kalshi would not accept this combination "
+                                  f"({_refusal_code(cause.body)})")
+            drop = min(clash, key=lambda c: c.market.volume_usd)
+            legs = [c for c in legs if c.ticker != drop.ticker]
+            logger.info("luck preview: dropped %s as redundant (%d legs left)",
+                        drop.ticker, len(legs))
+            continue
+        ticker = market.get("ticker") or ""
+        if not ticker:
+            return legs, "", ("Kalshi did not return a combined market for "
+                              "these legs")
+        return legs, ticker, ""
+    return legs, "", "could not assemble a combination the exchange accepts"
+
+
+def _refusal_code(body: str) -> str:
+    """The exchange's error code, e.g. invalid_parameters -- not its text."""
+    try:
+        err = (json.loads(body) or {}).get("error") or {}
+        return str(err.get("code") or "refused")
+    except (ValueError, AttributeError):
+        return "refused"
 
 
 def place(cred, token: str, *, tenant_slug: str = "",
