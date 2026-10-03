@@ -1037,6 +1037,26 @@ function TradeHistoryPanel({ data, busy, error, onRefresh, disabled,
 }
 
 
+// Past ten legs the sheet opens with a random 75% of them ticked rather than
+// all of them -- 15 of 20, the other 5 left unticked for the operator to add
+// by hand. Never fewer than the min legs, or the ticket it opens with could
+// not be placed.
+const LUCK_RANDOM_OVER = 10;
+const LUCK_RANDOM_SHARE = 0.75;
+
+function luckDefaultKeep(legs, minLegs) {
+  const tickers = legs.map((l) => l.ticker);
+  if (tickers.length <= LUCK_RANDOM_OVER) return new Set(tickers);
+  const want = Math.min(tickers.length,
+    Math.max(minLegs, Math.round(tickers.length * LUCK_RANDOM_SHARE)));
+  // A Fisher-Yates shuffle, stopped once `want` legs are drawn.
+  for (let i = 0; i < want; i += 1) {
+    const j = i + Math.floor(Math.random() * (tickers.length - i));
+    [tickers[i], tickers[j]] = [tickers[j], tickers[i]];
+  }
+  return new Set(tickers.slice(0, want));
+}
+
 function LuckPanel() {
   const [open, setOpen] = useState(false);
   const [sheet, setSheet] = useState(false);
@@ -1091,7 +1111,7 @@ function LuckPanel() {
       const out = await awaitJob(job.job_id);
       if (out && out.ok) {
         setPreview(out);
-        setKeep(new Set(out.legs.map((l) => l.ticker)));
+        setKeep(luckDefaultKeep(out.legs, n(form.min_legs, 5)));
         setSheet(true);
       } else {
         // A failed build is exactly when the funnel is worth reading, and
@@ -1116,6 +1136,9 @@ function LuckPanel() {
   });
   const allOn = () => setKeep(new Set((preview ? preview.legs : []).map((l) => l.ticker)));
   const allOff = () => setKeep(new Set());
+  // A fresh random 75%, for after ALL or NONE has replaced the first one.
+  const reroll = () => setKeep(luckDefaultKeep(preview ? preview.legs : [], n(form.min_legs, 5)));
+  const randomStart = !!preview && preview.legs.length > LUCK_RANDOM_OVER;
 
   // The odds of what is SELECTED, not of what was proposed. Deselect a leg
   // and this moves -- showing the preview's original number beside an edited
@@ -1268,6 +1291,7 @@ function LuckPanel() {
             </header>
             <p className="bs-luck-note">
               {chosen.length} of {preview.legs.length} kept
+              {randomStart ? ', a random 75% ticked to start' : null}
               {' \u00b7 '}chance {(chosenOdds * 100).toFixed(3)}%
               {' \u00b7 '}{preview.scanned.toLocaleString()} markets scanned
               {preview.max_spread_c == null ? null
@@ -1284,6 +1308,10 @@ function LuckPanel() {
             <div className="bs-luck-actions">
               <button type="button" className="bs-btn" onClick={allOn} disabled={!!busy}>ALL</button>
               <button type="button" className="bs-btn" onClick={allOff} disabled={!!busy}>NONE</button>
+              {randomStart ? (
+                <button type="button" className="bs-btn" onClick={reroll} disabled={!!busy}
+                  title="tick a fresh random 75% of the legs">RANDOM 75%</button>
+              ) : null}
               <button type="button" className="bs-btn live" onClick={place}
                 disabled={!!busy || !enough}>
                 {busy === 'place'
