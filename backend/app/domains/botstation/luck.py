@@ -34,13 +34,6 @@ _RUNTIME = None
 _PREVIEWS: dict[str, dict] = {}
 PREVIEW_TTL_S = 900
 
-# The NO-side ticket's spread gate, when the operator sets none. It is built
-# from game props -- spreads, totals, both-teams-to-score, correct scores --
-# and those quote wider than a headline winner market: at the regular 3c gate
-# almost none of them is eligible, which is the board this ticket is for.
-NO_SIDE_SPREAD_C = 15
-
-
 def _game_key(market) -> tuple[str, str]:
     """The game a market belongs to, across all of its series.
 
@@ -130,19 +123,16 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
     ``no_side_only`` builds the ticket from NO sides alone: every market --
     headline winners and every game prop, spreads, totals, both teams to
     score -- read as "this does not happen", and nothing backed outright.
-    Props are thin and quoted wide, so the volume floor does not apply and an
-    unset spread gate is NO_SIDE_SPREAD_C rather than the engine's 3c. Legs
-    are taken one per game and ranked on price, highest first: with volume
-    ignored, the price inside the operator's band is what is left to choose
-    on.
+    It changes the SIDES and nothing else: the leg price band, the volume
+    floor, the spread gate and the horizon apply exactly as set. Legs are
+    taken one per game -- a fixture's props are one bet asked several ways --
+    and ranked on price, highest first.
     """
     from app.domains.botstation.parley import engine, filters
     from app.domains.botstation.parley.models import ComboOrder
 
-    if max_spread_c is not None:
-        spread_c = max(0, int(max_spread_c))
-    else:
-        spread_c = NO_SIDE_SPREAD_C if no_side_only else filters.MAX_SPREAD_C
+    spread_c = (filters.MAX_SPREAD_C if max_spread_c is None
+                else max(0, int(max_spread_c)))
     hours = (filters.MAX_HOURS_TO_EXPIRY if max_hours is None
              else max(1, int(max_hours)))
 
@@ -190,7 +180,7 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
     # legs and no reason, and the bot looks like it has a sport list.
     eligible_by_sport = _by_sport(candidates)
 
-    floor = 0.0 if no_side_only else max(0.0, float(min_volume_usd))
+    floor = max(0.0, float(min_volume_usd))
     if floor:
         candidates = [c for c in candidates if c.market.volume_usd >= floor]
     volume_by_sport = _by_sport(candidates)

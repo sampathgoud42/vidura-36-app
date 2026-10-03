@@ -1049,26 +1049,17 @@ function LuckPanel() {
     // long shot used to inherit silently: 3c wide, closing within 72h.
     max_spread_c: '3', max_hours: '72',
     // NO sides only: every leg read as "this does not happen", game props
-    // included. Props are thin and quoted wide, so the volume floor is set
-    // aside and the spread gate opens to 15c while it is on.
+    // included. It changes the sides and nothing else -- the min volume and
+    // max spread above apply exactly as set.
     no_side: false,
   });
-  // The spread the operator had before NO-side widened it, put back when
-  // they switch it off again.
-  const spreadBefore = useRef('3');
   const [preview, setPreview] = useState(null);
   const [keep, setKeep] = useState(() => new Set());
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const setNoSide = (e) => {
-    const on = e.target.checked;
-    setForm((f) => {
-      if (on) spreadBefore.current = f.max_spread_c;
-      return { ...f, no_side: on, max_spread_c: on ? '15' : (spreadBefore.current || '3') };
-    });
-  };
+  const setNoSide = (e) => setForm((f) => ({ ...f, no_side: e.target.checked }));
   const n = (v, d) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
 
   // The scan runs well past the tunnel's ~100s ceiling, so the server hands
@@ -1092,8 +1083,8 @@ function LuckPanel() {
         min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
         min_leg_c: n(form.min_leg_c, 60),
         max_leg_c: n(form.max_leg_c, 98),
-        min_volume_usd: form.no_side ? 0 : n(form.min_volume_usd, 0),
-        max_spread_c: n(form.max_spread_c, form.no_side ? 15 : 3),
+        min_volume_usd: n(form.min_volume_usd, 0),
+        max_spread_c: n(form.max_spread_c, 3),
         max_hours: n(form.max_hours, 72),
         no_side_only: !!form.no_side,
       });
@@ -1198,26 +1189,22 @@ function LuckPanel() {
               </label>
               {/* NO side only. Off, the ticket backs whichever side of a market
                   is the stronger one. On, every leg is a NO -- "Ecuador do
-                  not win", "Penn St. do not win by over 7.5" -- and the game
+                  not win", "Penn St. do not win by over 7.5" -- with the game
                   props behind each fixture (spreads, totals, both teams to
-                  score) come into it, which the volume floor and a 3c spread
-                  gate would otherwise keep out almost entirely. */}
+                  score) offered too. Every other field still applies as set:
+                  leg price, min volume, max spread, closes in. */}
               <label className="bs-luckrow bs-lucknoside"
-                title="only NO sides: every market — game props included — read as 'this does not happen'; min volume is ignored and the spread gate opens to 15c">
+                title="only NO sides: every market — game props included — read as 'this does not happen'; leg price, min volume, max spread and closes-in still apply">
                 <span className="lbl">NO side</span>
                 <input type="checkbox" checked={form.no_side} onChange={setNoSide}
                   aria-label="NO side only" />
-                <span className="txt">only · game props, any volume</span>
+                <span className="txt">only · game props</span>
               </label>
               <label className="bs-luckrow">
                 <span className="lbl">Min vol</span>
                 <input className="bs-input" type="number" min="0" step="500"
-                  value={form.no_side ? '' : form.min_volume_usd}
-                  placeholder={form.no_side ? 'ignored' : ''}
-                  disabled={form.no_side}
-                  onChange={set('min_volume_usd')}
-                  title={form.no_side ? 'ignored while NO side only is on'
-                    : 'minimum dollar volume per leg'} />
+                  value={form.min_volume_usd} onChange={set('min_volume_usd')}
+                  title="minimum dollar volume per leg" />
                 <i>$</i>
               </label>
               {/* The two gates the long shot used to inherit from the
@@ -1288,7 +1275,7 @@ function LuckPanel() {
               {preview.max_hours == null ? null
                 : `, closing within ${preview.max_hours}h`}
               {preview.no_side_only
-                ? ' \u00b7 NO sides only, game props in, any volume \u2014 one leg per game, highest price first'
+                ? ' \u00b7 NO sides only, game props in \u2014 one leg per game, highest price first'
                 : null}
               {' \u00b7 '}buys at market, spending
               ${n(form.min_usd, 5).toFixed(2)}–${n(form.max_usd, 7.5).toFixed(2)}
@@ -1394,8 +1381,7 @@ function LuckPanel() {
                 </div>
                 <p className="bs-luck-note">
                   Live → Eligible is your leg price, spread and horizon.
-                  Eligible → On volume is the min-volume floor
-                  {preview.no_side_only ? ' (set aside on this NO-side ticket)' : ''}.
+                  Eligible → On volume is the min-volume floor.
                   On volume → In collection is Kalshi's: a parlay can only be
                   built from events one collection carries, and the one
                   hosting the most legs is the one used.

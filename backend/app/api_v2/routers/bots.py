@@ -740,8 +740,8 @@ class LuckPreviewRequest(BaseModel):
     # default lives in one place rather than being restated here.
     max_spread_c: int | None = Field(default=None, ge=0, le=99)
     max_hours: int | None = Field(default=None, ge=1, le=720)
-    # Every leg from its NO side, game props included; the volume floor is
-    # ignored and an omitted spread gate is 15c rather than 3c.
+    # Every leg from its NO side, game props included. Every other gate above
+    # -- price band, volume floor, spread, horizon -- applies as sent.
     no_side_only: bool = False
 
 
