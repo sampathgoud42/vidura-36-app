@@ -52,6 +52,7 @@ TENANT_READ_PATHS = [
     "/api/v1/tradier/commodities",
     "/api/v1/bots/crypto/signals",
     "/api/v1/bots/kalshi/shards",
+    "/api/v1/bots/luck/sports",
     "/api/v1/bots/statuses",
     "/api/v1/tradier/timesales",
     "/api/v1/desk36/dmi",

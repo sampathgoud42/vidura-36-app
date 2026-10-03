@@ -743,6 +743,9 @@ class LuckPreviewRequest(BaseModel):
     # Every leg from its NO side, game props included. Every other gate above
     # -- price band, volume floor, spread, horizon -- applies as sent.
     no_side_only: bool = False
+    # The sports to scan, as GET /bots/luck/sports names them. Omitted or
+    # empty is every sport, including one that opened after they were listed.
+    sports: list[str] | None = Field(default=None, max_length=60)
 
 
 class LuckPlaceRequest(BaseModel):
@@ -793,7 +796,8 @@ def luck_preview(payload: LuckPreviewRequest,
                                  min_volume_usd=payload.min_volume_usd,
                                  max_spread_c=payload.max_spread_c,
                                  max_hours=payload.max_hours,
-                                 no_side_only=payload.no_side_only),
+                                 no_side_only=payload.no_side_only,
+                                 sports=[s[:40] for s in payload.sports or []]),
             "status": "running"}
 
 
@@ -840,6 +844,25 @@ def luck_job(job_id: str,
         raise HTTPException(status_code=404,
                             detail="no such job — it may have expired")
     return out
+
+
+@router.get("/luck/sports", operation_id="getLuckSports")
+@deps.tenant_scoped
+def luck_sports(tenant: Tenant = Depends(deps.current_tenant),
+                db: DbSession = Depends(deps.get_db)) -> dict:
+    """The sports with something open now, for the ticket's sport picker.
+
+    Market data read through the operator's own key; it names nobody.
+    """
+    from app.domains.botstation import luck
+
+    cred = _kalshi_cred(db, tenant)
+    try:
+        return {"sports": luck.sports_in_play(cred)}
+    except Exception:                                   # noqa: BLE001
+        raise HTTPException(
+            status_code=424,
+            detail="Kalshi could not be reached for the sports list") from None
 
 
 # The windows the desk reports P&L over. Hours, because a trading day is not

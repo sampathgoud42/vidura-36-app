@@ -319,6 +319,9 @@ export const vidura = {
   luckPlace: (body) => api.post('/bots/luck/place', body, { timeout: 420000 }),
   // Both of the above now return a job id immediately; this is the poll.
   luckJob: (jobId) => api.get(`/bots/luck/job/${jobId}`),
+  // The sports with something open, for the ticket's sport picker. Two
+  // listing calls on a cold server cache, so it gets more than the default.
+  luckSports: () => api.get('/bots/luck/sports', { timeout: 60000 }),
   // A DMI strip's CALL/PUT, bought by hand on the asset's Kalshi 15-minute
   // market. Placing carries the CONFIRMATION's key -- minted once when the
   // form opens -- so a retry after a lost response is the same order.

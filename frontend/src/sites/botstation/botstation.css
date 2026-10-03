@@ -1073,6 +1073,36 @@
 @media (pointer: coarse) {
   .bs-lucknoside { min-height: 44px; }
 }
+/* The sport picker: one line closed ("All sports · 20", "3 of 20 sports"),
+   a wrap of ticks open beneath it, inside the dock's own scroll. */
+.bs-lucksportrow { align-items: baseline; }   /* label stays by the summary */
+.bs-lucksports { flex: 1 1 auto; min-width: 0; }
+.bs-lucksports > summary {
+  list-style: none; cursor: pointer;
+  padding: 5px 6px; border: 1px solid var(--bs-hair-2);
+  font-size: 11px; color: var(--bs-ink-2);
+}
+.bs-lucksports > summary::-webkit-details-marker { display: none; }
+.bs-lucksports > summary::after { content: ' \25BE'; color: var(--bs-ink-3); }
+.bs-lucksports[open] > summary::after { content: ' \25B4'; }
+.bs-sportgrid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 2px 8px; padding: 6px;
+  border: 1px solid var(--bs-hair-2); border-top: 0;
+}
+.bs-sportquick { grid-column: 1 / -1; display: flex; gap: 6px; margin-bottom: 4px; }
+.bs-sportgrid label {
+  display: flex; align-items: center; gap: 6px; min-height: 24px;
+  font-size: 11px; color: var(--bs-ink-2); cursor: pointer;
+}
+.bs-sportgrid input[type="checkbox"] {
+  flex: 0 0 auto; width: 16px; height: 16px; margin: 0;
+  accent-color: var(--bs-sun); cursor: pointer;
+}
+@media (pointer: coarse) {
+  .bs-lucksports > summary { min-height: 44px; display: flex; align-items: center; }
+  .bs-sportgrid label { min-height: 44px; }
+}
 .bs-luckrow .bs-input:disabled { opacity: 0.45; }
 .bs-luckdock .bs-luck-actions { gap: 6px; margin: 2px 0 6px; }
 .bs-luckdock .bs-btn { padding: 7px 10px; font-size: 10px; min-height: 32px; }

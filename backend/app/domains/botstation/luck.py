@@ -96,6 +96,47 @@ def _sweep() -> None:
         _PREVIEWS.pop(key, None)
 
 
+# The sports in play, for the desk's sport picker. Two listing calls -- every
+# sports series with its tag, every open event -- for an answer that changes
+# over hours, so it is held a few minutes rather than re-read each time the
+# panel opens.
+_SPORTS: tuple[float, list[dict]] | None = None
+SPORTS_TTL_S = 600
+
+
+def sports_in_play(cred) -> list[dict]:
+    """Every sport with an open event now, busiest first.
+
+    Named as the scanner names them -- Kalshi's sport tag on each series,
+    lowercased -- so a sport picked on the desk is one `_load_markets`
+    filters on, with nothing to translate between the two.
+    """
+    global _SPORTS
+    if _SPORTS and time.time() - _SPORTS[0] < SPORTS_TTL_S:
+        return _SPORTS[1]
+    from app.services.kalshi_client import DEFAULT_BASE, KalshiClient
+
+    runtime = _runtime()
+    client = KalshiClient(cred.token, private_key_pem=cred.private_key_pem,
+                          base_uri=cred.base_url or DEFAULT_BASE)
+    try:
+        tags = runtime._sport_tags(client)
+        active = runtime._active_sports_series(client)
+    finally:
+        client.close()
+    counts: dict[str, int] = {}
+    for series in active:
+        if series in tags:
+            counts[tags[series][0]] = counts.get(tags[series][0], 0) + 1
+    found = [{"sport": sport, "series": n} for sport, n in
+             sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))]
+    # An empty answer is a failed read (both listings swallow their errors),
+    # not a day without sport: kept out of the cache so the next open retries.
+    if found:
+        _SPORTS = (time.time(), found)
+    return found
+
+
 def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
             min_leg_c: int = 60, max_leg_c: int = 98,
             min_volume_usd: float = 0.0,
@@ -132,6 +173,9 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
     floor, the spread gate and the horizon apply exactly as set. Legs are
     taken one per game -- a fixture's props are one bet asked several ways --
     and ranked on price, highest first.
+
+    ``sports`` narrows the scan to those sports, as `sports_in_play` names
+    them. Empty or omitted is every sport.
     """
     from app.domains.botstation.parley import engine, filters
     from app.domains.botstation.parley.models import ComboOrder
@@ -141,9 +185,13 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
     hours = (filters.MAX_HOURS_TO_EXPIRY if max_hours is None
              else max(1, int(max_hours)))
 
+    # Only these sports' series are read at all, which also makes a narrow
+    # ticket a quicker scan. Empty is every sport, one that opened since the
+    # desk listed them included.
+    wanted = sorted({s.strip().lower() for s in (sports or []) if s and s.strip()})
     runtime = _runtime()
     markets, scores = runtime._load_markets(
-        cred, sports or [], include_sub_events=True)
+        cred, wanted, include_sub_events=True)
     offered = markets
     if no_side_only:
         # Every market from its NO side and from nothing else. A market that
@@ -246,6 +294,8 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         "sides": {c.ticker: c.market.side for c in picked},
         "max_leg": ceiling,
         "combo_ticker": combo_ticker,
+        # Placing re-reads only these sports: every leg is from one of them.
+        "sports": wanted,
         "owner": owner,
     }
     return {
@@ -261,6 +311,7 @@ def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
         "max_spread_c": spread_c,
         "max_hours": hours,
         "no_side_only": no_side_only,
+        "sports": wanted,
         # Kalshi accepted these exact legs as one combination. Legs can be
         # dropped on the sheet and the rest still stand: a side rule, an
         # event limit or a duplicate pair cannot be broken by taking a leg
@@ -427,7 +478,8 @@ def place(cred, token: str, *, tenant_slug: str = "",
                 "detail": f"{len(wanted)} legs selected, {min_legs} required"}
 
     runtime = _runtime()
-    markets, scores = runtime._load_markets(cred, [], include_sub_events=True)
+    markets, scores = runtime._load_markets(
+        cred, held.get("sports") or [], include_sub_events=True)
     # Each leg on the side it was shown on. The board reads YES-side, and a
     # leg previewed as "Ecuador do not win" must be re-checked -- and bought
     # -- as that, never as its opposite.

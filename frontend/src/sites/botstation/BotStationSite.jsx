@@ -1077,10 +1077,37 @@ function LuckPanel() {
   const [keep, setKeep] = useState(() => new Set());
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  // The sport picker. Kept as the sports UNticked, so every sport starts
+  // ticked, and "all ticked" goes to the server as no list at all -- which
+  // covers a sport that opens after this one was read, too.
+  const [sportList, setSportList] = useState(null);
+  const [sportErr, setSportErr] = useState('');
+  const [sportsOff, setSportsOff] = useState(() => new Set());
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
   const setNoSide = (e) => setForm((f) => ({ ...f, no_side: e.target.checked }));
   const n = (v, d) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
+
+  // Read when the panel first opens. A failed read is tried again the next
+  // time it opens, and until then the scan simply covers every sport.
+  useEffect(() => {
+    if (!open || sportList !== null) return undefined;
+    let alive = true;
+    setSportErr('');
+    vidura.luckSports()
+      .then((r) => { if (alive) setSportList((r && r.sports) || []); })
+      .catch((e) => { if (alive) setSportErr(String((e && e.message) || e)); });
+    return () => { alive = false; };
+  }, [open, sportList]);
+
+  const toggleSport = (sport) => setSportsOff((prev) => {
+    const next = new Set(prev);
+    if (next.has(sport)) next.delete(sport); else next.add(sport);
+    return next;
+  });
+  const sportNames = (sportList || []).map((s) => s.sport);
+  const sportsOn = sportNames.filter((s) => !sportsOff.has(s));
+  const noSport = sportNames.length > 0 && sportsOn.length === 0;
 
   // The scan runs well past the tunnel's ~100s ceiling, so the server hands
   // back a job id and we poll rather than holding a request open.
@@ -1107,6 +1134,7 @@ function LuckPanel() {
         max_spread_c: n(form.max_spread_c, 3),
         max_hours: n(form.max_hours, 72),
         no_side_only: !!form.no_side,
+        sports: sportsOff.size ? sportsOn : [],
       });
       const out = await awaitJob(job.job_id);
       if (out && out.ok) {
@@ -1180,6 +1208,38 @@ function LuckPanel() {
                 three ranges, and in a sidebar column six labelled fields wrap
                 into a wall the panel cannot show without scrolling. */}
             <div className="bs-luckform">
+              {/* Which sports the scan reads -- every one, ticked, to start.
+                  One line closed; the ticks open beneath it. */}
+              <div className="bs-luckrow bs-lucksportrow">
+                <span className="lbl">Sports</span>
+                <details className="bs-lucksports">
+                  <summary title="the sports this ticket's legs may come from">
+                    {sportList === null
+                      ? (sportErr ? 'All sports (list unavailable)' : 'All sports…')
+                      : noSport ? 'None — tick at least one'
+                        : sportsOff.size ? `${sportsOn.length} of ${sportNames.length} sports`
+                          : `All sports · ${sportNames.length}`}
+                  </summary>
+                  {sportList && sportList.length ? (
+                    <div className="bs-sportgrid">
+                      <div className="bs-sportquick">
+                        <button type="button" className="bs-btn"
+                          onClick={() => setSportsOff(new Set())}>ALL</button>
+                        <button type="button" className="bs-btn"
+                          onClick={() => setSportsOff(new Set(sportNames))}>NONE</button>
+                      </div>
+                      {sportList.map((s) => (
+                        <label key={s.sport}
+                          title={`${s.series} series with something open`}>
+                          <input type="checkbox" checked={!sportsOff.has(s.sport)}
+                            onChange={() => toggleSport(s.sport)} />
+                          <span>{s.sport}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                </details>
+              </div>
               <label className="bs-luckrow">
                 <span className="lbl">Legs</span>
                 <input className="bs-input" type="number" min="2" max="24"
@@ -1252,7 +1312,8 @@ function LuckPanel() {
 
             <div className="bs-luck-actions">
               <button type="button" className="bs-btn" onClick={build}
-                disabled={!!busy}>
+                disabled={!!busy || noSport}
+                title={noSport ? 'tick at least one sport' : undefined}>
                 {busy === 'preview' ? 'SCANNING\u2026' : 'BUILD TICKET'}
               </button>
               {preview && !sheet ? (
@@ -1294,6 +1355,8 @@ function LuckPanel() {
               {randomStart ? ', a random 75% ticked to start' : null}
               {' \u00b7 '}chance {(chosenOdds * 100).toFixed(3)}%
               {' \u00b7 '}{preview.scanned.toLocaleString()} markets scanned
+              {preview.sports && preview.sports.length
+                ? ` (${preview.sports.join(', ')})` : null}
               {preview.max_spread_c == null ? null
                 : ` \u00b7 \u2264${preview.max_spread_c}c wide`}
               {preview.max_hours == null ? null
