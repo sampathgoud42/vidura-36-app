@@ -12,6 +12,9 @@ Three of them, and the first one is the reason this module exists at all:
                  a Bot Station DMI signal, on Kalshi's fifteen-minute markets.
                  Every two seconds: a quarter-hour market moves too fast for
                  the risk monitor's ten.
+  luck schedule  the scheduled Luck parley: at 9:00 and 18:00 Chicago time,
+                 a ticket built and placed for every operator who has the
+                 schedule switched on. Checked every minute.
 
 ``monitor.sweep_all_tenants`` existed and was called by NOTHING. The risk
 heartbeat table had zero rows in it, which is exactly what a monitor that has
@@ -119,12 +122,18 @@ def _sweep_signal_trades() -> None:
     signal_trade.sweep_all_tenants()
 
 
+def _run_luck_schedule() -> None:
+    from app.domains.botstation import luck_schedule
+
+    luck_schedule.sweep_all_tenants()
+
+
 _LOOPS: dict[str, _Loop] = {}
 
 
 def start_all() -> None:
     """Start every loop. Idempotent, so a reload does not double them up."""
-    from app.domains.botstation import signal_trade
+    from app.domains.botstation import luck_schedule, signal_trade
 
     if not _LOOPS:
         _LOOPS["risk-monitor"] = _Loop("risk-monitor", MONITOR_INTERVAL_S,
@@ -133,6 +142,8 @@ def start_all() -> None:
                                      _sweep_ledger)
         _LOOPS["signal-trades"] = _Loop("signal-trades", signal_trade.POLL_S,
                                         _sweep_signal_trades)
+        _LOOPS["luck-schedule"] = _Loop("luck-schedule", luck_schedule.POLL_S,
+                                        _run_luck_schedule)
     for loop in _LOOPS.values():
         loop.start()
 

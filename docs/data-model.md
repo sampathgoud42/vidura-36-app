@@ -4,7 +4,7 @@
 edit by hand -- re-run it after a migration and the shape follows the
 database instead of drifting from it.
 
-SQLite, one schema, 21 tables. Every tenant-owned table
+SQLite, one schema, 23 tables. Every tenant-owned table
 carries a `tenant_id` foreign key that is NOT NULL, so a row without an
 owner cannot be written even by a raw INSERT.
 
@@ -24,15 +24,17 @@ erDiagram
     tenant ||--o{ bot_run : owns
     tenant ||--o{ bot_trade : owns
     tenant ||--o{ execution_attempt : owns
+    tenant ||--o{ luck_run : owns
+    tenant ||--o{ luck_schedule : owns
     tenant ||--o{ position : owns
     tenant ||--o{ risk_heartbeat : owns
     tenant ||--o{ signal_trade : owns
     tenant ||--o{ tenant_credential : owns
-    tenant_credential |o--o{ tenant_secret_audit : credential_id
     tenant ||--o{ tenant_secret_audit : owns
+    tenant_credential |o--o{ tenant_secret_audit : credential_id
     tenant ||--o{ tenant_world_access : owns
-    wellness_profile ||--o{ wellness_goal : profile_id
     tenant ||--o{ wellness_goal : owns
+    wellness_profile ||--o{ wellness_goal : profile_id
     tenant ||--o{ wellness_profile : owns
     execution_lease {
         text standalone

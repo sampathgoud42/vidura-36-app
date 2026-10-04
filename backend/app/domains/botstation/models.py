@@ -209,3 +209,65 @@ class SignalTrade(Base, TenantOwned, Timestamped):
             name="status_known"),
         Index("ix_signal_trade_tenant_status", "tenant_id", "status"),
     )
+
+
+class LuckSchedule(Base, TenantOwned, Timestamped):
+    """An operator's scheduled luck parley: a ticket built and placed in the
+    background at fixed times every day, while ``enabled``.
+
+    One row per operator. ``config_json`` is the ticket exactly as the Luck
+    form held it when the schedule was switched on or last updated -- legs,
+    spend, leg price, NO side, volume, spread, horizon, sports -- so what runs
+    at 9 is what the operator saw, not whatever the form says by then.
+    """
+
+    __tablename__ = "luck_schedule"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # When it was last switched ON. A slot that began before that is not
+    # run: switching on at 9:10 must not buy the 9:00 ticket on the spot.
+    enabled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="one_schedule_per_tenant"),
+    )
+
+
+class LuckRun(Base, TenantOwned, Timestamped):
+    """One scheduled slot, for one operator: what happened at 9:00 or 18:00.
+
+    The row is written BEFORE the ticket is built, and (tenant, slot) is
+    unique: a slot is claimed once and never run twice -- not by a second
+    pass of the loop, and not after a restart in the middle of a placement,
+    where running it again could buy the ticket twice.
+    """
+
+    __tablename__ = "luck_run"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    # The slot in Chicago time, "2026-10-04 09:00".
+    slot: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False,
+                                        default="running")
+    detail: Mapped[str | None] = mapped_column(String(255))
+    legs: Mapped[int | None] = mapped_column(Integer)
+    cost_usd: Mapped[float | None] = mapped_column(Float)
+    combo_ticker: Mapped[str | None] = mapped_column(String(64))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "slot", name="one_run_per_slot"),
+        #   running      claimed; the ticket is being built or placed
+        #   placed       the combo was bought
+        #   skipped      not enough cash, or no ticket the bar allows
+        #   failed       built, but the exchange did not take it
+        #   interrupted  the desk restarted mid-run -- check Kalshi; never re-run
+        CheckConstraint(
+            "status in ('running','placed','skipped','failed','interrupted')",
+            name="status_known"),
+        Index("ix_luck_run_tenant_slot", "tenant_id", "slot"),
+    )

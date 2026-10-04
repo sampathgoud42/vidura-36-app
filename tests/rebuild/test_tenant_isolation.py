@@ -256,6 +256,36 @@ def test_a_signal_trade_belongs_to_the_operator_who_placed_it(client, alice, bob
         client.get("/api/v1/bots/signal-trades", headers=bob.headers).json())
 
 
+def test_a_luck_schedule_belongs_to_the_operator_who_set_it(client, alice, bob):
+    """A scheduled Luck parley spends money twice a day with nobody watching.
+    Alice switching hers on leaves Bob's off and unset; Bob switching his off
+    does not touch hers; and neither reads the other's ticket or runs."""
+    from app.domains.botstation.models import LuckRun
+    from app.platform.db.repository import TenantRepository
+    from app.platform.db.session import session_scope
+
+    ticket = {"min_legs": 5, "max_legs": 36, "min_usd": 5, "max_usd": 7.5,
+              "min_leg_c": 66, "max_leg_c": 98, "min_volume_usd": 5000,
+              "max_spread_c": 3, "max_hours": 72}
+    on = client.put("/api/v1/bots/luck/schedule",
+                    json={"enabled": True, "config": ticket}, headers=alice.headers)
+    assert on.status_code == 200, on.text
+    with session_scope() as db:
+        TenantRepository(db, alice.tenant_id).add(LuckRun(
+            slot="2026-10-04 09:00", status="placed", detail="alice's ticket"))
+
+    theirs = client.get("/api/v1/bots/luck/schedule", headers=bob.headers).json()
+    assert theirs["enabled"] is False and theirs["config"] is None
+    assert theirs["runs"] == []
+
+    off = client.put("/api/v1/bots/luck/schedule", json={"enabled": False},
+                     headers=bob.headers)
+    assert off.status_code == 200, off.text
+    mine = client.get("/api/v1/bots/luck/schedule", headers=alice.headers).json()
+    assert mine["enabled"] is True and mine["config"]["max_legs"] == 36
+    assert [r["detail"] for r in mine["runs"]] == ["alice's ticket"]
+
+
 def test_a_luck_job_and_preview_belong_to_the_operator_who_made_them(client, alice, bob):
     """A luck job's result can hold a ticket's legs, stake and fills, and a
     preview token buys the legs it was shown. Both belong to the operator who
@@ -502,6 +532,8 @@ COVERED_BY_NAMED_TESTS = {
         "test_a_luck_job_and_preview_belong_to_the_operator_who_made_them",
     "/api/v1/bots/luck/job/{job_id}":
         "test_a_luck_job_and_preview_belong_to_the_operator_who_made_them",
+    "/api/v1/bots/luck/schedule":
+        "test_a_luck_schedule_belongs_to_the_operator_who_set_it",
     "/api/v1/bots/signal-trade/place":
         "test_a_signal_trade_belongs_to_the_operator_who_placed_it",
     "/api/v1/bots/signal-trades":

@@ -1100,6 +1100,20 @@ function LuckPanel() {
     return () => { alive = false; };
   }, [open, sportList]);
 
+  // The schedule: read whenever the panel opens -- its runs happen in the
+  // background, so an open panel is where the latest is wanted.
+  const [sched, setSched] = useState(null);
+  const [schedBusy, setSchedBusy] = useState(false);
+  const [schedErr, setSchedErr] = useState('');
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    vidura.luckSchedule()
+      .then((s) => { if (alive) setSched(s); })
+      .catch((e) => { if (alive) setSchedErr(String((e && e.message) || e)); });
+    return () => { alive = false; };
+  }, [open]);
+
   const toggleSport = (sport) => setSportsOff((prev) => {
     const next = new Set(prev);
     if (next.has(sport)) next.delete(sport); else next.add(sport);
@@ -1108,6 +1122,54 @@ function LuckPanel() {
   const sportNames = (sportList || []).map((s) => s.sport);
   const sportsOn = sportNames.filter((s) => !sportsOff.has(s));
   const noSport = sportNames.length > 0 && sportsOn.length === 0;
+
+  // The ticket as the form holds it now -- what switching the schedule on
+  // saves, and what UPDATE puts in place of the saved one.
+  const ticketNow = () => ({
+    min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
+    min_usd: n(form.min_usd, 5), max_usd: n(form.max_usd, 7.5),
+    min_leg_c: n(form.min_leg_c, 60), max_leg_c: n(form.max_leg_c, 98),
+    min_volume_usd: n(form.min_volume_usd, 0), max_spread_c: n(form.max_spread_c, 3),
+    max_hours: n(form.max_hours, 72), no_side_only: !!form.no_side,
+    sports: sportsOff.size ? [...sportsOn].sort() : [],
+  });
+  const sameTicket = (a, b) => !!a && !!b && Object.keys(ticketNow()).every((k) => (
+    k === 'sports' ? [...(a.sports || [])].sort().join() === [...(b.sports || [])].sort().join()
+      : Number(a[k]) === Number(b[k]) || a[k] === b[k]));
+  const schedDiffers = !!(sched && sched.enabled && sched.config && !sameTicket(ticketNow(), sched.config));
+  const ticketText = (t) => `${t.min_legs}–${t.max_legs} legs · $${Number(t.min_usd).toFixed(2)}–$`
+    + `${Number(t.max_usd).toFixed(2)} · ${t.min_leg_c}–${t.max_leg_c}c · vol ≥ $${Number(t.min_volume_usd).toLocaleString()}`
+    + ` · ≤${t.max_spread_c}c · ${t.max_hours}h · ${(t.sports || []).length ? t.sports.join(', ') : 'all sports'}`
+    + (t.no_side_only ? ' · NO side' : '');
+  const saveSchedule = async (body) => {
+    setSchedBusy(true); setSchedErr('');
+    try {
+      setSched(await vidura.setLuckSchedule(body));
+    } catch (e) {
+      setSchedErr(String((e && e.message) || e));
+    } finally { setSchedBusy(false); }
+  };
+  const toggleSchedule = async (e) => {
+    if (!e.target.checked) { saveSchedule({ enabled: false }); return; }
+    const t = ticketNow();
+    const ok = await confirmDialog({
+      title: 'Schedule the luck parley?',
+      body: 'Every day at 9:00 AM and 6:00 PM CT, in the background: if the combo shards '
+        + `hold at least $${t.max_usd.toFixed(2)}, a ticket is built with these settings — `
+        + `${ticketText(t)} — and placed, spending $${t.min_usd.toFixed(2)}–$${t.max_usd.toFixed(2)} `
+        + 'each time with nobody confirming it.',
+      confirmText: 'Switch on',
+      cancelText: 'Cancel',
+    });
+    if (ok) saveSchedule({ enabled: true, config: t });
+  };
+  const slotText = (slot) => {
+    const [d, t] = String(slot || '').split(' ');
+    const [, mo, da] = (d || '').split('-').map(Number);
+    const [hh, mm] = (t || '').split(':').map(Number);
+    const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][mo - 1];
+    return `${month} ${da}, ${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}`;
+  };
 
   // The scan runs well past the tunnel's ~100s ceiling, so the server hands
   // back a job id and we poll rather than holding a request open.
@@ -1204,6 +1266,48 @@ function LuckPanel() {
 
         {!open ? null : (
           <div className="bs-luckdock-body">
+            {/* The schedule: on, the server builds and places this ticket at
+                9:00 and 18:00 Chicago time every day, with nobody here. It
+                keeps the ticket saved when it was switched on (or UPDATEd),
+                not whatever the form says later. */}
+            <div className="bs-luckrow bs-lucksched">
+              <span className="lbl">Schedule</span>
+              <label className="bs-luckswitch" title="place this ticket automatically at 9:00 AM and 6:00 PM CT, every day">
+                <input type="checkbox" checked={!!(sched && sched.enabled)}
+                  disabled={schedBusy || sched === null} onChange={toggleSchedule}
+                  aria-label="Schedule the luck parley at 9 AM and 6 PM CT daily" />
+                <span className="track" /><span className="knob" />
+              </label>
+              <span className="txt">9:00 AM &amp; 6:00 PM CT · daily</span>
+            </div>
+            {sched && sched.enabled && sched.config ? (
+              <p className="bs-luck-note bs-lucksched-on">
+                ON · next {new Date(sched.next_run).toLocaleString('en-US', {
+                  timeZone: 'America/Chicago', weekday: 'short', hour: 'numeric', minute: '2-digit' })} CT
+                {' · '}{ticketText(sched.config)}
+                {schedDiffers ? (
+                  <button type="button" className="bs-btn bs-lucksched-up" disabled={schedBusy}
+                    onClick={() => saveSchedule({ enabled: true, config: ticketNow() })}
+                    title="the form differs from the scheduled ticket — schedule the form's settings instead">
+                    UPDATE SCHEDULE
+                  </button>
+                ) : null}
+              </p>
+            ) : null}
+            {schedErr ? <p className="bs-luck-err">{schedErr}</p> : null}
+            {sched && sched.runs && sched.runs.length ? (
+              <ul className="bs-luckruns">
+                {sched.runs.slice(0, 3).map((r) => (
+                  <li key={r.slot}>
+                    <b>{slotText(r.slot)}</b>
+                    <span className={`st st-${r.status}`}>{r.status}</span>
+                    {r.cost_usd != null ? ` $${r.cost_usd.toFixed(2)}` : ''}
+                    {r.detail ? <span className="dim"> · {r.detail}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
             {/* Paired as ranges rather than six separate boxes: they ARE
                 three ranges, and in a sidebar column six labelled fields wrap
                 into a wall the panel cannot show without scrolling. */}

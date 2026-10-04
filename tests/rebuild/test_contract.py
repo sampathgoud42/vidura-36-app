@@ -102,6 +102,9 @@ CONTRACT: list[tuple[str, str]] = [
     ("GET", f"{V1}/bots/luck/job/{{job_id}}"),
     # The sports in play, for the ticket's sport picker.
     ("GET", f"{V1}/bots/luck/sports"),
+    # The scheduled Luck parley: on/off, its ticket, its runs.
+    ("GET", f"{V1}/bots/luck/schedule"),
+    ("PUT", f"{V1}/bots/luck/schedule"),
     # A DMI strip's CALL/PUT bought by hand on the asset's Kalshi 15-minute
     # market, then watched for its take-profit and stop-loss. Added after the
     # freeze.

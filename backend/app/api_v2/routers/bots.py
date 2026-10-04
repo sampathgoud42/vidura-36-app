@@ -847,6 +847,60 @@ def luck_job(job_id: str,
     return out
 
 
+class LuckScheduleTicket(LuckPreviewRequest):
+    """The ticket a scheduled run builds: the preview's settings and the
+    spend range placing takes."""
+    min_usd: float = Field(default=5, gt=0, le=5000)
+    max_usd: float = Field(default=7.5, gt=0, le=5000)
+
+
+class LuckScheduleRequest(BaseModel):
+    enabled: bool
+    # The form's settings, saved as the ticket the schedule places. Needed to
+    # switch it on the first time; omitted, the saved ticket is kept.
+    config: LuckScheduleTicket | None = None
+
+
+@router.get("/luck/schedule", operation_id="getLuckSchedule")
+@deps.tenant_scoped
+def luck_schedule_get(tenant: Tenant = Depends(deps.current_tenant),
+                      db: DbSession = Depends(deps.get_db)) -> dict:
+    """The operator's scheduled Luck parley: on or off, the ticket it places,
+    when it next runs (9:00 and 18:00 Chicago time) and its latest runs."""
+    from app.domains.botstation import luck_schedule
+
+    return luck_schedule.get_state(db, tenant.id)
+
+
+@router.put("/luck/schedule", operation_id="setLuckSchedule")
+@deps.tenant_scoped
+def luck_schedule_set(payload: LuckScheduleRequest,
+                      tenant: Tenant = Depends(deps.current_tenant),
+                      db: DbSession = Depends(deps.get_db)) -> dict:
+    """Switch the scheduled Luck parley on or off, and set its ticket.
+
+    Real money while it is on: at each slot, with at least the ticket's most
+    spend on the combo shards, a ticket is built and placed in the
+    background, with nobody there to confirm it.
+    """
+    from app.domains.botstation import luck_schedule
+
+    config = None
+    if payload.config is not None:
+        if payload.config.max_legs < payload.config.min_legs:
+            raise HTTPException(status_code=422, detail="max legs is below min legs")
+        if payload.config.max_usd < payload.config.min_usd:
+            raise HTTPException(status_code=422, detail="max spend is below min spend")
+        config = payload.config.model_dump()
+        config["sports"] = [s.strip().lower()[:40] for s in config.get("sports") or []
+                            if s and s.strip()]
+    try:
+        return luck_schedule.set_state(db, tenant.id, enabled=payload.enabled,
+                                       config=config)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
 @router.get("/luck/sports", operation_id="getLuckSports")
 @deps.tenant_scoped
 def luck_sports(tenant: Tenant = Depends(deps.current_tenant),

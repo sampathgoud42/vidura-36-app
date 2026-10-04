@@ -1103,6 +1103,48 @@
   .bs-lucksports > summary { min-height: 44px; display: flex; align-items: center; }
   .bs-sportgrid label { min-height: 44px; }
 }
+/* The schedule switch: a track and a knob over a real checkbox, so the
+   keyboard, the screen reader and the touch target are the browser's own. */
+.bs-lucksched { align-items: center; }
+.bs-lucksched .txt { flex: 1 1 auto; font-size: 10px; color: var(--bs-ink-2); }
+.bs-luckswitch { position: relative; flex: 0 0 auto; width: 38px; height: 22px; }
+.bs-luckswitch input {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+  opacity: 0; cursor: pointer; z-index: 1;
+}
+.bs-luckswitch .track {
+  position: absolute; inset: 0; border: 1px solid var(--bs-hair-2);
+  border-radius: 11px; transition: background 0.15s, border-color 0.15s;
+}
+.bs-luckswitch .knob {
+  position: absolute; top: 4px; left: 4px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--bs-ink-3);
+  transition: transform 0.15s, background 0.15s;
+}
+.bs-luckswitch input:checked ~ .track {
+  border-color: var(--bs-sun);
+  background: color-mix(in srgb, var(--bs-sun) 22%, transparent);
+}
+.bs-luckswitch input:checked ~ .knob { transform: translateX(16px); background: var(--bs-sun); }
+.bs-luckswitch input:focus-visible ~ .track { outline: 2px solid var(--bs-sun); outline-offset: 2px; }
+.bs-luckswitch input:disabled { cursor: default; }
+.bs-luckswitch input:disabled ~ .track, .bs-luckswitch input:disabled ~ .knob { opacity: 0.5; }
+.bs-lucksched-on { color: var(--bs-ink-2); }
+.bs-lucksched-up { margin-left: 6px; padding: 3px 8px; min-height: 24px; font-size: 9px; }
+.bs-luckruns { list-style: none; margin: 2px 0 8px; padding: 0; font-size: 10px; color: var(--bs-ink-2); }
+.bs-luckruns li { padding: 3px 0; border-top: 1px dashed var(--bs-hair); }
+.bs-luckruns b { font-weight: 600; color: var(--bs-ink); margin-right: 6px; }
+.bs-luckruns .st { text-transform: uppercase; letter-spacing: 0.08em; font-size: 9px; }
+.bs-luckruns .st-placed { color: var(--bs-good); }
+.bs-luckruns .st-skipped, .bs-luckruns .st-running { color: var(--bs-warn); }
+.bs-luckruns .st-failed, .bs-luckruns .st-interrupted { color: var(--bs-crit); }
+.bs-luckruns .dim { color: var(--bs-ink-3); }
+@media (pointer: coarse) {
+  .bs-lucksched { min-height: 44px; }
+  .bs-luckswitch { width: 46px; height: 28px; }
+  .bs-luckswitch .knob { top: 5px; left: 5px; width: 18px; height: 18px; }
+  .bs-luckswitch input:checked ~ .knob { transform: translateX(18px); }
+}
 .bs-luckrow .bs-input:disabled { opacity: 0.45; }
 .bs-luckdock .bs-luck-actions { gap: 6px; margin: 2px 0 6px; }
 .bs-luckdock .bs-btn { padding: 7px 10px; font-size: 10px; min-height: 32px; }
