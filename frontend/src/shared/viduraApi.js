@@ -9,7 +9,7 @@
 //   3. dev/preview default: http://<current hostname>:8791
 //   4. same-origin '' (reverse-proxy deployments routing /api to the API)
 
-import { forgetExperience, liteRunning } from './experience.js';
+import { botRunning, forgetExperience, liteRunning } from './experience.js';
 
 const API_BASE_KEY = 'api38.base';
 const API_KEY_KEY = 'vidura.api.key'; // session token / shared X-API-Key
@@ -123,6 +123,20 @@ function liteRefuses(path) {
   return liteRunning() && !LITE_PATHS.some((p) => path.startsWith(p));
 }
 
+// Everything Bot only mode may ask for: the Bot Station's own endpoints and
+// nothing of any other world's. A request outside this never leaves.
+const BOT_PATHS = [
+  '/auth/',                     // identity and world access
+  '/bots',                      // bots, their logs and runs, the DMI signals,
+                                // signal trades, the luck parley, reconcile
+  '/portfolio',                 // the Kalshi account's value and its history
+  '/trade-history',             // the account's settled record
+];
+
+function botRefuses(path) {
+  return botRunning() && !BOT_PATHS.some((p) => path.startsWith(p));
+}
+
 async function req(method, path, { body, params, timeout = 30000,
                                    idempotencyKey } = {}) {
   // Refused before anything is sent. The status is a word rather than a
@@ -131,6 +145,10 @@ async function req(method, path, { body, params, timeout = 30000,
   if (liteRefuses(path)) {
     throw new ApiError('lite',
       `${path.split('?')[0]} is not loaded in Lightweight mode - switch to Regular for it`);
+  }
+  if (botRefuses(path)) {
+    throw new ApiError('bot',
+      `${path.split('?')[0]} is not loaded in Bot only mode - switch to Regular for it`);
   }
   let url = apiBase() + '/api/v1' + path;
   if (params) {
@@ -301,6 +319,25 @@ export const vidura = {
   luckPlace: (body) => api.post('/bots/luck/place', body, { timeout: 420000 }),
   // Both of the above now return a job id immediately; this is the poll.
   luckJob: (jobId) => api.get(`/bots/luck/job/${jobId}`),
+  // The sports with something open, for the ticket's sport picker. Two
+  // listing calls on a cold server cache, so it gets more than the default.
+  luckSports: () => api.get('/bots/luck/sports', { timeout: 60000 }),
+  // The scheduled Luck parley: on/off, the ticket it places at 9:00 and
+  // 18:00 Chicago time, and its latest runs.
+  luckSchedule: () => api.get('/bots/luck/schedule'),
+  setLuckSchedule: (body) => api.put('/bots/luck/schedule', body),
+  // A DMI strip's CALL/PUT, bought by hand on the asset's Kalshi 15-minute
+  // market. Placing carries the CONFIRMATION's key -- minted once when the
+  // form opens -- so a retry after a lost response is the same order.
+  signalTradePreview: (body) => api.post('/bots/signal-trade/preview', body),
+  signalTradePlace: (body, key) => api.post('/bots/signal-trade/place', body,
+    { idempotencyKey: key }),
+  signalTrades: () => api.get('/bots/signal-trades'),
+  // Cash per Kalshi exchange shard, and moving it between them. The move
+  // carries the confirmation's key: the exchange's transfer has none.
+  kalshiShards: () => api.get('/bots/kalshi/shards'),
+  kalshiShardTransfer: (body, key) => api.post('/bots/kalshi/shards/transfer', body,
+    { idempotencyKey: key }),
   // The one ledger every bot writes to, with P&L already banded by window.
   tradeEventLog: (params) => api.get('/bots/event-log', { params }),
   // Launch/stop history from the run table, not from this browser's memory.

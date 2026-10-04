@@ -407,12 +407,30 @@ class KalshiClient:
         d = self.request("GET",
                          f"/multivariate_event_collections/{collection}")
         body = d.get("multivariate_contract", d)
+        # Each event's own terms. A combination that breaks either is refused
+        # with a bare 400 "invalid parameters" that names no leg, so they are
+        # kept here to be honoured BEFORE anything is sent: a NO leg on an
+        # event that takes only YES (tennis, the NBA, MLB, much of the long
+        # tail), and more of one event's markets than it allows (one, on
+        # nearly every event).
+        events = body.get("associated_events") or []
         return {
             "collection_ticker": collection,
             "series_ticker": body.get("series_ticker", ""),
-            "events": set(body.get("associated_event_tickers") or []),
+            "events": ({e["ticker"] for e in events if e.get("ticker")}
+                       or set(body.get("associated_event_tickers") or [])),
             "size_min": int(body.get("size_min") or 2),
             "size_max": int(body.get("size_max") or 0),
+            "yes_only": {e["ticker"] for e in events
+                         if e.get("ticker") and e.get("is_yes_only")},
+            "event_size_max": {e["ticker"]: int(e["size_max"]) for e in events
+                               if e.get("ticker")
+                               and e.get("size_max") is not None},
+            # Both deprecated by Kalshi in favour of the per-event terms
+            # above, and false on every collection seen; honoured while sent.
+            "all_yes": bool(body.get("is_all_yes")),
+            "single_market_per_event": bool(
+                body.get("is_single_market_per_event")),
         }
 
     def create_combined_market(self, collection: str,

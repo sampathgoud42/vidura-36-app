@@ -145,3 +145,129 @@ class BotTrade(Base, TenantOwned, Timestamped):
             name="status_known"),
         Index("ix_bot_trade_tenant_bot_opened", "tenant_id", "bot_key", "opened_at"),
     )
+
+
+class SignalTrade(Base, TenantOwned, Timestamped):
+    """One position taken by hand from a DMI signal on the Bot Station, on the
+    asset's Kalshi fifteen-minute market, and watched until it is out.
+
+    The row IS the watch. The background loop reads every ``watching`` row on
+    each pass, so a trade survives a restart of this process: the take-profit
+    and the stop-loss resume from here rather than from memory. Nothing rests
+    on the exchange -- entries and exits are immediate-or-cancel -- so there is
+    no order to reconcile against this row, only the position.
+    """
+
+    __tablename__ = "signal_trade"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+
+    # The confirmation's own id, sent by the form. A confirmation that arrives
+    # twice -- a double click, a retry after a dropped response -- is one
+    # trade, not two; it is also the exchange's idempotency key for the buy.
+    request_id: Mapped[str] = mapped_column(String(64), nullable=False)
+
+    asset: Mapped[str] = mapped_column(String(16), nullable=False)   # btc, gold15
+    series: Mapped[str] = mapped_column(String(24), nullable=False)  # KXBTC15M
+    ticker: Mapped[str] = mapped_column(String(64), nullable=False)
+    signal: Mapped[str] = mapped_column(String(4), nullable=False)   # call | put
+    # Whether 5m agreed when it was confirmed (the strip's check mark).
+    confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    side: Mapped[str] = mapped_column(String(3), nullable=False)     # yes | no
+
+    contracts: Mapped[float] = mapped_column(Float, nullable=False)  # asked for
+    filled: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    entry_c: Mapped[float | None] = mapped_column(Float)
+    tp_c: Mapped[float | None] = mapped_column(Float)
+    sl_c: Mapped[float | None] = mapped_column(Float)
+    # When the quarter closes: past it the position is left to settle.
+    close_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    order_id: Mapped[str | None] = mapped_column(String(64))
+
+    status: Mapped[str] = mapped_column(String(16), nullable=False,
+                                        default="watching")
+    exited: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    exit_c: Mapped[float | None] = mapped_column(Float)
+    note: Mapped[str | None] = mapped_column(String(255))
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "request_id", name="tenant_request"),
+        CheckConstraint("side in ('yes','no')", name="side_known"),
+        CheckConstraint("signal in ('call','put')", name="signal_known"),
+        #   watching   held, take-profit and stop-loss live
+        #   tp / sl    sold on that exit
+        #   expired    still held when the quarter closed; left to settle
+        #   closed     no longer held, and not by this desk (sold elsewhere)
+        #   unfilled   the buy found nobody to sell to; nothing was bought
+        #   unwatched  a RISKY buy: bought whatever the bid, and nothing
+        #              watches it -- no take-profit, no stop-loss
+        CheckConstraint(
+            "status in ('watching','tp','sl','expired','closed','unfilled',"
+            "'unwatched')",
+            name="status_known"),
+        Index("ix_signal_trade_tenant_status", "tenant_id", "status"),
+    )
+
+
+class LuckSchedule(Base, TenantOwned, Timestamped):
+    """An operator's scheduled luck parley: a ticket built and placed in the
+    background at fixed times every day, while ``enabled``.
+
+    One row per operator. ``config_json`` is the ticket exactly as the Luck
+    form held it when the schedule was switched on or last updated -- legs,
+    spend, leg price, NO side, volume, spread, horizon, sports -- so what runs
+    at 9 is what the operator saw, not whatever the form says by then.
+    """
+
+    __tablename__ = "luck_schedule"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # When it was last switched ON. A slot that began before that is not
+    # run: switching on at 9:10 must not buy the 9:00 ticket on the spot.
+    enabled_at: Mapped[datetime | None] = mapped_column(DateTime)
+    config_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", name="one_schedule_per_tenant"),
+    )
+
+
+class LuckRun(Base, TenantOwned, Timestamped):
+    """One scheduled slot, for one operator: what happened at 9:00 or 18:00.
+
+    The row is written BEFORE the ticket is built, and (tenant, slot) is
+    unique: a slot is claimed once and never run twice -- not by a second
+    pass of the loop, and not after a restart in the middle of a placement,
+    where running it again could buy the ticket twice.
+    """
+
+    __tablename__ = "luck_run"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    # The slot in Chicago time, "2026-10-04 09:00".
+    slot: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False,
+                                        default="running")
+    detail: Mapped[str | None] = mapped_column(String(255))
+    legs: Mapped[int | None] = mapped_column(Integer)
+    cost_usd: Mapped[float | None] = mapped_column(Float)
+    combo_ticker: Mapped[str | None] = mapped_column(String(64))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "slot", name="one_run_per_slot"),
+        #   running      claimed; the ticket is being built or placed
+        #   placed       the combo was bought
+        #   skipped      not enough cash, or no ticket the bar allows
+        #   failed       built, but the exchange did not take it
+        #   interrupted  the desk restarted mid-run -- check Kalshi; never re-run
+        CheckConstraint(
+            "status in ('running','placed','skipped','failed','interrupted')",
+            name="status_known"),
+        Index("ix_luck_run_tenant_slot", "tenant_id", "slot"),
+    )

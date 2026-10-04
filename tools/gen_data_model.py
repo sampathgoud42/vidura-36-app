@@ -28,6 +28,7 @@ DOMAIN = {
     "execution_lease": "trading", "risk_heartbeat": "trading",
     "signal": "trading",
     "bot_run": "bot-station", "bot_trade": "bot-station",
+    "signal_trade": "bot-station",
     "scan_run": "market-scans", "scan_best_bets_row": "market-scans",
     "scan_breakout_row": "market-scans",
 }
@@ -75,6 +76,13 @@ WHY = {
     "bot_trade": "One trade a bot recorded, mirrored into the shared ledger. "
                  "Nothing here names a bot family -- adding a bot must not "
                  "add a table.",
+    "signal_trade": "One position bought by hand from a Bot Station DMI "
+                    "signal on a Kalshi fifteen-minute market (CALL buys "
+                    "YES, PUT buys NO). The row IS the watch: the "
+                    "background loop reads every watching row each pass to "
+                    "apply the +20% take-profit and -40% stop-loss, so a "
+                    "trade outlives a restart. Entries and exits are "
+                    "immediate-or-cancel, so nothing rests on the exchange.",
     "scan_run": "When a stored scan ran, one row per combination: Best Bets "
                 "by venue, BreakoutRadar by market and timeframe. Replaced "
                 "with the combination's rows in one transaction (truncate and "

@@ -100,6 +100,21 @@ CONTRACT: list[tuple[str, str]] = [
     ("POST", f"{V1}/bots/luck/preview"),
     ("POST", f"{V1}/bots/luck/place"),
     ("GET", f"{V1}/bots/luck/job/{{job_id}}"),
+    # The sports in play, for the ticket's sport picker.
+    ("GET", f"{V1}/bots/luck/sports"),
+    # The scheduled Luck parley: on/off, its ticket, its runs.
+    ("GET", f"{V1}/bots/luck/schedule"),
+    ("PUT", f"{V1}/bots/luck/schedule"),
+    # A DMI strip's CALL/PUT bought by hand on the asset's Kalshi 15-minute
+    # market, then watched for its take-profit and stop-loss. Added after the
+    # freeze.
+    ("POST", f"{V1}/bots/signal-trade/preview"),
+    ("POST", f"{V1}/bots/signal-trade/place"),
+    ("GET", f"{V1}/bots/signal-trades"),
+    # Cash per Kalshi exchange shard, and moving it between them (15-minute
+    # markets spend only shard 2's). Added after the freeze.
+    ("GET", f"{V1}/bots/kalshi/shards"),
+    ("POST", f"{V1}/bots/kalshi/shards/transfer"),
     # desk + wellness + worlds
     ("GET", f"{V1}/levels/status"),
     ("POST", f"{V1}/levels/start"),
@@ -265,7 +280,9 @@ def test_execution_endpoints_advertise_idempotency(app):
     # refresh, and closing everything moved to /positions/flatten (9800aa1).
     money = {f"{V1}/tradier/positions", f"{V1}/tradier/positions/contract",
              f"{V1}/tradier/positions/{{position_id}}/close",
-             f"{V1}/tradier/positions/flatten"}
+             f"{V1}/tradier/positions/flatten",
+             f"{V1}/bots/signal-trade/place",
+             f"{V1}/bots/kalshi/shards/transfer"}
     missing = []
     for route in api_routes(app):
         if route.path in money and "POST" in route.methods:

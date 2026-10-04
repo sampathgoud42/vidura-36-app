@@ -102,17 +102,20 @@ MAX_SPREAD_C = 3
 
 
 def within_expiry_horizon(market, *, hours: int = MAX_HOURS_TO_EXPIRY,
-                          now=None) -> tuple[bool, str]:
+                          now=None, on_settle: bool = False) -> tuple[bool, str]:
     """Does this close soon enough to be worth tying capital up for.
 
     Measured on close_ts. A stage-race market can report an expected
     expiration of today and a CLOSE two weeks out; the close is when the leg
     resolves and the money comes back, so the close is what a parlay horizon
     has to be measured against.
+
+    ``on_settle`` measures on the expected settlement instead, where there is
+    one: a tennis match closes a fortnight out and settles when it ends.
     """
     from datetime import datetime, timezone
 
-    raw = market.closes_at
+    raw = (market.settles_at or market.closes_at) if on_settle else market.closes_at
     if not raw:
         # Unknown, so refused. An unreadable close time is the one case where
         # guessing "soon" risks locking a combo up indefinitely.
@@ -367,6 +370,7 @@ def eligible_legs(markets: list[MarketState],
                   tennis_needs_score: bool = True,
                   tennis_lock_c: int | None = TENNIS_LOCK_C,
                   soccer_no_side: bool = True,
+                  tennis_rule=None,
                   now=None
                   ) -> tuple[list[ComboCandidate], list[dict]]:
     """Every market that may become a leg, and why the rest were refused.
@@ -396,6 +400,12 @@ def eligible_legs(markets: list[MarketState],
     win is 93c NOT to. The two sides are then ranked against each other like
     any other pair, and the one-leg-per-event rule below decides which of them
     survives, so a match still contributes exactly one leg.
+
+    ``tennis_rule``, when given, is the caller's own judgement of a tennis
+    leg -- ``(market, score or None) -> (ok, why)`` -- and it REPLACES every
+    tennis gate above: the lock, the need for a score, and the set-and-games
+    conditions a score must meet. The gates that are not about tennis still
+    apply to it: the price floor and ceiling, the horizon, the spread.
     """
     scores = scores or {}
     tracker = tracker or PositionTracker()
@@ -439,7 +449,8 @@ def eligible_legs(markets: list[MarketState],
         # quote is the evidence they were standing in for. The two checks
         # above are not skipped and neither is the horizon below: those are
         # about the book's shape, not the leg's odds.
-        locked = (tennis_lock_c is not None
+        locked = (tennis_rule is None
+                  and tennis_lock_c is not None
                   and is_tennis(market.sport)
                   and (market.bid_c or 0) > int(tennis_lock_c))
 
@@ -451,7 +462,12 @@ def eligible_legs(markets: list[MarketState],
                 rejected.append({"ticker": market.ticker, "reason": why})
                 continue
 
-        ok, why = within_expiry_horizon(market, hours=max_hours, now=now)
+        # A tennis leg judged by the caller's rule is measured on when it
+        # SETTLES: its match closes a fortnight out, Kalshi's latest date, and
+        # pays when it ends -- on the close, no live match could ever qualify.
+        ok, why = within_expiry_horizon(
+            market, hours=max_hours, now=now,
+            on_settle=tennis_rule is not None and is_tennis(market.sport))
         if not ok:
             rejected.append({"ticker": market.ticker, "reason": why})
             continue
@@ -471,7 +487,14 @@ def eligible_legs(markets: list[MarketState],
 
         reason = f"implied {market.implied_probability:.0%}"
         score_state = None
-        if is_tennis(market.sport):
+        if is_tennis(market.sport) and tennis_rule is not None:
+            score_state = scores.get(market.ticker)
+            ok, why = tennis_rule(market, score_state)
+            if not ok:
+                rejected.append({"ticker": market.ticker, "reason": why})
+                continue
+            reason = f"implied {market.implied_probability:.0%}; {why}"
+        elif is_tennis(market.sport):
             score_state = scores.get(market.ticker)
             if score_state is None:
                 if tennis_needs_score:

@@ -264,8 +264,12 @@
 .bs-strips {
   display: flex; flex-wrap: wrap; align-items: flex-start;
   column-gap: 4px;
+  /* The core's legend and HUD are pinned to the bottom of this panel; this
+     is the room they sit in, so they no longer paint over the last row. */
+  padding-bottom: 24px;
 }
 .bs-strips > .bs-commodities { flex: 1 1 400px; min-width: 0; }
+.bs-strips > .bs-sigtrades { flex-basis: 100%; }
 
 .bs-commodities { border-top: 1px solid var(--bs-hair); padding: 10px 14px 12px; }
 .bs-commodities-hd { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
@@ -294,6 +298,86 @@
 .bs-commrow .tf b { font-weight: 700; margin-right: 2px; }
 .bs-commrow .slope { font-size: 0.9em; margin-left: 1px; }
 .bs-commrow .sig { font-weight: 700; font-size: 11px; min-width: 3.2em; text-align: right; }
+/* The signal is a link to trade it: a button with no chrome, underlined the
+   way a link is, and big enough to hit with a thumb. */
+.bs-commrow .sig-btn {
+  background: none; border: 0; padding: 4px 2px; margin: -4px -2px;
+  font-family: inherit; cursor: pointer;
+  text-decoration: underline dotted; text-underline-offset: 3px;
+}
+.bs-commrow .sig-btn:hover, .bs-commrow .sig-btn:focus-visible { text-decoration-style: solid; }
+@media (pointer: coarse) { .bs-commrow .sig-btn { min-height: 44px; min-width: 44px; } }
+
+/* The confirmation: the luck sheet's frame, narrower, as a list of facts. */
+.bs-sigsheet { width: min(520px, 100%); }
+.bs-sigsheet h2 { font-size: 14px; letter-spacing: 0.08em; flex: 1 1 auto; }
+.bs-sig-grid {
+  display: grid; grid-template-columns: 7.5em 1fr; gap: 8px 10px;
+  margin: 10px 0 12px; font-size: 12px; align-items: baseline;
+}
+.bs-sig-grid dt {
+  font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--bs-ink-3);
+}
+.bs-sig-grid dd { margin: 0; color: var(--bs-ink); }
+.bs-sig-grid dd .dim { color: var(--bs-ink-3); }
+.bs-sig-grid dd.warn { color: var(--bs-warn); }
+/* 16px: anything smaller makes iPhone Safari zoom the page on focus. */
+.bs-sig-grid .bs-input { width: 6em; padding: 5px 6px; font-size: 16px; text-align: right; }
+.bs-sig-chk { margin-left: 8px; font-size: 11px; }
+/* The bid's own refresh: beside the check it updates, not pushed to the edge. */
+.bs-sig-refresh { margin-left: 10px; vertical-align: 1px; }
+.bs-sig-refresh .spin { display: inline-block; animation: bs-spin 0.8s linear infinite; }
+@media (pointer: coarse) { .bs-sig-refresh { min-width: 44px; min-height: 36px; } }
+.bs-sig-chk.ok { color: var(--bs-good); }
+.bs-sig-chk.bad { color: var(--bs-crit); }
+.bs-sig-invalid { font-weight: 700; }
+
+/* What was traded from the strips, newest first. */
+.bs-sigrow .st { font-weight: 700; font-size: 11px; }
+.bs-sigrow .st.watching { color: var(--bs-cyan); }
+.bs-sigrow .st.tp { color: var(--bs-good); }
+.bs-sigrow .st.sl { color: var(--bs-crit); }
+.bs-sigrow .st.expired, .bs-sigrow .st.closed, .bs-sigrow .st.unfilled { color: var(--bs-ink-3); }
+.bs-sigrow .st.unwatched { color: var(--bs-warn); }
+/* RISKY-BUY: unmistakably not the ordinary button beside it. */
+.bs-btn.risky { border-color: var(--bs-warn); color: var(--bs-warn); }
+.bs-btn.risky:hover:not(:disabled) { background: rgba(250, 178, 25, 0.12); }
+.bs-btn.risky:disabled { border-color: var(--bs-hair-2); color: var(--bs-ink-4); }
+.bs-sig-risky-ok { color: var(--bs-warn); }
+
+/* MOVE MONEY: the button in the status strip, and its sheet. */
+.bs-move-btn { padding: 4px 9px; font-size: 10px; min-height: 26px; margin-top: 2px; }
+.bs-movesheet h2 { flex: 1 1 auto; }
+.bs-movesheet .bs-refresh { margin-left: 0; }
+.bs-shards { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 10px 0 12px; }
+.bs-shard {
+  border: 1px solid var(--bs-hair-2); padding: 8px 10px;
+  display: flex; flex-direction: column; gap: 2px; font-size: 12px;
+}
+.bs-shard .n { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--bs-ink-3); }
+.bs-shard b { font-size: 15px; color: var(--bs-ink); }
+.bs-shard .p { font-size: 10px; color: var(--bs-ink-3); }
+.bs-shard.from { border-color: var(--bs-warn); }
+.bs-shard.to { border-color: var(--bs-good); }
+.bs-move-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; margin-bottom: 8px; }
+.bs-move-field { display: flex; flex-direction: column; gap: 3px; }
+.bs-move-field span { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--bs-ink-3); }
+/* 16px: anything smaller makes iPhone Safari zoom the page on focus. */
+.bs-move-field .bs-input { font-size: 16px; padding: 5px 6px; min-width: 6.5em; }
+.bs-move-field.amt .bs-input { width: 7em; text-align: right; }
+.bs-swap { min-width: 44px; min-height: 36px; font-size: 16px; padding: 4px 10px; }
+.bs-linkbtn {
+  background: none; border: 0; color: var(--bs-cyan); cursor: pointer;
+  text-decoration: underline; font: inherit; font-size: 11px; padding: 8px 4px;
+}
+.bs-move-hist { margin-top: 12px; border-top: 1px solid var(--bs-hair); padding-top: 8px; }
+.bs-move-hist .hd { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--bs-ink-3); margin-bottom: 4px; }
+.bs-move-hist .row {
+  display: grid; grid-template-columns: 6.5em 1fr 6em 6em; gap: 8px;
+  font-size: 11px; color: var(--bs-ink-2); padding: 2px 0;
+}
+.bs-move-hist .row b { color: var(--bs-ink); text-align: right; }
+.bs-move-hist .st.complete { color: var(--bs-good); }
 @media (max-width: 900px) {
   .bs-commodities-rows { flex-direction: column; gap: 6px; }
 }
@@ -976,6 +1060,92 @@
   font-style: normal; font-size: 9px; color: var(--bs-ink-3);
   flex: 0 0 auto;
 }
+/* The NO-side switch: a box, then what it does in words. 18px so a thumb
+   finds it on a phone, and the text wraps rather than widening the dock. */
+.bs-lucknoside { cursor: pointer; }
+.bs-lucknoside input[type="checkbox"] {
+  flex: 0 0 auto; width: 18px; height: 18px; margin: 0;
+  accent-color: var(--bs-sun); cursor: pointer;
+}
+.bs-lucknoside .txt { flex: 1 1 auto; font-size: 10px; color: var(--bs-ink-2); }
+/* On a touch screen the whole row is the target -- the label wraps the box --
+   and it gets the 44px a thumb needs. */
+@media (pointer: coarse) {
+  .bs-lucknoside { min-height: 44px; }
+}
+/* The sport picker: one line closed ("All sports · 20", "3 of 20 sports"),
+   a wrap of ticks open beneath it, inside the dock's own scroll. */
+.bs-lucksportrow { align-items: baseline; }   /* label stays by the summary */
+.bs-lucksports { flex: 1 1 auto; min-width: 0; }
+.bs-lucksports > summary {
+  list-style: none; cursor: pointer;
+  padding: 5px 6px; border: 1px solid var(--bs-hair-2);
+  font-size: 11px; color: var(--bs-ink-2);
+}
+.bs-lucksports > summary::-webkit-details-marker { display: none; }
+.bs-lucksports > summary::after { content: ' \25BE'; color: var(--bs-ink-3); }
+.bs-lucksports[open] > summary::after { content: ' \25B4'; }
+.bs-sportgrid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 2px 8px; padding: 6px;
+  border: 1px solid var(--bs-hair-2); border-top: 0;
+}
+.bs-sportquick { grid-column: 1 / -1; display: flex; gap: 6px; margin-bottom: 4px; }
+.bs-sportgrid label {
+  display: flex; align-items: center; gap: 6px; min-height: 24px;
+  font-size: 11px; color: var(--bs-ink-2); cursor: pointer;
+}
+.bs-sportgrid input[type="checkbox"] {
+  flex: 0 0 auto; width: 16px; height: 16px; margin: 0;
+  accent-color: var(--bs-sun); cursor: pointer;
+}
+@media (pointer: coarse) {
+  .bs-lucksports > summary { min-height: 44px; display: flex; align-items: center; }
+  .bs-sportgrid label { min-height: 44px; }
+}
+/* The schedule switch: a track and a knob over a real checkbox, so the
+   keyboard, the screen reader and the touch target are the browser's own. */
+.bs-lucksched { align-items: center; }
+.bs-lucksched .txt { flex: 1 1 auto; font-size: 10px; color: var(--bs-ink-2); }
+.bs-luckswitch { position: relative; flex: 0 0 auto; width: 38px; height: 22px; }
+.bs-luckswitch input {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0;
+  opacity: 0; cursor: pointer; z-index: 1;
+}
+.bs-luckswitch .track {
+  position: absolute; inset: 0; border: 1px solid var(--bs-hair-2);
+  border-radius: 11px; transition: background 0.15s, border-color 0.15s;
+}
+.bs-luckswitch .knob {
+  position: absolute; top: 4px; left: 4px; width: 14px; height: 14px;
+  border-radius: 50%; background: var(--bs-ink-3);
+  transition: transform 0.15s, background 0.15s;
+}
+.bs-luckswitch input:checked ~ .track {
+  border-color: var(--bs-sun);
+  background: color-mix(in srgb, var(--bs-sun) 22%, transparent);
+}
+.bs-luckswitch input:checked ~ .knob { transform: translateX(16px); background: var(--bs-sun); }
+.bs-luckswitch input:focus-visible ~ .track { outline: 2px solid var(--bs-sun); outline-offset: 2px; }
+.bs-luckswitch input:disabled { cursor: default; }
+.bs-luckswitch input:disabled ~ .track, .bs-luckswitch input:disabled ~ .knob { opacity: 0.5; }
+.bs-lucksched-on { color: var(--bs-ink-2); }
+.bs-lucksched-up { margin-left: 6px; padding: 3px 8px; min-height: 24px; font-size: 9px; }
+.bs-luckruns { list-style: none; margin: 2px 0 8px; padding: 0; font-size: 10px; color: var(--bs-ink-2); }
+.bs-luckruns li { padding: 3px 0; border-top: 1px dashed var(--bs-hair); }
+.bs-luckruns b { font-weight: 600; color: var(--bs-ink); margin-right: 6px; }
+.bs-luckruns .st { text-transform: uppercase; letter-spacing: 0.08em; font-size: 9px; }
+.bs-luckruns .st-placed { color: var(--bs-good); }
+.bs-luckruns .st-skipped, .bs-luckruns .st-running { color: var(--bs-warn); }
+.bs-luckruns .st-failed, .bs-luckruns .st-interrupted { color: var(--bs-crit); }
+.bs-luckruns .dim { color: var(--bs-ink-3); }
+@media (pointer: coarse) {
+  .bs-lucksched { min-height: 44px; }
+  .bs-luckswitch { width: 46px; height: 28px; }
+  .bs-luckswitch .knob { top: 5px; left: 5px; width: 18px; height: 18px; }
+  .bs-luckswitch input:checked ~ .knob { transform: translateX(18px); }
+}
+.bs-luckrow .bs-input:disabled { opacity: 0.45; }
 .bs-luckdock .bs-luck-actions { gap: 6px; margin: 2px 0 6px; }
 .bs-luckdock .bs-btn { padding: 7px 10px; font-size: 10px; min-height: 32px; }
 
