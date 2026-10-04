@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session as DbSession
 from app.api_v2 import deps
 from app.domains.botstation import lifecycle, registry
 from app.domains.botstation.models import BotTrade
+from app.domains.botstation.parley.models import MAX_COMBO_LEGS
 from app.domains.trading.execution import idempotency
 from app.tenancy import repository as tenants
 from app.tenancy.models import Tenant
@@ -730,8 +731,8 @@ def reconcile(apply: bool = Query(default=True),
 
 
 class LuckPreviewRequest(BaseModel):
-    min_legs: int = Field(default=5, ge=2, le=24)
-    max_legs: int = Field(default=24, ge=2, le=24)
+    min_legs: int = Field(default=5, ge=2, le=MAX_COMBO_LEGS)
+    max_legs: int = Field(default=24, ge=2, le=MAX_COMBO_LEGS)
     min_leg_c: int = Field(default=60, ge=5, le=98)
     max_leg_c: int = Field(default=98, ge=6, le=99)
     min_volume_usd: float = Field(default=0, ge=0)
@@ -755,7 +756,7 @@ class LuckPlaceRequest(BaseModel):
     tickers: list[str] | None = None
     min_usd: float = Field(default=5, gt=0, le=5000)
     max_usd: float = Field(default=7.5, gt=0, le=5000)
-    min_legs: int = Field(default=5, ge=2, le=24)
+    min_legs: int = Field(default=5, ge=2, le=MAX_COMBO_LEGS)
 
 
 def _kalshi_cred(db: DbSession, tenant: Tenant):

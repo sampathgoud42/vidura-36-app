@@ -1242,11 +1242,12 @@ function LuckPanel() {
               </div>
               <label className="bs-luckrow">
                 <span className="lbl">Legs</span>
-                <input className="bs-input" type="number" min="2" max="24"
+                <input className="bs-input" type="number" min="2" max="40"
                   value={form.min_legs} onChange={set('min_legs')} />
                 <i>–</i>
-                <input className="bs-input" type="number" min="2" max="24"
-                  value={form.max_legs} onChange={set('max_legs')} />
+                <input className="bs-input" type="number" min="2" max="40"
+                  value={form.max_legs} onChange={set('max_legs')}
+                  title="up to 40 legs" />
               </label>
               <label className="bs-luckrow">
                 <span className="lbl">Spend $</span>

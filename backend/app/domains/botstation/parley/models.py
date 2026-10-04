@@ -307,15 +307,21 @@ class ComboCandidate(BaseModel):
         return self.market.ask_c or 100
 
 
+# The most legs one combination may hold. Kalshi publishes no ceiling (every
+# collection's size_max is 0) and accepts long combos, and the luck ticket
+# asks the exchange to accept the exact legs before they are shown anyway.
+MAX_COMBO_LEGS = 40
+
+
 class ComboOrder(BaseModel):
     """A parlay: two to five legs, none of them from the same event."""
 
-    # 24 is the outer bound this desk will construct, not the house
-    # style: a regular parlay is capped at 5 by the engine's max_legs,
-    # while the daily long-shot ticket deliberately runs much longer.
-    # Keeping the model permissive and the POLICY in the caller means a
-    # different appetite is a launch option, not a code change.
-    legs: list[ComboCandidate] = Field(min_length=2, max_length=24)
+    # MAX_COMBO_LEGS is the outer bound this desk will construct, not the
+    # house style: a regular parlay is capped at 5 by the engine's max_legs,
+    # while the long-shot ticket deliberately runs much longer. Keeping the
+    # model permissive and the POLICY in the caller means a different
+    # appetite is a launch option, not a code change.
+    legs: list[ComboCandidate] = Field(min_length=2, max_length=MAX_COMBO_LEGS)
     # Whether two legs may come from the SAME event. False everywhere except
     # the daily long-shot ticket, which is explicitly a correlated bet: it
     # wants "set 1 winner" and "match winner" on one match precisely because

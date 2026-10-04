@@ -165,9 +165,10 @@ class _CsvLedgerAdapter:
 # process to start -- so these are the numbers its PREVIEW and PLACE calls
 # take, rendered from the same schema every other bot uses.
 _LUCK_OPTIONS = {
-    "min_legs": {"type": "integer", "min": 2, "max": 24, "default": 5,
+    # Up to parley.models.MAX_COMBO_LEGS.
+    "min_legs": {"type": "integer", "min": 2, "max": 40, "default": 5,
                  "label": "Minimum legs", "group": "Ticket"},
-    "max_legs": {"type": "integer", "min": 2, "max": 24, "default": 24,
+    "max_legs": {"type": "integer", "min": 2, "max": 40, "default": 24,
                  "label": "Maximum legs", "group": "Ticket"},
     "min_leg_c": {"type": "integer", "min": 5, "max": 98, "default": 60,
                   "label": "Minimum leg price (c)", "group": "Ticket"},
