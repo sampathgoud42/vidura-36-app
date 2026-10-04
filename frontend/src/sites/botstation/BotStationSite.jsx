@@ -707,7 +707,7 @@ function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
 // `load` is what differs, plus the title and how a row is labelled. Everything
 // about how a reading is DISPLAYED is shared, which is the part that has to
 // stay consistent across the desk.
-function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2, onSignal }) {
+function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2, onSignal, extra = null }) {
   const [snap, setSnap] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -782,6 +782,7 @@ function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2, onSignal 
             spot {snap.meta.spot_age_s == null ? 'not read' : ago(snap.meta.spot_age_s)}
           </span>
         )}
+        {extra}
         <button type="button" className="bs-refresh" onClick={doRefresh} disabled={busy}
           title="force a fresh scan now">↻</button>
       </div>
@@ -1631,13 +1632,19 @@ const CRYPTO_ACCENT = {
   doge: '#c2a633', xrp: '#25a768',
 };
 
-function CryptoStrip({ onSignal }) {
+function CryptoStrip({ onSignal, onCombo }) {
   return (
     <DmiStrip
       title="CRYPTO" icon="₿" onSignal={onSignal}
       load={loadCryptoBoard}
       labelFor={(r) => ({ label: r.label || r.bot.toUpperCase(),
                           accent: CRYPTO_ACCENT[r.bot] })}
+      extra={(
+        <button type="button" className="bs-btn bs-combo15-btn" onClick={onCombo}
+          title="build one Kalshi combo across every fifteen-minute market, crypto and commodities, from these DMI signals">
+          15M COMBO
+        </button>
+      )}
     />
   );
 }
@@ -1839,16 +1846,187 @@ function SignalStrips() {
   const [open, setOpen] = useState(null);           // { row, label, accent }
   const [placed, setPlaced] = useState(0);
   const onSignal = useCallback((row, label, accent) => setOpen({ row, label, accent }), []);
+  const [combo, setCombo] = useState(false);
+  const onCombo = useCallback(() => setCombo(true), []);
   return (
     <>
       <CommoditiesStrip onSignal={onSignal} />
-      <CryptoStrip onSignal={onSignal} />
+      <CryptoStrip onSignal={onSignal} onCombo={onCombo} />
       <SignalTrades refreshKey={placed} />
       {open && (
         <SignalTradeSheet {...open} onClose={() => setOpen(null)}
           onPlaced={() => setPlaced((k) => k + 1)} />
       )}
+      {combo && <Combo15Sheet onClose={() => setCombo(false)} />}
     </>
+  );
+}
+
+// ── the fifteen-minute combo ───────────────────────────────────────────────
+// Every fifteen-minute market Kalshi lets a combo hold, crypto and
+// commodities, for the quarter trading now: CALL as YES, PUT as NO. Ticked by
+// default when the DMI is under five minutes old, the bid is 35-90c and the
+// side is at most 5c wide; the rest are listed unticked with the reason. A
+// market with no side (no signal, mixed) or whose quarter the collection does
+// not host cannot be ticked. One stake, $5 unless changed, at most $99.
+function Combo15Sheet({ onClose }) {
+  const [pv, setPv] = useState(null);
+  const [busy, setBusy] = useState('load');
+  const [err, setErr] = useState('');
+  const [keep, setKeep] = useState(() => new Set());
+  const [stake, setStake] = useState('5');
+  const [result, setResult] = useState(null);
+  // One key per confirmation; a fresh build is a fresh confirmation.
+  const keyRef = useRef(newConfirmationKey());
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+
+  const load = useCallback(async () => {
+    setBusy('load'); setErr(''); setResult(null);
+    try {
+      const d = await vidura.combo15Preview();
+      if (!alive.current) return;
+      setPv(d);
+      setKeep(new Set((d.legs || []).filter((l) => l.default).map((l) => l.ticker)));
+      keyRef.current = newConfirmationKey();
+      if (d && d.ok === false) setErr(d.detail || 'no combo can be built');
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const legs = (pv && pv.legs) || [];
+  const chosen = legs.filter((l) => l.selectable && keep.has(l.ticker));
+  const odds = chosen.reduce((acc, l) => acc * ((l.bid_c || 0) / 100), 1);
+  const maxStake = (pv && pv.max_stake_usd) || 99;
+  const stakeN = Number(stake);
+  const stakeOk = Number.isFinite(stakeN) && stakeN > 0 && stakeN <= maxStake;
+  const done = !!(result && result.placed);
+  const canPlace = !busy && !done && chosen.length >= 2 && stakeOk;
+  const toggle = (ticker) => setKeep((prev) => {
+    const next = new Set(prev);
+    if (next.has(ticker)) next.delete(ticker); else next.add(ticker);
+    return next;
+  });
+
+  const place = async () => {
+    if (!canPlace) return;
+    const money = `$${stakeN.toFixed(2)}`;
+    const ok = await confirmDialog({
+      title: `Buy a ${chosen.length}-leg combo for up to ${money}?`,
+      body: `One Kalshi combo on this quarter's fifteen-minute markets: ${chosen
+        .map((l) => `${l.label} ${l.side.toUpperCase()}`).join(', ')}. It pays only if every `
+        + `leg lands — about ${(odds * 100).toFixed(1)}% on the bids. Bought at the market `
+        + `through Kalshi's request-for-quote, spending at most ${money}.`,
+      confirmText: `Buy for ${money}`,
+      cancelText: 'Cancel',
+    });
+    if (!ok) return;
+    setBusy('place'); setErr('');
+    try {
+      const out = await vidura.combo15Place({
+        legs: chosen.map((l) => ({ ticker: l.ticker, side: l.side })),
+        stake_usd: Math.round(stakeN * 100) / 100,
+      }, keyRef.current);
+      if (!alive.current) return;
+      setResult(out);
+      if (!out || !out.placed) setErr((out && out.detail) || 'not placed');
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  };
+
+  const rule = (pv && pv.rule) || {};
+  return createPortal(
+    <div className="bs-luck-scrim" onClick={() => { if (busy !== 'place') onClose(); }}>
+      <div className="bs-luck-sheet bs-combo15" role="dialog" aria-modal="true"
+        aria-label="fifteen-minute combo" onClick={(e) => e.stopPropagation()}>
+        <header className="bs-modal-hd">
+          <h2>15-MINUTE COMBO</h2>
+          <button type="button" className="bs-refresh" onClick={load} disabled={!!busy}
+            aria-label="build again" title="read the markets and the DMI boards again">
+            <span className={busy === 'load' ? 'spin' : ''} aria-hidden="true">↻</span>
+          </button>
+          <button type="button" className="close" disabled={busy === 'place'} onClick={onClose}>×</button>
+        </header>
+        <p className="bs-luck-note">
+          {busy === 'load' && !pv ? 'reading every fifteen-minute market and the DMI boards…' : (
+            <>
+              {chosen.length} of {legs.length} ticked · chance {(odds * 100).toFixed(2)}%
+              {' · '}ticked by default: DMI ≤ {Math.round((rule.fresh_s || 300) / 60)}m old,
+              {' '}CALL → YES / PUT → NO, bid {rule.bid_min_c ?? 35}–{rule.bid_max_c ?? 90}c,
+              {' '}≤ {rule.max_spread_c ?? 5}c wide
+            </>
+          )}
+        </p>
+        <div className="bs-luck-actions">
+          <label className="bs-combo15-stake">
+            Max investment $
+            <input className="bs-input" type="number" min="1" max={maxStake} step="1"
+              value={stake} onChange={(e) => setStake(e.target.value)} disabled={!!busy || done}
+              aria-label="maximum investment in dollars" />
+          </label>
+          <button type="button" className="bs-btn live" onClick={place} disabled={!canPlace}>
+            {busy === 'place' ? 'PLACING…' : `PLACE COMBO — ${chosen.length} LEGS`}
+          </button>
+        </div>
+        {!stakeOk ? <p className="bs-luck-err">max investment is above $0 and at most ${maxStake}</p> : null}
+        {pv && !busy && !done && chosen.length < 2 ? (
+          <p className="bs-luck-err">a combo needs at least two ticked legs</p>
+        ) : null}
+        {err ? <p className="bs-luck-err">{err}</p> : null}
+        {done ? (
+          <p className="bs-luck-ok">
+            PLACED — {result.legs_used} legs, {result.contracts} contracts
+            {result.filled_c != null ? ` at ${result.filled_c}c` : ''}
+            {result.cost_usd != null ? ` · $${Number(result.cost_usd).toFixed(2)}` : ''}
+            {result.detail ? ` · ${result.detail}` : ''}
+          </p>
+        ) : null}
+        <div className="bs-luck-legs">
+          <table>
+            <thead>
+              <tr><th>Keep</th><th>Market</th><th>Signal</th><th>Side</th>
+                <th className="num">Bid</th><th className="num">Ask</th>
+                <th className="num">Spread</th><th className="num">DMI age</th>
+                <th className="num">Closes</th><th>Not ticked because</th></tr>
+            </thead>
+            <tbody>
+              {legs.map((l) => {
+                const on = l.selectable && keep.has(l.ticker);
+                return (
+                  <tr key={l.series} className={on ? '' : 'off'}>
+                    <td>
+                      <input type="checkbox" checked={on} disabled={!l.selectable || !!busy || done}
+                        onChange={() => toggle(l.ticker)}
+                        aria-label={`${l.label}${l.side ? ` ${l.side.toUpperCase()}` : ''}`} />
+                    </td>
+                    <td title={l.ticker || l.series}>{l.label}</td>
+                    <td>{l.signal ? `${SIG_TEXT[l.signal]}${l.confirms ? '✓' : ''}` : '—'}</td>
+                    <td>{l.side ? l.side.toUpperCase() : '—'}</td>
+                    <td className="num">{cents(l.bid_c)}</td>
+                    <td className="num">{cents(l.ask_c)}</td>
+                    <td className="num">{cents(l.spread_c)}</td>
+                    <td className="num">{l.dmi_age_s == null ? '—' : mmss(l.dmi_age_s)}</td>
+                    <td className="num">{l.left_s == null ? '—' : mmss(l.left_s)}</td>
+                    <td className="dim why">{(l.why || []).join('; ')}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

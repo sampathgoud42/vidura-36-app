@@ -111,6 +111,9 @@ CONTRACT: list[tuple[str, str]] = [
     ("POST", f"{V1}/bots/signal-trade/preview"),
     ("POST", f"{V1}/bots/signal-trade/place"),
     ("GET", f"{V1}/bots/signal-trades"),
+    # One combo across the fifteen-minute markets, from the DMI boards.
+    ("POST", f"{V1}/bots/combo15/preview"),
+    ("POST", f"{V1}/bots/combo15/place"),
     # Cash per Kalshi exchange shard, and moving it between them (15-minute
     # markets spend only shard 2's). Added after the freeze.
     ("GET", f"{V1}/bots/kalshi/shards"),
@@ -282,6 +285,7 @@ def test_execution_endpoints_advertise_idempotency(app):
              f"{V1}/tradier/positions/{{position_id}}/close",
              f"{V1}/tradier/positions/flatten",
              f"{V1}/bots/signal-trade/place",
+             f"{V1}/bots/combo15/place",
              f"{V1}/bots/kalshi/shards/transfer"}
     missing = []
     for route in api_routes(app):

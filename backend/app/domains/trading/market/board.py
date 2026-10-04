@@ -18,7 +18,30 @@ Tradier, a spot poller, Coinbase -- has already done its own job by then.
 
 from __future__ import annotations
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from app.domains.trading.market import indicators
+
+
+def bar_epoch(bar: dict) -> int | None:
+    """When a bar began, in unix seconds, whichever shape its source writes:
+    Coinbase an epoch; Tradier an epoch ``timestamp`` beside its ET clock
+    time; the off-hours accumulator a Chicago "YYYY-MM-DD HH:MM"."""
+    for key in ("timestamp", "time"):
+        value = bar.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return int(value)
+    value = bar.get("time")
+    if not isinstance(value, str):
+        return None
+    try:
+        moment = datetime.fromisoformat(value.strip().replace(" ", "T"))
+    except ValueError:
+        return None
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=ZoneInfo("America/Chicago"))
+    return int(moment.timestamp())
 
 # The timeframes every board shows, and the factor each is folded from. All
 # of them come from ONE fetch of 1-minute bars: separate fetches would let the
@@ -93,6 +116,10 @@ def row_from_bars(key: str, label: str, symbol: str, bars: list[dict],
         "direction": signal,
         "m5_confirms": (bool(signal)
                         and (readings["m5"] or {}).get("side") == signal),
+        # When the newest bar the DMI was read from began. A board cached a
+        # minute ago over a market that stopped trading hours ago is fresh
+        # as a cache and stale as a signal; this is the second one.
+        "bar_time": bar_epoch(bars[-1]) if bars else None,
     }
     for name in TIMEFRAMES:
         reading = readings[name] or {}

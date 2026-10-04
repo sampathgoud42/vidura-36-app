@@ -541,6 +541,11 @@ COVERED_BY_NAMED_TESTS = {
     # A quote for the asset's current market: read through the operator's own
     # key, stored nowhere, and naming nobody.
     "/api/v1/bots/signal-trade/preview": "no tenant-addressable identifier",
+    # The fifteen-minute combo: market data read through the caller's own
+    # key, and a combo bought in the caller's own account. Its confirmation
+    # key is looked up inside the caller's scope (owner, key).
+    "/api/v1/bots/combo15/preview": "no tenant-addressable identifier",
+    "/api/v1/bots/combo15/place": "no tenant-addressable identifier",
     # Cash moved inside the CALLER's own Kalshi account, through the caller's
     # own key; a shard index names no one. The read beside it is in the sweep.
     "/api/v1/bots/kalshi/shards/transfer": "no tenant-addressable identifier",

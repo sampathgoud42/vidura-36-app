@@ -333,6 +333,12 @@ export const vidura = {
   signalTradePlace: (body, key) => api.post('/bots/signal-trade/place', body,
     { idempotencyKey: key }),
   signalTrades: () => api.get('/bots/signal-trades'),
+  // One combo across the fifteen-minute markets, from the DMI boards: the
+  // list with its default ticks, then the purchase, under the confirmation's
+  // key so a retry is the same combo.
+  combo15Preview: () => api.post('/bots/combo15/preview', {}),
+  combo15Place: (body, key) => api.post('/bots/combo15/place', body,
+    { idempotencyKey: key }),
   // Cash per Kalshi exchange shard, and moving it between them. The move
   // carries the confirmation's key: the exchange's transfer has none.
   kalshiShards: () => api.get('/bots/kalshi/shards'),

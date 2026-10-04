@@ -219,6 +219,74 @@ def signal_trade_place(payload: SignalPlaceRequest,
         raise HTTPException(status_code=424, detail=str(exc)) from None
 
 
+class Combo15Leg(BaseModel):
+    ticker: str = Field(min_length=3, max_length=64)
+    side: str = Field(pattern="^(yes|no)$")
+
+
+class Combo15PlaceRequest(BaseModel):
+    legs: list[Combo15Leg] = Field(min_length=2, max_length=MAX_COMBO_LEGS)
+    # Default $5, at most $99: the form's own bounds, checked again here.
+    stake_usd: float = Field(default=5, gt=0, le=99)
+
+
+@router.post("/combo15/preview", operation_id="previewCombo15")
+@deps.tenant_scoped
+def combo15_preview(tenant: Tenant = Depends(deps.current_tenant),
+                    db: DbSession = Depends(deps.get_db),
+                    kr=Depends(deps.keyring)) -> dict:
+    """Every fifteen-minute market a combo can hold right now, crypto and
+    commodities: the quarter trading now, the side its DMI points, its quote,
+    and whether it is ticked by default (DMI under five minutes old, CALL or
+    PUT, bid 35-90c, at most 5c wide). Sends nothing."""
+    from app.domains.botstation import combo15
+
+    cred = _kalshi_cred(db, tenant)
+    tradier = None
+    try:
+        # The credential the commodity board reads with, so the signals here
+        # are the ones its strip shows.
+        tradier = tenants.load_credential(db, tenant.id, "tradier_sandbox", kr)
+    except Exception:                                   # noqa: BLE001
+        pass
+    try:
+        return combo15.preview(cred, tradier_cred=tradier)
+    except Exception:                                   # noqa: BLE001
+        logger.info("combo15 preview: Kalshi unreachable for %s", tenant.slug)
+        raise HTTPException(status_code=424,
+                            detail="Kalshi could not be reached") from None
+
+
+@router.post("/combo15/place", operation_id="placeCombo15")
+@deps.tenant_scoped
+def combo15_place(payload: Combo15PlaceRequest,
+                  idempotency_key: str | None = Header(
+                      default=None, alias="Idempotency-Key"),
+                  tenant: Tenant = Depends(deps.current_tenant),
+                  db: DbSession = Depends(deps.get_db)) -> dict:
+    """Buy the ticked fifteen-minute legs as one combo. REAL MONEY.
+
+    Each leg is read again first -- still open, more than a minute to run,
+    quoted on its side -- and the combo collection must still host it. The
+    Idempotency-Key is the confirmation's: a retry gets the first answer."""
+    from app.domains.botstation import combo15
+
+    key = (idempotency_key or "").strip()
+    if not 8 <= len(key) <= 64:
+        raise HTTPException(status_code=422,
+                            detail="an Idempotency-Key header (8-64 characters) "
+                                   "is required to place a combo")
+    cred = _kalshi_cred(db, tenant)
+    try:
+        return combo15.place(cred, legs=[leg.model_dump() for leg in payload.legs],
+                             stake_usd=payload.stake_usd, key=key,
+                             owner=tenant.id, tenant_slug=tenant.slug)
+    except Exception:                                   # noqa: BLE001
+        logger.info("combo15 place: Kalshi unreachable for %s", tenant.slug)
+        raise HTTPException(status_code=424,
+                            detail="Kalshi could not be reached") from None
+
+
 @router.get("/signal-trades", operation_id="listSignalTrades")
 @deps.tenant_scoped
 def signal_trades(tenant: Tenant = Depends(deps.current_tenant),
