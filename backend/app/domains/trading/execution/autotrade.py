@@ -279,21 +279,37 @@ def crosses(tickers: list[str]) -> list[dict]:
     Read from the levels watcher's own snapshot rather than recomputed here.
     Two independent implementations of "did SPY break its opening range" is
     exactly how a desk ends up with a chart and a trade that disagree.
+
+    The snapshot is keyed by ticker, each with the LATEST cross per level:
+
+        {"updated": "2026-10-05 13:46:03 CST",
+         "tickers": {"SPY": {"levels": {...},
+                             "latest": {"10min_high": {"signal": "above_10min_high",
+                                                       "dir": "LONG", "time": "09:05"}}}}}
+
+    This read it as a list of rows, so iterating it yielded the ticker NAMES
+    and every pass died on str.get -- the level-cross strategy never saw a
+    cross. A cross counts while it is its level's latest: a later cross back
+    through the same level replaces it, which is the "reclaimed" the loop
+    looks for. A snapshot not written today is yesterday's levels, and none
+    of it counts.
     """
     from app.services import levels as levels_svc
 
     snapshot = (levels_svc.status() or {}).get("status") or {}
+    if not str(snapshot.get("updated") or "").startswith(clock.today().isoformat()):
+        return []
     wanted = {t.upper() for t in tickers}
     out = []
-    for row in (snapshot.get("tickers") or snapshot.get("rows") or []):
-        symbol = str(row.get("ticker") or row.get("symbol") or "").upper()
-        if symbol not in wanted:
+    for symbol, entry in (snapshot.get("tickers") or {}).items():
+        symbol = str(symbol).upper()
+        if symbol not in wanted or not isinstance(entry, dict):
             continue
-        for kind in _SIDE_FOR_CROSS:
-            if row.get(kind):
-                out.append({"ticker": symbol, "kind": kind,
-                            "at": row.get(f"{kind}_at") or row.get("at"),
-                            "price": row.get("price") or row.get("last")})
+        for level_cross in (entry.get("latest") or {}).values():
+            kind = (level_cross or {}).get("signal")
+            if kind in _SIDE_FOR_CROSS:
+                out.append({"ticker": symbol, "kind": kind, "at": level_cross.get("time"),
+                            "price": (entry.get("levels") or {}).get(kind.split("_", 1)[1])})
     return out
 
 
