@@ -180,6 +180,20 @@ async function req(method, path, { body, params, timeout = 30000,
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
+  } catch (e) {
+    // Two different failures used to read the same -- "Backend unreachable"
+    // -- and they call for opposite responses. A TIMEOUT means the server
+    // was reached and is still working: an order may be going through, so
+    // retrying blindly is the wrong move. A network failure means nothing
+    // got there at all.
+    const err = e?.name === 'AbortError'
+      ? new ApiError(null, `No answer within ${Math.round(timeout / 1000)}s — the desk `
+        + 'may still be working on it. Check before trying again.')
+      : new ApiError(null, 'Cannot reach the desk — check your connection, '
+        + 'or the desk may be restarting.');
+    err.offline = true;
+    err.timeout = e?.name === 'AbortError';
+    throw err;
   } finally {
     clearTimeout(timer);
   }
@@ -352,8 +366,22 @@ export const vidura = {
   rainTrade: (body, key) => api.post('/climate/rain-forecast/trade', body,
     { idempotencyKey: key }),
   combo15Preview: () => api.post('/bots/combo15/preview', {}),
-  combo15Place: (body, key) => api.post('/bots/combo15/place', body,
-    { idempotencyKey: key }),
+  // Placing STARTS a job and returns; the sheet then reads the answer, up
+  // to three minutes, so a slow RFQ can no longer be cut off by a timeout.
+  combo15Place: async (body, key, onTick) => {
+    let job = await api.post('/bots/combo15/place', body, { idempotencyKey: key });
+    const until = Date.now() + 180000;
+    while (job && job.status !== 'done' && Date.now() < until) {
+      onTick?.(job.elapsed_s);
+      await new Promise((r) => setTimeout(r, 1000));
+      job = await api.get(`/bots/combo15/place/${encodeURIComponent(key)}`);
+    }
+    if (!job || job.status !== 'done') {
+      throw new ApiError('timeout', 'the combo is still being placed after three minutes '
+        + '— check the account before placing it again');
+    }
+    return job.result;
+  },
   // Cash per Kalshi exchange shard, and moving it between them. The move
   // carries the confirmation's key: the exchange's transfer has none.
   kalshiShards: () => api.get('/bots/kalshi/shards'),
@@ -410,7 +438,8 @@ export const vidura = {
   // Kalshi, with the P&L of both. Not the ledger -- the ledger is what the
   // bots believed at entry, this is what the exchange has. Reaches back over
   // a thousand settlements, so it is slower than the panel it feeds.
-  tradeHistory: () => api.get('/trade-history', { timeout: 60000 }),
+  // Served from a two-minute cache; `fresh` (the panel's ↻) reads the exchange now.
+  tradeHistory: (fresh) => api.get('/trade-history', { params: { fresh: fresh || undefined }, timeout: 60000 }),
   // settle stale-open ledger rows from Kalshi fills+settlements (all bot
   // families). hours = staleness floor, NOT a lookback window; apply=false
   // previews. Kalshi lookups per row -> generous timeout.

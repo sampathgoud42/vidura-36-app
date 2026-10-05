@@ -269,7 +269,11 @@ def combo15_place(payload: Combo15PlaceRequest,
 
     Each leg is read again first -- still open, more than a minute to run,
     quoted on its side -- and the combo collection must still host it. The
-    Idempotency-Key is the confirmation's: a retry gets the first answer."""
+    Idempotency-Key is the confirmation's: a retry gets the first answer.
+
+    Answers at once with {job, status}; the result is read from
+    GET /combo15/place/{key} -- a combo is several Kalshi round trips and an
+    RFQ wait, which outran the browser's timeout inside one request."""
     from app.domains.botstation import combo15
 
     key = (idempotency_key or "").strip()
@@ -278,14 +282,23 @@ def combo15_place(payload: Combo15PlaceRequest,
                             detail="an Idempotency-Key header (8-64 characters) "
                                    "is required to place a combo")
     cred = _kalshi_cred(db, tenant)
-    try:
-        return combo15.place(cred, legs=[leg.model_dump() for leg in payload.legs],
-                             stake_usd=payload.stake_usd, key=key,
-                             owner=tenant.id, tenant_slug=tenant.slug)
-    except Exception:                                   # noqa: BLE001
-        logger.info("combo15 place: Kalshi unreachable for %s", tenant.slug)
-        raise HTTPException(status_code=424,
-                            detail="Kalshi could not be reached") from None
+    # Started, not awaited: the answer is read from /combo15/place/{key}.
+    # See combo15.start_place for why a combo cannot sit inside one request.
+    return combo15.start_place(cred, legs=[leg.model_dump() for leg in payload.legs],
+                               stake_usd=payload.stake_usd, key=key,
+                               owner=tenant.id, tenant_slug=tenant.slug)
+
+
+@router.get("/combo15/place/{key}", operation_id="getCombo15Placement")
+@deps.tenant_scoped
+def combo15_placement(key: str, tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """Where a combo placement stands: running, or done with its result."""
+    from app.domains.botstation import combo15
+
+    job = combo15.job_status(tenant.id, key.strip())
+    if job is None:
+        raise HTTPException(status_code=404, detail="no combo placement under that key")
+    return job
 
 
 @router.get("/signal-trades", operation_id="listSignalTrades")

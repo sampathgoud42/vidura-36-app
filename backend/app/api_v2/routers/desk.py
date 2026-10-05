@@ -189,6 +189,7 @@ def portfolio_history(days: int = Query(default=30, le=3650),
 @trades_router.get("/trade-history", operation_id="getKalshiTradeHistory")
 @deps.tenant_scoped
 def trade_history(limit: int = Query(default=500, ge=1, le=1000),
+                  fresh: bool = Query(default=False),
                   tenant: Tenant = Depends(deps.current_tenant),
                   db: DbSession = Depends(deps.get_db),
                   kr: Keyring = Depends(deps.keyring)) -> dict:
@@ -209,7 +210,48 @@ def trade_history(limit: int = Query(default=500, ge=1, le=1000),
         return {"available": False, "venue": "kalshi",
                 "detail": "no Kalshi credential for this operator",
                 "open": [], "history": [], "pnl": {}}
-    return history.trade_history(cred, limit=limit)
+    return _cached_history(tenant.id, cred, limit, fresh=fresh)
+
+
+# The exchange's record takes ~13 s to read -- every settlement, cursor-paged --
+# and it was read in full on every request, which on a phone connection was
+# close enough to the browser's 30 s to fail. Served from the newest copy
+# instead: a copy younger than HISTORY_TTL_S is returned as it is; an older one
+# is returned AT ONCE and refreshed behind the answer. Only the first read after
+# a restart waits for Kalshi. Settlements land minutes apart, so two minutes of
+# staleness is invisible and says so (`cached_age_s`).
+HISTORY_TTL_S = 120
+_HISTORY: dict[tuple[str, int], dict] = {}
+_HISTORY_LOCK = threading.Lock()
+
+
+def _cached_history(tenant_id: str, cred, limit: int, *, fresh: bool = False) -> dict:
+    from app.domains.botstation import history
+
+    key = (tenant_id, limit)
+    with _HISTORY_LOCK:
+        held = None if fresh else _HISTORY.get(key)
+        stale = held is None or time.time() - held["at"] > HISTORY_TTL_S
+        start = stale and held is not None and not held.get("refreshing")
+        if start:
+            held["refreshing"] = True
+    if held is None:
+        data = history.trade_history(cred, limit=limit)
+        with _HISTORY_LOCK:
+            _HISTORY[key] = {"at": time.time(), "data": data}
+        return {**data, "cached_age_s": 0}
+    if start:
+        def refresh() -> None:
+            try:
+                data = history.trade_history(cred, limit=limit)
+                with _HISTORY_LOCK:
+                    _HISTORY[key] = {"at": time.time(), "data": data}
+            except Exception as exc:                    # noqa: BLE001
+                logger.info("trade history refresh failed: %s", type(exc).__name__)
+                with _HISTORY_LOCK:
+                    held["refreshing"] = False
+        threading.Thread(target=refresh, name="trade-history", daemon=True).start()
+    return {**held["data"], "cached_age_s": round(time.time() - held["at"])}
 
 
 # ---- venue + market data --------------------------------------------------

@@ -2200,6 +2200,7 @@ function Combo15Sheet({ onClose }) {
   const [keep, setKeep] = useState(() => new Set());
   const [stake, setStake] = useState('5');
   const [result, setResult] = useState(null);
+  const [placingS, setPlacingS] = useState(0);     // seconds the job has run
   // One key per confirmation; a fresh build is a fresh confirmation.
   const keyRef = useRef(newConfirmationKey());
   const alive = useRef(true);
@@ -2257,7 +2258,7 @@ function Combo15Sheet({ onClose }) {
       const out = await vidura.combo15Place({
         legs: chosen.map((l) => ({ ticker: l.ticker, side: l.side })),
         stake_usd: Math.round(stakeN * 100) / 100,
-      }, keyRef.current);
+      }, keyRef.current, (s) => { if (alive.current) setPlacingS(s); });
       if (!alive.current) return;
       setResult(out);
       if (!out || !out.placed) setErr((out && out.detail) || 'not placed');
@@ -2299,7 +2300,9 @@ function Combo15Sheet({ onClose }) {
               aria-label="maximum investment in dollars" />
           </label>
           <button type="button" className="bs-btn live" onClick={place} disabled={!canPlace}>
-            {busy === 'place' ? 'PLACING…' : `PLACE COMBO — ${chosen.length} LEGS`}
+            {busy === 'place'
+              ? `PLACING… ${placingS ? `${Math.round(placingS)}s` : ''}`
+              : `PLACE COMBO — ${chosen.length} LEGS`}
           </button>
         </div>
         {!stakeOk ? <p className="bs-luck-err">max investment is above $0 and at most ${maxStake}</p> : null}
@@ -4163,11 +4166,11 @@ export default function BotStationSite() {
     }
   }, [user, feedSync.busy, loadFeed]);
 
-  const loadHist = useCallback(async () => {
+  const loadHist = useCallback(async (fresh = false) => {
     if (!user) return;
     setHistBusy(true);
     try {
-      const out = await vidura.tradeHistory();
+      const out = await vidura.tradeHistory(fresh === true);
       setHist(out);
       setHistErr(out && out.available === false ? (out.detail || 'unavailable') : '');
     } catch (e) {
@@ -4594,7 +4597,7 @@ export default function BotStationSite() {
                 market resolved, and where the two disagree this is the one
                 that is right. It leads because it is the money. */}
             <TradeHistoryPanel data={hist} busy={histBusy} error={histErr}
-              onRefresh={loadHist} disabled={!user}
+              onRefresh={() => loadHist(true)} disabled={!user}
               ledgerSync={feedSync} onLedgerSync={syncFeed} />
 
             <div className="bs-panel">
