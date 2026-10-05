@@ -659,7 +659,7 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
             : pick ? (
               <>
                 <b>{chosen?.occ_symbol || '—'}</b>
-                {byOI && <span> · most open interest</span>}<br />
+                {byOI && <span> · best OI + volume</span>}<br />
                 strike <b>{chosen?.strike ?? '—'}</b> · exp <b>{pick.expiration ?? '—'}</b><br />
                 delta <b>{chosen?.delta != null ? chosen.delta.toFixed(3) : '—'}</b>
                 {' · '}bid <b>{chosen?.bid ?? '—'}</b> · ask <b>{chosen?.ask ?? '—'}</b>

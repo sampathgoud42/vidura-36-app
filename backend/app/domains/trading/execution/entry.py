@@ -215,7 +215,8 @@ def open_by_open_interest(db, *, tenant_id: str, cred, symbol: str, side: str,
         (venue_mod.balance(cred=cred, sandbox=sandbox) or {}).get("option_buying_power") or 0)
     passed: list[str] = []
     for opt in ranked[:max_tries]:
-        label = f"{opt['symbol']} (OI {int(opt.get('open_interest') or 0):,})"
+        label = (f"{opt['symbol']} (OI {int(opt.get('open_interest') or 0):,}, "
+                 f"vol {int(opt.get('volume') or 0):,})")
         try:
             price = selection.buy_price(order_type, float(opt.get("bid") or 0),
                                         float(opt.get("ask") or 0), discount_pct)

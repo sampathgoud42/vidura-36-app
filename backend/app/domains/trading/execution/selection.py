@@ -147,16 +147,33 @@ def pick_contract(chain: list[dict], side: str, delta_min: float,
     return picked
 
 
-def rank_by_open_interest(chain: list[dict], side: str, spot: float) -> list[dict]:
-    """Contracts of one side, out of the money, most open interest first.
+# How the open-interest pick scores a strike -- for the order to FILL: what
+# the market holds (open interest), what it is trading today (volume), and how
+# tight the quote is against its own price (a wide spread is where a limit
+# sits unfilled). A strike held, active and tight ranks first; an old OI pile
+# nobody trades today, or a penny contract quoted 0.01 x 0.02, ranks lower.
+OI_WEIGHT = 0.4
+VOLUME_WEIGHT = 0.4
+SPREAD_WEIGHT = 0.2
 
-    The best_picks auto-trader's pick, which ignores delta: a CALL must have
-    its strike ABOVE the underlying's price and a PUT below it, and among
-    those the strike the market holds most of comes first -- volume, then
-    the tighter spread, break ties. A two-sided quote is required here as it
-    is in pick_contract: no bid, no exit, no entry.
+
+def rank_by_open_interest(chain: list[dict], side: str, spot: float) -> list[dict]:
+    """Contracts of one side, out of the money, best liquidity first.
+
+    The open-interest pick, which ignores delta: a CALL must have its strike
+    ABOVE the underlying's price and a PUT below it. Among those, each strike
+    is scored on open interest and today's volume, each as a share of the
+    largest on this side of this expiry, and on how tight its quote is:
+
+        score = OI_WEIGHT * oi / max_oi + VOLUME_WEIGHT * volume / max_volume
+              + SPREAD_WEIGHT * (1 - min(1, (ask - bid) / mid))
+
+    highest first; more open interest breaks a tie. ``_score`` rides on each
+    contract so a preview can show why it ranked where it did. A two-sided
+    quote is required here as it is in pick_contract: no bid, no exit, no
+    entry.
     """
-    ranked = []
+    rows = []
     for opt in chain:
         if (opt.get("option_type") or "").lower() != side:
             continue
@@ -170,15 +187,26 @@ def rank_by_open_interest(chain: list[dict], side: str, spot: float) -> list[dic
         ask = float(opt.get("ask") or 0)
         if bid <= 0 or ask <= 0:
             continue
-        oi = int(opt.get("open_interest") or 0)
-        vol = int(opt.get("volume") or 0)
-        ranked.append((-oi, -vol, ask - bid, opt))
-    ranked.sort(key=lambda r: r[:3])
+        rows.append((int(opt.get("open_interest") or 0), int(opt.get("volume") or 0),
+                     ask - bid, opt))
+    if not rows:
+        return []
+    max_oi = max(r[0] for r in rows) or 1
+    max_vol = max(r[1] for r in rows) or 1
+    scored = []
+    for oi, vol, spread, opt in rows:
+        mid = (float(opt["bid"]) + float(opt["ask"])) / 2
+        tight = 1 - min(1.0, spread / mid) if mid > 0 else 0.0
+        score = (OI_WEIGHT * oi / max_oi + VOLUME_WEIGHT * vol / max_vol
+                 + SPREAD_WEIGHT * tight)
+        scored.append((-score, -oi, spread, opt, score))
+    scored.sort(key=lambda r: r[:3])
     out = []
-    for _, _, _, opt in ranked:
+    for _, _, _, opt, score in scored:
         picked = dict(opt)
         delta = (opt.get("greeks") or {}).get("delta")
         picked["_delta"] = float(delta) if delta is not None else None
+        picked["_score"] = round(score, 3)
         out.append(picked)
     return out
 

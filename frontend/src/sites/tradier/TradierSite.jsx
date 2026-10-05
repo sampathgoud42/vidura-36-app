@@ -1446,8 +1446,9 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
               </div>
               {pick === 'open_interest' && (
                 <span className="tr-note tr-pick-note">
-                  most open interest, {side === 'put' ? 'below' : 'above'} the price, nearest
-                  expiry — the next one if refused, up to 6
+                  best open interest + volume + tight quote, {side === 'put' ? 'below' : 'above'} the price, on the{' '}
+                  {!zeroDte && !nearExpiry ? 'first expiry 7+ days out' : 'nearest expiry'}{' '}
+                  — the next one if refused, up to 6
                 </span>
               )}</div>
           )}
@@ -2532,7 +2533,7 @@ const STRATEGY_LABELS = {
 // How a strike is chosen, everywhere a contract is picked: the delta band, or
 // the nearest expiry's most-held out-of-the-money strike (the next most-held
 // when that order is refused, up to six).
-export const STRIKE_PICKS = [['delta', 'DELTA'], ['open_interest', 'OPEN INT']];
+export const STRIKE_PICKS = [['delta', 'DELTA'], ['open_interest', 'OI + VOL']];
 
 /* Near Expiry: only when 0DTE is off. ON buys the nearest expiry after today;
    OFF buys the first one 7+ days out, and that position is held over the
@@ -2953,7 +2954,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
             </div>
             <span className="tr-note tr-pick-note">
               {pick === 'open_interest'
-                ? 'most open interest, out of the money (CALL above / PUT below the price), nearest expiry — the next one if refused, up to 6'
+                ? `best open interest + volume + tight quote, out of the money (CALL above / PUT below the price), on the ${!zeroDte && !nearExpiry ? 'first expiry 7+ days out' : 'nearest expiry'} — the next one if refused, up to 6`
                 : 'the contract closest to the middle of the delta band'}
             </span></div>
           <div><span className="tr-label">Delta range</span>
@@ -3043,11 +3044,11 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               {defaults?.super_max_age_min ?? 6} min old and still open, and at most one entry per
               ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}
               {pick === 'open_interest'
-                ? 'The strike is the nearest expiry’s most-held out-of-the-money one, whatever its delta; when that order is refused the next most-held is tried, up to 6 — then the error shows here and the next signal is taken.'
+                ? `The strike is the ${!zeroDte && !nearExpiry ? 'first 7+ day expiry’s' : 'nearest expiry’s'} best-filling out-of-the-money one (open interest, volume, tight quote), whatever its delta; when that order is refused the next best is tried, up to 6 — then the error shows here and the next signal is taken.`
                 : `The strike is picked by delta ${f.delta}.`}{' '}
               {zeroDte
                 ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
-                : 'The nearest expiry after today.'}{' '}
+                : nearExpiry ? 'The nearest expiry after today.' : 'The first expiry 7+ days out, held over the close.'}{' '}
               Bought {orderTag(otype, discount)}, sized by Buy % (TP {f.tp_pct}% / SL {f.sl_pct}%).
               Disarms itself at the 15:00 close.
             </>
@@ -3060,7 +3061,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}
               {zeroDte
                 ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
-                : 'The nearest expiry after today.'}{' '}
+                : nearExpiry ? 'The nearest expiry after today.' : 'The first expiry 7+ days out, held over the close.'}{' '}
               Sized by Buy % through the desk&rsquo;s own BUY (delta {f.delta}, TP {f.tp_pct}% / SL{' '}
               {f.sl_pct}%); below min contracts the trade is skipped. Disarms itself at the 15:00
               close — today&rsquo;s report re-ranks the pairs.
@@ -3074,7 +3075,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}
               {zeroDte
                 ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
-                : 'The nearest expiry after today.'}{' '}
+                : nearExpiry ? 'The nearest expiry after today.' : 'The first expiry 7+ days out, held over the close.'}{' '}
               Sized by Buy % through the desk&rsquo;s own BUY (delta {f.delta}, TP {f.tp_pct}% / SL{' '}
               {f.sl_pct}%); below min contracts the trade is skipped. Disarms itself at the 15:00
               close — the list is today&rsquo;s.

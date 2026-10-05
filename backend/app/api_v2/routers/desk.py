@@ -388,7 +388,8 @@ def chain(symbol: str = Query(...), side: str = Query(default="call"),
         brief = [{"symbol": o["symbol"], "strike": o["strike"], "delta": o["_delta"],
                   "bid": o["bid"], "ask": o["ask"],
                   "open_interest": int(o.get("open_interest") or 0),
-                  "volume": int(o.get("volume") or 0)} for o in top]
+                  "volume": int(o.get("volume") or 0),
+                  "score": o.get("_score")} for o in top]
         return {"symbol": symbol, "side": side, "expiration": chosen, "pick": "open_interest",
                 "spot": spot, "delta_band": [lo, hi],
                 "picked": brief[0] if brief else None, "ranked": brief,
