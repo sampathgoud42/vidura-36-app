@@ -142,13 +142,19 @@ def _post_superhot() -> None:
     superhot_telegram.sweep_all_tenants()
 
 
+def _answer_telegram_commands() -> None:
+    from app.domains.notify import telegram_commands
+
+    telegram_commands.sweep_all_tenants()
+
+
 _LOOPS: dict[str, _Loop] = {}
 
 
 def start_all() -> None:
     """Start every loop. Idempotent, so a reload does not double them up."""
     from app.domains.botstation import luck_schedule, signal_trade
-    from app.domains.notify import super_telegram, superhot_telegram
+    from app.domains.notify import super_telegram, superhot_telegram, telegram_commands
 
     if not _LOOPS:
         _LOOPS["risk-monitor"] = _Loop("risk-monitor", MONITOR_INTERVAL_S,
@@ -164,6 +170,9 @@ def start_all() -> None:
         _LOOPS["superhot-telegram"] = _Loop("superhot-telegram",
                                             superhot_telegram.POLL_S,
                                             _post_superhot)
+        _LOOPS["telegram-commands"] = _Loop("telegram-commands",
+                                            telegram_commands.POLL_S,
+                                            _answer_telegram_commands)
     for loop in _LOOPS.values():
         loop.start()
 
