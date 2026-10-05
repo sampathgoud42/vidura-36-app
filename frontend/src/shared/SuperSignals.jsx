@@ -42,6 +42,17 @@ const SCOPE_KEY = 'superSignals.scope';
 const SCOPES = [['all', 'all'], ['open', 'open'], ['watch', '★ watchlist'],
   ['pairs', '\u{1F44D}\u{1F44D} best pairs', '\u{1F44D}\u{1F44D} pairs']];
 const THUMBS = '\u{1F44D}\u{1F44D}';
+// The channel's stars (super_telegram.py): the pair won more than 66% of its
+// decided trades over the last 7 sessions (3 stars), else 3 (2), else the
+// last one (1) -- counted before the session on screen, so old signals carry
+// the marks they would have been posted with.
+const STAR = '⭐';
+function starText(rec) {
+  if (!rec) return '';
+  const span = rec.sessions === 1 ? 'last session' : `last ${rec.sessions} sessions`;
+  const pct = Math.round((100 * rec.wins) / Math.max(1, rec.wins + rec.losses));
+  return `pair won ${rec.wins}–${rec.losses} (${pct}%) over the ${span}`;
+}
 
 // A signal is "part of a best pair" when its signal type AND its ticker are a
 // pair on the daily report's best ticker + signal pairs -- keyed as the
@@ -451,6 +462,10 @@ export default function SuperSignals({
                 const isOpen = openKey === g.key;
                 const isFresh = g.rows.some((r) => fresh[r.id]);
                 const best = g.rows.map(pairOf).find(Boolean) || null;
+                // The channel's stars: the best any setup on this bar earned.
+                const starRow = g.rows.reduce((a, r) => ((r.stars || 0) > (a?.stars || 0) ? r : a), null);
+                const stars = starRow ? starRow.stars : 0;
+                const starWhy = stars ? starText(starRow.star_record) : '';
                 return (
                   <li key={g.key} className={`ss-sig${isFresh ? ' fresh' : ''}${isOpen ? ' x' : ''}`}>
                     <div className="ss-l1">
@@ -463,6 +478,10 @@ export default function SuperSignals({
                         <span className="ss-thumbs" role="img" aria-label="best pair"
                           title={`best pair #${best.rank} of ${best.total}: ${best.signal || best.type_key}`
                             + ` on ${best.ticker}`}>{THUMBS}</span>
+                      )}
+                      {stars > 0 && (
+                        <span className="ss-stars" role="img" aria-label={`${stars} star${stars > 1 ? 's' : ''}`}
+                          title={starWhy}>{STAR.repeat(stars)}</span>
                       )}
                       <button type="button" className="ss-what" aria-expanded={isOpen}
                         onClick={() => setOpenKey(isOpen ? null : g.key)}
@@ -506,6 +525,9 @@ export default function SuperSignals({
                         {g.rows.length > 1 && (
                           <p className="ss-setups">{g.rows.length} setups on this bar:{' '}
                             {g.rows.map((r) => label(r.setup)).join(' · ')}</p>
+                        )}
+                        {stars > 0 && (
+                          <p className="ss-note ss-starsnote">{STAR.repeat(stars)} {starWhy}</p>
                         )}
                         {best && (
                           <p className="ss-note ss-thumbsnote">

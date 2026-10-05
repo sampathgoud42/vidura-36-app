@@ -46,8 +46,18 @@ def session(date: str | None = Query(default=None, pattern=DATE),
     """One session's signals, the watchlist tracker's hits and desk health.
 
     No date is today on a trading day, otherwise the last session -- so a
-    weekend visit shows Friday rather than an empty board."""
-    return _relay(desk.get_json, "/api/session", {"date": date} if date else None)
+    weekend visit shows Friday rather than an empty board.
+
+    Each signal carries the channel's marks: ``stars`` (1-3, the pair's win
+    rate above 66% over the last 1, 3 or 7 sessions before this one) and the
+    ``star_record`` that earned them."""
+    from app.domains.notify import super_telegram
+
+    data = _relay(desk.get_json, "/api/session", {"date": date} if date else None)
+    try:
+        return super_telegram.mark_session(data)
+    except Exception:                                   # noqa: BLE001
+        return data
 
 
 @router.get("/rank", operation_id="getSuperSignalsRank")

@@ -477,3 +477,7 @@
   .ss-tgbtn { min-width: 44px; height: 44px; }
   .ss-tg-switch { min-height: 44px; }
 }
+/* The channel's stars beside the thumbs: same size, gold, a reason on hover. */
+.ss-stars { margin-left: 4px; font-size: 10px; line-height: 1; letter-spacing: -0.15em; cursor: help; white-space: nowrap; }
+.ss--touch .ss-stars { font-size: 12px; }
+.ss-starsnote { color: #fbbf24; }

@@ -153,12 +153,34 @@ class Marks:
         return pair_key(signal) in self.pairs
 
     def stars(self, signal: dict) -> int:
+        return self.star_record(signal)[0]
+
+    def star_record(self, signal: dict) -> tuple[int, int, int, int]:
+        """(stars, wins, losses, sessions back) for the window that earned
+        them -- or (0, 0, 0, 0). The panel shows the record as the reason."""
         key = pair_key(signal)
         for back, count in STAR_WINDOWS:
             wins, losses = self.records.get(back, {}).get(key, (0, 0))
             if wins + losses and 100 * wins / (wins + losses) > STAR_WIN_PCT:
-                return count
-        return 0
+                return count, wins, losses, back
+        return 0, 0, 0, 0
+
+
+def mark_session(session: dict) -> dict:
+    """The session with each signal's marks attached, as the panel shows
+    them: ``stars`` and ``star_record`` {wins, losses, sessions}. The same
+    marks the channel posts, for any session -- a past one is marked against
+    the sessions before IT. Never fails the read: unmarked on any error."""
+    signals = session.get("signals") or []
+    if not signals:
+        return session
+    marks = marks_for(session)
+    for s in signals:
+        count, wins, losses, back = marks.star_record(s)
+        s["stars"] = count
+        s["star_record"] = ({"wins": wins, "losses": losses, "sessions": back}
+                            if count else None)
+    return session
 
 
 def _signal_at(date: str, signal: dict) -> datetime | None:
@@ -326,6 +348,7 @@ def _session() -> dict | None:
 
 _pairs_cache: list = [0.0, None]           # [monotonic time read, frozenset of pair keys]
 _records_cache: dict = {}                  # session date -> records_of(the sessions before it)
+RECORDS_KEEP = 10
 
 
 def _best_pairs(clock=time.monotonic) -> frozenset:
@@ -361,7 +384,10 @@ def _records(session: dict) -> dict[int, dict[str, tuple[int, int]]]:
     except Exception as exc:                            # noqa: BLE001
         logger.info("super telegram: a past session did not answer (%s)", type(exc).__name__)
         return {}
-    _records_cache.clear()
+    # A few days kept, not one: the panel reads past sessions while the feed
+    # keeps reading today, and one slot would have them evict each other.
+    while len(_records_cache) >= RECORDS_KEEP:
+        _records_cache.pop(next(iter(_records_cache)))
     _records_cache[day] = records_of(chain)
     return _records_cache[day]
 
