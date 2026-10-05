@@ -1951,6 +1951,7 @@ export default function Desk36Site() {
               }}
               paper={!live} busy={autoBusy}
               deskOwner={autoST.signal_desk_owner}
+              armed={autoOn ? (autoST.armed_strategies || [autoST.strategy]) : []}
               onClose={() => setAutoOpen(false)}
               onArm={async (body) => {
                 setAutoBusy(true);
@@ -1965,21 +1966,19 @@ export default function Desk36Site() {
                 finally { setAutoBusy(false); }
               }} />
             )}
+            {/* Every armed strategy, each with its own disarm -- they run side
+                by side, and disarming one leaves the others running. */}
             {autoOn && (
-              <button type="button" className="d36-go put"
-                disabled={autoBusy}
-                onClick={async () => {
+              <AutoStatus st={autoST} className="d36-autoline" busy={autoBusy}
+                onDisarm={async (strategy) => {
                   setAutoBusy(true);
                   try {
-                    await vidura.autoTradeStop(user.user_id);
-                    setToast('auto-trader disarmed');
+                    await vidura.autoTradeStop(user.user_id, strategy || undefined);
+                    setToast(strategy ? `${strategy.replace(/_/g, ' ')} disarmed` : 'every strategy disarmed');
                     setAutoST(await vidura.autoTradeStatus(user.user_id));
-                    setAutoOpen(false);
                   } catch (e) { failNow(e); }
                   finally { setAutoBusy(false); }
-                }}>
-                disarm
-              </button>
+                }} />
             )}
           </div>
         </div>

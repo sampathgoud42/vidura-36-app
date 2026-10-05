@@ -71,7 +71,6 @@ it is the "wait a few seconds and re-check" the operator asked for.
 from __future__ import annotations
 
 import contextlib
-import itertools
 import logging
 import re
 import threading
@@ -246,12 +245,29 @@ class Watcher:
         }
 
 
-_WATCHERS: dict[str, Watcher] = {}
+# Armed watchers, per operator and per strategy: an operator may run several
+# strategies at once -- the level cross beside super signals beside best
+# picks -- but never the same strategy twice.
+_WATCHERS: dict[str, dict[str, Watcher]] = {}
 _LOCK = threading.Lock()
-# Numbers each watcher's claim on the signal desk. Per arm, not per process: a
-# disarmed watcher's thread releasing on its way out must never release the
-# claim of the watcher armed right after it.
-_INSTANCES = itertools.count(1)
+# The signal strategies running side by side for one operator share ONE claim
+# on the signal desk (this process's, signal_owner) and ONE per-ticker
+# cooldown: two of them may not both enter TSLA inside the hour on different
+# signals -- the same "one idea, one position" the claim enforces against the
+# standalone bot. A watcher on its way out releases the claim only when no
+# other signal watcher of its operator is still armed.
+_SHARED_ENTRIES: dict[str, dict[str, datetime]] = {}
+
+
+def _armed(tenant_id: str) -> list[Watcher]:
+    """This operator's armed watchers. Caller holds _LOCK."""
+    return [w for w in (_WATCHERS.get(tenant_id) or {}).values() if not w.stop_flag.is_set()]
+
+
+def _desk_holder() -> str:
+    from app.domains.trading.execution import signal_owner
+
+    return signal_owner.holder_name("desk", "signals")
 # Every watcher thread that has not finished, armed or not. stop() takes a
 # watcher out of _WATCHERS at once, but its thread still has a last database
 # write to make on its way out -- releasing its claim on the signal desk -- so
@@ -653,6 +669,11 @@ def _release_desk(watcher: Watcher) -> None:
 
     if not watcher.desk_holder:
         return
+    with _LOCK:
+        others = [w for w in _armed(watcher.tenant_id)
+                  if w is not watcher and w.strategy in SIGNAL_STRATEGIES]
+    if others:
+        return                  # still held for the signal strategies running on
     try:
         signal_owner.release(watcher.tenant_id, watcher.desk_holder)
     except Exception as exc:                            # noqa: BLE001
@@ -691,8 +712,9 @@ def _run_super(watcher: Watcher) -> None:
         watcher.stop_flag.wait(SUPER_POLL_SECONDS)
     watcher.stop_flag.set()
     with _LOCK:
-        if _WATCHERS.get(watcher.tenant_id) is watcher:
-            _WATCHERS.pop(watcher.tenant_id, None)
+        mine = _WATCHERS.get(watcher.tenant_id) or {}
+        if mine.get(watcher.strategy) is watcher:
+            mine.pop(watcher.strategy, None)
     _release_desk(watcher)
     watcher.log("disarmed")
 
@@ -777,15 +799,19 @@ def _claim_desk(tenant_id: str, strategy: str,
     owners is the duplicate this exists to prevent."""
     from app.domains.trading.execution import signal_owner
 
-    holder = signal_owner.holder_name("desk", strategy, instance=next(_INSTANCES))
+    holder = _desk_holder()
+    sharing = any(w.strategy in SIGNAL_STRATEGIES for w in _armed(tenant_id))
     try:
         other = signal_owner.claim(tenant_id, holder)
         if other is None:
-            recent = signal_owner.recent_entries(tenant_id, tickers,
+            # Any ticker for best picks, which names none: the cooldown it
+            # inherits is every signal-desk entry inside the hour.
+            recent = signal_owner.recent_entries(tenant_id, tickers or None,
                                                  within_s=SUPER_COOLDOWN_S)
     except Exception as exc:                            # noqa: BLE001
-        with contextlib.suppress(Exception):
-            signal_owner.release(tenant_id, holder)
+        if not sharing:
+            with contextlib.suppress(Exception):
+                signal_owner.release(tenant_id, holder)
         raise AutoTradeRefused(f"cannot confirm who is trading the signal desk -- "
                                f"{type(exc).__name__}") from None
     if other is not None:
@@ -869,10 +895,10 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             "stale -- TBOT_ENFORCE_STOP_WATCHDOG is off", tenant_id)
 
     with _LOCK:
-        existing = _WATCHERS.get(tenant_id)
+        existing = (_WATCHERS.get(tenant_id) or {}).get(strategy)
         if existing is not None and not existing.stop_flag.is_set():
-            raise AutoTradeRefused("a watcher is already armed for this "
-                                   "operator; stop it before arming another")
+            raise AutoTradeRefused(f"{strategy.replace('_', ' ')} is already armed -- "
+                                   f"disarm it before arming it again")
         holder, recent = "", {}
         if strategy in SIGNAL_STRATEGIES:
             holder, recent = _claim_desk(tenant_id, strategy, wanted)
@@ -886,9 +912,18 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             discount_pct=float(discount_pct) if order_type == "limit" else 0.0,
             pick=pick, near_expiry=bool(near_expiry) or bool(zero_dte))
         # The cooldown carries over: a ticker the bot -- or an earlier arm --
-        # entered twenty minutes ago is still inside its hour.
-        watcher.last_entry.update(recent)
-        _WATCHERS[tenant_id] = watcher
+        # entered twenty minutes ago is still inside its hour. The signal
+        # strategies of one operator share one cooldown map, so a ticker one
+        # of them entered is on cooldown for all of them.
+        if strategy in SIGNAL_STRATEGIES:
+            shared = _SHARED_ENTRIES.setdefault(tenant_id, {})
+            for ticker, at in recent.items():
+                if ticker not in shared or shared[ticker] < at:
+                    shared[ticker] = at
+            watcher.last_entry = shared
+        else:
+            watcher.last_entry.update(recent)
+        _WATCHERS.setdefault(tenant_id, {})[strategy] = watcher
 
     # Warm the modules the loop imports lazily, on THIS thread: two threads
     # importing the same package at once can deadlock on Python's import lock
@@ -903,7 +938,7 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
     with _LOCK:
         _THREADS.add(thread)
     thread.start()
-    return _answer(watcher.public(), active=True)
+    return status(tenant_id)
 
 
 def defaults() -> dict:
@@ -948,27 +983,38 @@ def _answer(body: dict, *, active: bool, tenant_id: str | None = None,
     return out
 
 
-def stop(tenant_id: str) -> dict:
+def stop(tenant_id: str, strategy: str | None = None) -> dict:
+    """Disarm one strategy, or with none named every one this operator runs."""
     with _LOCK:
-        watcher = _WATCHERS.pop(tenant_id, None)
-    if watcher is None:
-        return _answer({"running": False, "was_running": False}, active=False,
-                       tenant_id=tenant_id)
-    watcher.stop_flag.set()
-    # Released now rather than when the thread next wakes, so the desk reads
-    # free at once -- the thread's own release on the way out is then a no-op.
-    _release_desk(watcher)
-    return _answer({"running": False, "was_running": True, "placed": watcher.placed},
-                   active=False, tenant_id=tenant_id)
+        mine = _WATCHERS.get(tenant_id) or {}
+        names = [strategy] if strategy else list(mine)
+        stopped = [w for n in names if (w := mine.pop(n, None)) is not None]
+        for w in stopped:
+            # set inside the lock, so _release_desk below sees it as gone
+            w.stop_flag.set()
+    for w in stopped:
+        # Released now rather than when the thread next wakes, so the desk
+        # reads free at once -- but only if no other signal strategy runs on.
+        _release_desk(w)
+    out = status(tenant_id)
+    out.update({"was_running": bool(stopped),
+                "stopped": [w.strategy for w in stopped],
+                "placed": sum(w.placed for w in stopped)})
+    return out
 
 
 def status(tenant_id: str) -> dict:
+    """Every armed strategy for this operator, under ``watchers``. The newest
+    one is also spread at the top level, the shape the desks read before
+    strategies could run side by side."""
     with _LOCK:
-        watcher = _WATCHERS.get(tenant_id)
-    if watcher is None or watcher.stop_flag.is_set():
-        return _answer({"running": False}, active=False, tenant_id=tenant_id)
-    return _answer(watcher.public(), active=True, tenant_id=tenant_id,
-                   own_holder=watcher.desk_holder)
+        armed = sorted(_armed(tenant_id), key=lambda w: w.armed_at)
+    if not armed:
+        return _answer({"running": False, "watchers": []}, active=False, tenant_id=tenant_id)
+    body = {**armed[-1].public(), "watchers": [w.public() for w in armed],
+            "armed_strategies": [w.strategy for w in armed]}
+    holder = next((w.desk_holder for w in armed if w.desk_holder), "")
+    return _answer(body, active=True, tenant_id=tenant_id, own_holder=holder)
 
 
 def quiesce(timeout: float = 10.0) -> None:
@@ -982,9 +1028,11 @@ def quiesce(timeout: float = 10.0) -> None:
     order.
     """
     with _LOCK:
-        watchers = list(_WATCHERS.values())
+        watchers = [w for mine in _WATCHERS.values() for w in mine.values()]
         _WATCHERS.clear()
         threads = list(_THREADS)
+        for watcher in watchers:
+            watcher.stop_flag.set()
     for watcher in watchers:
         watcher.stop_flag.set()
         _release_desk(watcher)

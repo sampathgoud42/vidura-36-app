@@ -1008,10 +1008,13 @@ def autotrade_start(payload: AutoTradeStart,
 
 @market_router.post("/autotrade/stop", operation_id="stopTradierAutoTrade")
 @deps.tenant_scoped
-def autotrade_stop(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+def autotrade_stop(strategy: str | None = Query(default=None, max_length=40),
+                   tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """Disarm one strategy (``strategy``), or every armed one when none is
+    named. Positions they opened stay managed by the desk."""
     from app.domains.trading.execution import autotrade
 
-    return autotrade.stop(tenant.id)
+    return autotrade.stop(tenant.id, strategy)
 
 
 # ---- the DMI board --------------------------------------------------------

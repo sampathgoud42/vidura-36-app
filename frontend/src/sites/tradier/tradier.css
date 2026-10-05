@@ -1581,3 +1581,15 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
 /* DELTA | OPEN INT strike-pick toggle, on the BUY tickets and the arm form. */
 .tr-pick-toggle { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .tr-pick-note { display: block; margin-top: 4px; line-height: 1.35; }
+
+/* Auto-trade: one line per armed strategy, each with its own ✕ disarm. */
+.tr-autolines { display: flex; flex-direction: column; }
+.tr-autolines .tr-autoline + .tr-autoline { margin-top: 2px; }
+.tr-autoline .tr-autodisarm {
+  margin-left: 8px; padding: 0 6px; min-width: 22px; min-height: 18px;
+  background: none; border: 1px solid currentColor; border-radius: 4px;
+  color: var(--tr-red, #f87171); font: inherit; line-height: 1.2; cursor: pointer;
+  vertical-align: middle;
+}
+.tr-autoline .tr-autodisarm:disabled { opacity: 0.5; cursor: default; }
+.tr-autoline.tr-autoctl { display: flex; gap: 6px; flex-wrap: wrap; color: inherit; }

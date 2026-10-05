@@ -2814,9 +2814,13 @@ export function deskOwnerNote(owner) {
     : `${owner.describe} holds the signal desk`;
 }
 
-export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, deskOwner }) {
+export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, deskOwner,
+  armed = [] }) {
+  // Strategies already running cannot be armed twice; open on the first free one.
+  const firstFree = (defaults?.strategies || []).find((s) => !armed.includes(s));
   const [f, setF] = useState({
-    strategy: defaults?.strategy || '10min_intraday_move',
+    strategy: (!armed.includes(defaults?.strategy) && defaults?.strategy)
+      || firstFree || '10min_intraday_move',
     tickers: defaults?.tickers || 'SPY,QQQ,SPX',
     window_open: defaults?.window_open || '08:30',
     window_close: defaults?.window_close || '09:30',
@@ -2897,7 +2901,9 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
     <div className="tr-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true"
       aria-label="arm auto-trade">
       <div className="tr-modal tr-panel" onClick={(e) => e.stopPropagation()}>
-        <span className="tr-eyebrow mb-3" style={{ display: 'block' }}>arm auto trade</span>
+        <span className="tr-eyebrow mb-3" style={{ display: 'block' }}>
+          {armed.length ? `arm another strategy · ${armed.length} running` : 'arm auto trade'}
+        </span>
         {deskOwner && (
           <p className="tr-deskowner" role="status">
             🤖 {deskOwnerNote(deskOwner)}. While it runs, super signals and best pairs cannot
@@ -2909,7 +2915,9 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           <div><span className="tr-label">Strategy</span>
             <select className="tr-select" value={f.strategy} onChange={set('strategy')}>
               {(defaults?.strategies || [f.strategy]).map((s) => (
-                <option key={s} value={s}>{STRATEGY_LABELS[s] || s}</option>
+                <option key={s} value={s} disabled={armed.includes(s)}>
+                  {STRATEGY_LABELS[s] || s}{armed.includes(s) ? ' — armed' : ''}
+                </option>
               ))}
             </select></div>
           <div><span className="tr-label">Tickers</span>
@@ -3115,7 +3123,8 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button type="button" className="tr-btn sm auto"
-            disabled={busy || deskTaken || (isSuper && f.signals.length === 0)
+            disabled={busy || deskTaken || armed.includes(f.strategy)
+              || (isSuper && f.signals.length === 0)
               || (isPairs && f.pairs.length === 0)}
             title={deskTaken ? deskOwnerNote(deskOwner)
               : isSuper && f.signals.length === 0 ? 'pick at least one signal type to trade'
@@ -3493,8 +3502,41 @@ export function LiteChart({ isBlocked, blocked, ...props }) {
 // What the auto-trader is doing, in words: the AUTO button's colour says it
 // is armed, and this says what for -- strategy, scope, window, entries so far
 // -- rather than leaving that to a tooltip on a board this pared down.
-export function AutoStatus({ st, className = '' }) {
-  if (st?.active) {
+/* Every armed strategy, one line each -- they run side by side -- with its
+   own ✕ to disarm it, and "＋ arm another" to add one. Without onDisarm /
+   onArmAnother it is the read-only line it always was. */
+export function AutoStatus({ st, className = '', onDisarm, onArmAnother, busy = false }) {
+  const armed = st?.active ? (st.watchers?.length ? st.watchers : [st]) : [];
+  if (armed.length) {
+    return (
+      <div className={`tr-autolines ${className}`}>
+        {armed.map((w) => (
+          <AutoStatusLine key={w.strategy} st={w} className={className}
+            onDisarm={onDisarm} busy={busy} />
+        ))}
+        {(onArmAnother || (onDisarm && armed.length > 1)) && (
+          <p className={`tr-autoline tr-autoctl ${className}`}>
+            {onArmAnother && (
+              <button type="button" className="tr-chip" onClick={onArmAnother} disabled={busy}
+                title="arm another strategy to run alongside">＋ arm another</button>
+            )}
+            {onDisarm && armed.length > 1 && (
+              <button type="button" className="tr-chip" onClick={() => onDisarm(null)}
+                disabled={busy} title="disarm every armed strategy">✕ disarm all</button>
+            )}
+          </p>
+        )}
+      </div>
+    );
+  }
+  if (st?.signal_desk_owner) {
+    return <p className={`tr-autoline ${className}`}>{deskOwnerNote(st.signal_desk_owner)}</p>;
+  }
+  return null;
+}
+
+function AutoStatusLine({ st, className = '', onDisarm, busy }) {
+  {
     const what = STRATEGY_LABELS[st.strategy] || String(st.strategy || '').replace(/_/g, ' ');
     const pairs = (st.pairs || []).length;
     const scope = st.strategy === 'best_pairs'
@@ -3502,7 +3544,7 @@ export function AutoStatus({ st, className = '' }) {
     return (
       <p className={`tr-autoline on ${className}`}>
         <span className="dot" aria-hidden="true" />
-        auto-trader armed on {st.live ? 'LIVE' : 'SANDBOX'} · {what}
+        armed on {st.live ? 'LIVE' : 'SANDBOX'} · {what}
         {scope ? ` · ${scope}` : ''}
         {st.window ? ` · ${st.window} CST` : ''}
         {st.order_type && st.order_type !== 'smart' ? ` · ${orderTag(st.order_type, st.discount_pct)}` : ''}
@@ -3516,13 +3558,14 @@ export function AutoStatus({ st, className = '' }) {
             ⚠ {st.last_error.at} {st.last_error.message}
           </span>
         )}
+        {onDisarm && (
+          <button type="button" className="tr-autodisarm" onClick={() => onDisarm(st.strategy)}
+            disabled={busy} title={`disarm ${what} — the other strategies keep running`}
+            aria-label={`disarm ${what}`}>✕</button>
+        )}
       </p>
     );
   }
-  if (st?.signal_desk_owner) {
-    return <p className={`tr-autoline ${className}`}>{deskOwnerNote(st.signal_desk_owner)}</p>;
-  }
-  return null;
 }
 
 /* The desk's positions table, cut to what an OPEN position needs: the
@@ -3731,20 +3774,26 @@ export default function TradierSite() {
     // liteKey: Lightweight's ↻ asks again at once (and restarts the timer)
   }, [user, marketOffline, liteKey]);
 
-  const toggleAutoTrade = async () => {
+  // AUTO opens the arm form: with strategies already running it arms another
+  // beside them. Each one is disarmed from its own line (AutoStatus).
+  const toggleAutoTrade = () => {
     if (!user || autoBusy) return;
     setOpenErr(null);
-    if (!autoST?.active) { setAutoFormOpen(true); return; }
+    setAutoFormOpen(true);
+  };
+  const disarmAuto = async (strategy) => {
+    if (!user || autoBusy) return;
+    const name = strategy ? (STRATEGY_LABELS[strategy] || strategy.replace(/_/g, ' ')) : null;
     setAutoBusy(true);
     try {
       const ok = await confirmDialog({
-        title: 'Disarm the auto-trader?',
-        body: 'Stops watching for new signals, and abandons any contract whose '
-          + 'bid it is still observing. Positions it already opened stay managed '
-          + 'by the desk (TP/SL) as usual.',
+        title: name ? `Disarm ${name}?` : 'Disarm every strategy?',
+        body: (name ? 'Stops this strategy watching for new signals; the others keep running. '
+          : 'Stops every armed strategy. ')
+          + 'Positions already opened stay managed by the desk (TP/SL) as usual.',
         confirmText: 'Disarm', cancelText: 'Keep armed',
       });
-      if (ok) setAutoST(await vidura.autoTradeStop(user.user_id));
+      if (ok) setAutoST(await vidura.autoTradeStop(user.user_id, strategy || undefined));
     } catch (e) { setOpenErr(errText(e)); pushErr('auto-trade', e); }
     setAutoBusy(false);
   };
@@ -4210,7 +4259,7 @@ export default function TradierSite() {
                       className={`tr-autobtn ${autoST?.active ? 'on' : ''}`}
                       onClick={toggleAutoTrade} disabled={autoBusy}
                       title={autoST?.active
-                        ? 'auto-trader ARMED on this venue — click to open its form'
+                        ? `${(autoST.armed_strategies || []).length || 1} strategy(s) ARMED — click to arm another`
                         : autoST?.signal_desk_owner
                           ? `${deskOwnerNote(autoST.signal_desk_owner)} — click to open the form`
                           : 'arm the auto-trader on this venue'}>
@@ -4238,7 +4287,8 @@ export default function TradierSite() {
                 )}
               </div>
             )}
-            {lite && <AutoStatus st={autoST} />}
+            <AutoStatus st={autoST} onDisarm={disarmAuto} busy={autoBusy}
+              onArmAnother={autoST?.active ? toggleAutoTrade : undefined} />
           </div>
         </header>
 
@@ -4538,6 +4588,7 @@ export default function TradierSite() {
             paper={bal ? bal.sandbox : autoST?.paper}
             busy={autoBusy}
             onArm={armAutoTrade}
+            armed={autoST?.active ? (autoST.armed_strategies || [autoST.strategy]) : []}
             onClose={() => setAutoFormOpen(false)}
             deskOwner={autoST?.signal_desk_owner}
           />

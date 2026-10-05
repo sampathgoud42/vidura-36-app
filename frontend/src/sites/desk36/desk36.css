@@ -1011,3 +1011,17 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
 
 /* News & Events sits at the top of the board, inside the page gutter. */
 .d36-news { padding: 0 12px; margin-top: 8px; }
+
+/* Auto-trade: one line per armed strategy, each with its own ✕ disarm. */
+.tr-autolines { display: flex; flex-direction: column; }
+.tr-autolines .tr-autoline + .tr-autoline { margin-top: 2px; }
+.tr-autoline .tr-autodisarm {
+  margin-left: 8px; padding: 0 6px; min-width: 22px; min-height: 18px;
+  background: none; border: 1px solid currentColor; border-radius: 4px;
+  color: var(--tr-red, #f87171); font: inherit; line-height: 1.2; cursor: pointer;
+  vertical-align: middle;
+}
+.tr-autoline .tr-autodisarm:disabled { opacity: 0.5; cursor: default; }
+.tr-autoline.tr-autoctl { display: flex; gap: 6px; flex-wrap: wrap; color: inherit; }
+/* phone: the disarm targets meet Apple's 44px */
+.d36-autoline .tr-autodisarm { min-width: 44px; min-height: 32px; }

@@ -495,7 +495,9 @@ export const vidura = {
 
   // opening-range auto-trader (level cross -> confirmed -> managed 0DTE)
   autoTradeStart: (body) => api.post('/tradier/autotrade/start', body),
-  autoTradeStop: (userId) => api.post(`/tradier/autotrade/stop`),
+  // Strategies run side by side: name one to disarm it, none to disarm all.
+  autoTradeStop: (userId, strategy) => api.post(`/tradier/autotrade/stop`
+    + (strategy ? `?strategy=${encodeURIComponent(strategy)}` : '')),
   autoTradeStatus: (userId) => api.get('/tradier/autotrade/status', { params: {} }),
 
   // super research
