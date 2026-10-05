@@ -684,6 +684,17 @@ function TelegramViewer({ accent, onClose }) {
     adopt(d); setToken('');
     setNote(on ? 'on — new signals from now on are posted' : 'off');
   });
+  // The other posts, each its own switch on the same bot and chat.
+  const POSTS = {
+    post_hot: ['HOT boards', 'every half hour 09:00-15:00 CT, on 5m, 15m and 1H bars'],
+    post_superhot: ['SUPERHOT alerts', 'each ticker that joins the SUPERHOT list, as it does'],
+  };
+  const flip = (name, on) => run(name, async () => {
+    const d = await vidura.setSuperSignalsTelegram({ ...typed(), [name]: on });
+    if (!alive.current) return;
+    adopt(d); setToken('');
+    setNote(`${POSTS[name][0]} ${on ? 'on' : 'off'}`);
+  });
 
   const dirty = !!st && (token.trim() !== '' || chat.trim() !== (st.chat_id || ''));
   const ready = !!st && !!(st.token_saved || token.trim()) && !!chat.trim();
@@ -763,6 +774,15 @@ function TelegramViewer({ accent, onClose }) {
                 onChange={(e) => toggle(e.target.checked)} />
               <span>post new signals</span>
             </label>
+          </div>
+          <div className="ss-tg-row ss-tg-more">
+            {Object.entries(POSTS).map(([name, [text, why]]) => (
+              <label key={name} className="ss-tg-switch" title={why}>
+                <input type="checkbox" checked={!!(st && st[name])} disabled={!!busy || !ready}
+                  onChange={(e) => flip(name, e.target.checked)} />
+                <span>post {text}</span>
+              </label>
+            ))}
           </div>
           {note && <p className="ss-tg-ok">{note}</p>}
           {err && <p className="ss-tg-err">⚠ {err}</p>}

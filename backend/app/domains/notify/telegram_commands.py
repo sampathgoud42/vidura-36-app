@@ -83,7 +83,8 @@ def sweep_all_tenants() -> int:
         feeds = []
         for tid in db.scalars(select(Tenant.id)).all():
             f = st._feed(db, tid)
-            if f is not None and f.enabled and f.chat_id:
+            # Answered while any of the channel's posts is switched on.
+            if f is not None and f.chat_id and (f.enabled or f.post_hot or f.post_superhot):
                 token = st._token(db, tid, keyring)
                 if token:
                     feeds.append((tid, f.chat_id, token))

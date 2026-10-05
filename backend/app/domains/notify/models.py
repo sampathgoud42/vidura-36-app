@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Index, Integer, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Index, Integer, String, UniqueConstraint, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.db.base import Base, TenantOwned, Timestamped, tenant_fk
@@ -28,6 +28,12 @@ class TelegramFeed(Base, TenantOwned, Timestamped):
     # Telegram's id for the chat: -100... for a channel, or @name.
     chat_id: Mapped[str | None] = mapped_column(String(64))
     chat_title: Mapped[str | None] = mapped_column(String(128))
+    # The other posts, each its own switch: the half-hourly HOT boards, and
+    # the SUPERHOT alerts. ``enabled`` stays the Super Signals switch.
+    post_hot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                           server_default=false())
+    post_superhot: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                                server_default=false())
     posted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     last_post_at: Mapped[datetime | None] = mapped_column(DateTime)
     # Safe to show: never the token (notify's errors carry none).

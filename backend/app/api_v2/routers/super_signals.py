@@ -135,6 +135,9 @@ class TelegramFeedRequest(BaseModel):
     chat_id: str | None = Field(default=None, max_length=64)
     chat_title: str | None = Field(default=None, max_length=128)
     enabled: bool | None = None
+    # The other posts' switches: the half-hourly HOT boards, the SUPERHOT alerts.
+    post_hot: bool | None = None
+    post_superhot: bool | None = None
 
 
 class TelegramChatsRequest(BaseModel):
@@ -178,6 +181,7 @@ def telegram_set(payload: TelegramFeedRequest,
     return _telegram(super_telegram.set_state, db, tenant, kr,
                      token=payload.token, chat_id=payload.chat_id,
                      chat_title=payload.chat_title, enabled=payload.enabled,
+                     post_hot=payload.post_hot, post_superhot=payload.post_superhot,
                      actor=tenant.slug)
 
 

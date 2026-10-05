@@ -218,6 +218,8 @@ def get_state(db, tenant_id: str, keyring) -> dict:
     feed = _feed(db, tenant_id)
     return {"token_saved": _token(db, tenant_id, keyring) is not None,
             "enabled": bool(feed and feed.enabled),
+            "post_hot": bool(feed and feed.post_hot),
+            "post_superhot": bool(feed and feed.post_superhot),
             "chat_id": feed.chat_id if feed else None,
             "chat_title": feed.chat_title if feed else None,
             "posted": feed.posted if feed else 0,
@@ -228,7 +230,8 @@ def get_state(db, tenant_id: str, keyring) -> dict:
 
 def set_state(db, tenant, keyring, *, token: str | None = None,
               chat_id: str | None = None, chat_title: str | None = None,
-              enabled: bool | None = None, actor: str = "") -> dict:
+              enabled: bool | None = None, post_hot: bool | None = None,
+              post_superhot: bool | None = None, actor: str = "") -> dict:
     """Save the token (sealed), the chat, and the switch -- whichever given.
     Switching on needs both a token and a chat."""
     from app.domains.notify.models import TelegramFeed
@@ -270,6 +273,12 @@ def set_state(db, tenant, keyring, *, token: str | None = None,
             feed.enabled_at = _naive_utc(_now())
             feed.last_error = None
         feed.enabled = bool(enabled)
+    for name, value in (("post_hot", post_hot), ("post_superhot", post_superhot)):
+        if value is None:
+            continue
+        if value and not (feed.chat_id and (token or _token(db, tenant.id, keyring))):
+            raise ValueError("posting needs a saved bot token and a chat")
+        setattr(feed, name, bool(value))
     db.commit()
     return get_state(db, tenant.id, keyring)
 

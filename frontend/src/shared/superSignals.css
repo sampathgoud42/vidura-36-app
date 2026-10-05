@@ -481,3 +481,6 @@
 .ss-stars { margin-left: 4px; font-size: 10px; line-height: 1; letter-spacing: -0.15em; cursor: help; white-space: nowrap; }
 .ss--touch .ss-stars { font-size: 12px; }
 .ss-starsnote { color: #fbbf24; }
+/* The HOT and SUPERHOT switches, under the signals one, right-aligned with it. */
+.ss-tg-more { justify-content: flex-end; flex-wrap: wrap; gap: 6px 16px; margin-top: 6px; }
+.ss-tg-more .ss-tg-switch { margin-left: 0; }

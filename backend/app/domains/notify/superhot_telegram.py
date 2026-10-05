@@ -178,15 +178,19 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
     if not desk_open(now) and slot is None:
         return 0
     with session_scope() as db:
-        tenant_ids = [tid for tid in db.scalars(select(Tenant.id)).all()
-                      if (f := st._feed(db, tid)) is not None and f.enabled]
-    if not tenant_ids:
+        # Each post has its own switch: (tenant, HOT on, SUPERHOT on).
+        tenants = [(tid, f.post_hot, f.post_superhot)
+                   for tid in db.scalars(select(Tenant.id)).all()
+                   if (f := st._feed(db, tid)) is not None and f.chat_id
+                   and (f.post_hot or f.post_superhot)]
+    if not tenants:
         return 0
     keyring = deps.keyring()
     interval = get_settings().tradier_hot_interval
     day = now.astimezone(CT).date().isoformat()
     sent = 0
-    for tenant_id in tenant_ids:
+    for tenant_id, want_hot, want_superhot in tenants:
+        superhot_now = want_superhot and desk_open(now)
         try:
             with session_scope() as db:
                 cred, live = _credential(db, tenant_id, keyring)
@@ -195,21 +199,21 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
             # The 5-minute board keeps the id it was first posted under, so
             # adding the other bars did not repost a slot already sent.
             hot_ids = ({iv: f"hot:{day}:{slot}" + ("" if iv == "5min" else f":{iv}")
-                        for iv in HOT_INTERVALS} if slot else {})
+                        for iv in HOT_INTERVALS} if slot and want_hot else {})
             with session_scope() as db:
                 repo = TenantRepository(db, tenant_id)
                 done = {p.signal_id for p in db.scalars(repo.query(TelegramPost).where(
                     TelegramPost.signal_id.in_(list(hot_ids.values())))).all()} if hot_ids else set()
             hot_due = [iv for iv, pid in hot_ids.items() if pid not in done]
-            if not desk_open(now) and not hot_due:
+            if not superhot_now and not hot_due:
                 continue
             boards = {iv: _board(tenant_id, cred, live, iv)
-                      for iv in dict.fromkeys(hot_due + ([interval] if desk_open(now) else []))}
-            listed = superhot_rows(boards[interval]) if desk_open(now) else []
+                      for iv in dict.fromkeys(hot_due + ([interval] if superhot_now else []))}
+            listed = superhot_rows(boards[interval]) if superhot_now else []
             with session_scope() as db:
                 repo = TenantRepository(db, tenant_id)
                 feed = db.scalar(repo.query(TelegramFeed))
-                if feed is None or not feed.enabled or not feed.chat_id:
+                if feed is None or not feed.chat_id:
                     continue
                 token = st._token(db, tenant_id, keyring)
                 if not token:
