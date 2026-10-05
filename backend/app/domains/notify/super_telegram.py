@@ -284,11 +284,27 @@ def set_state(db, tenant, keyring, *, token: str | None = None,
 
 
 # ---- Telegram ---------------------------------------------------------------
-def _get(url: str, params: dict):
-    """The one outbound read. The seam tests substitute."""
-    import requests
+_SESSION = None
+_SESSION_LOCK = __import__("threading").Lock()
 
-    return requests.get(url, params=params, timeout=10)
+
+def _session():
+    """One kept-alive connection pool for every Telegram read. A fresh
+    requests.get per call paid a full TLS handshake each time -- and on
+    Windows that reloads the CA bundle -- which made the command poll the
+    API's single largest CPU cost."""
+    global _SESSION
+    with _SESSION_LOCK:
+        if _SESSION is None:
+            import requests
+
+            _SESSION = requests.Session()
+        return _SESSION
+
+
+def _get(url: str, params: dict, *, timeout: float = 10):
+    """The one outbound read. The seam tests substitute."""
+    return _session().get(url, params=params, timeout=timeout)
 
 
 def chats(token: str) -> list[dict]:

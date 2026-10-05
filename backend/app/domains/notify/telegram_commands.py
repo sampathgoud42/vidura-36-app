@@ -3,9 +3,13 @@
     /hot        the HOT board on 5-minute bars, now
     /superhot   the SUPERHOT list on 5-minute bars, now
 
-The bot reads its updates every few seconds (getUpdates; no webhook, so
-nothing has to reach this machine from outside) and answers in the same
-channel, in the same format as the scheduled posts.
+The bot LONG-POLLS its updates (getUpdates with a timeout: Telegram holds
+the request open until a message arrives or LONG_POLL_S passes; no webhook,
+so nothing has to reach this machine from outside) and answers in the same
+channel, in the same format as the scheduled posts. A command is answered
+as it arrives, on one kept-alive connection -- polling every five seconds
+with a fresh connection each time cost more CPU than anything else the API
+did.
 
 WHO CAN ASK
 Only the feed's own chat is answered -- a channel, where only its admins can
@@ -29,7 +33,9 @@ from sqlalchemy import select
 
 logger = logging.getLogger(__name__)
 
-POLL_S = 5
+# The loop re-enters at once: the wait happens at Telegram, in the request.
+POLL_S = 1
+LONG_POLL_S = 20
 STALE_S = 120
 INTERVAL = "5min"
 COMMAND = re.compile(r"^/(hot|superhot)(?:@\w+)?\s*$", re.IGNORECASE)
@@ -37,13 +43,14 @@ COMMAND = re.compile(r"^/(hot|superhot)(?:@\w+)?\s*$", re.IGNORECASE)
 _offsets: dict[str, int] = {}               # token -> next update id to ask for
 
 
-def _updates(token: str, offset: int | None) -> list[dict]:
+def _updates(token: str, offset: int | None, *, wait_s: int = 0) -> list[dict]:
     from app.domains.notify import super_telegram as st
 
-    params = {"allowed_updates": '["channel_post","message"]', "timeout": 0}
+    params = {"allowed_updates": '["channel_post","message"]', "timeout": wait_s}
     if offset is not None:
         params["offset"] = offset
-    r = st._get(f"https://api.telegram.org/bot{token}/getUpdates", params)
+    r = st._get(f"https://api.telegram.org/bot{token}/getUpdates", params,
+                timeout=wait_s + 10)
     if r.status_code >= 400:
         raise RuntimeError(f"getUpdates answered HTTP {r.status_code}")
     return (r.json() or {}).get("result") or []
@@ -88,10 +95,18 @@ def sweep_all_tenants() -> int:
                 token = st._token(db, tid, keyring)
                 if token:
                     feeds.append((tid, f.chat_id, token))
+    if not feeds:
+        # Nothing to listen for: wait as long as a poll would have, rather
+        # than asking the database again every second.
+        time.sleep(LONG_POLL_S)
+        return 0
     answered = 0
     for tenant_id, chat_id, token in feeds:
         try:
-            updates = _updates(token, _offsets.get(token))
+            # One feed (the usual case) waits at Telegram; several take turns
+            # with a short wait each, so one quiet channel cannot hold up the rest.
+            updates = _updates(token, _offsets.get(token),
+                               wait_s=LONG_POLL_S if len(feeds) == 1 else 2)
         except Exception as exc:                        # noqa: BLE001
             logger.info("telegram commands: %s", exc)
             continue
