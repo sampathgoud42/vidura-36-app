@@ -10,6 +10,19 @@ operator whose feed is on, posts the signals it has not posted before:
   * several at once go as one message (up to PER_MESSAGE), so a burst at a
     bar close is a handful of messages, inside Telegram's rate limits.
 
+Each signal's first line says its side and how its pair has done, at a glance:
+
+  * 🟢 a LONG (a call), 🔻 a SHORT (a put);
+  * 👍 when its ticker + signal pair is one of the daily report's best pairs --
+    the panel's own mark, keyed the same way (type_key::ticker);
+  * ⭐⭐⭐ when that same pair won more than 66% of its decided trades over the
+    previous 7 sessions, else ⭐⭐ over the previous 3, else ⭐ over the
+    previous one. A win is the target before the stop; timeouts sit outside
+    the rate, as they do on the panel.
+
+The marks never hold a signal back: when the desk's lists cannot be read, the
+signal goes without them.
+
 A signal is recorded as posted once Telegram has taken the message that
 carried it, and never posted again. A message Telegram refuses leaves its
 signals unposted and the reason on the feed, and they are tried again on the
@@ -37,7 +50,16 @@ SEND_GAP_S = 1.1          # Telegram: about one message a second per chat
 KEEP_POSTS_DAYS = 14
 VENUE = "telegram"
 CT = ZoneInfo("America/Chicago")
-ARROW = {"LONG": "🔺", "SHORT": "🔻"}
+SIDE = {"LONG": "🟢", "SHORT": "🔻"}       # a call green, a put red
+THUMBS = "👍"
+STAR = "⭐"
+STAR_WIN_PCT = 66                          # a pair's win rate must be ABOVE this
+STAR_WINDOWS = ((7, 3), (3, 2), (1, 1))    # (sessions back, stars): the longest that clears it
+PAIRS_TTL_S = 600                          # the best pairs change once a day, with the report
+LEGEND = ("🟢 long (call) · 🔻 short (put)\n"
+          "👍 one of the best ticker + signal pairs\n"
+          "⭐ the pair won more than 66% of its trades last session, "
+          "⭐⭐ over the last 3 sessions, ⭐⭐⭐ over the last 7")
 
 
 def _now() -> datetime:
@@ -68,10 +90,15 @@ def setup_text(signal: dict) -> str:
     return text
 
 
-def format_signal(signal: dict) -> str:
+def format_signal(signal: dict, *, best: bool = False, stars: int = 0) -> str:
     direction = str(signal.get("direction") or "").upper()
+    head = f"{SIDE.get(direction, '•')} {signal.get('ticker', '?')} {direction} · {signal.get('agent', '')}"
+    if best:
+        head += f" {THUMBS}"
+    if stars:
+        head += f" {STAR * stars}"
     lines = [
-        f"{ARROW.get(direction, '•')} {signal.get('ticker', '?')} {direction} · {signal.get('agent', '')}",
+        head,
         setup_text(signal),
         f"{_num(signal.get('price'))} → {_num(signal.get('target'))} · stop {_num(signal.get('stop'))}"
         + (f" · {int(signal['horizon_min'])}m" if signal.get("horizon_min") else ""),
@@ -80,12 +107,58 @@ def format_signal(signal: dict) -> str:
     return "\n".join(line for line in lines if line.strip())
 
 
-def format_batch(signals: list[dict]) -> str:
+def format_batch(signals: list[dict], marks: Marks | None = None) -> str:
     from app.platform import notify
 
+    marks = marks or Marks()
     head = "Super signals" if len(signals) > 1 else "Super signal"
-    text = head + "\n\n" + "\n\n".join(format_signal(s) for s in signals)
+    text = head + "\n\n" + "\n\n".join(
+        format_signal(s, best=marks.best(s), stars=marks.stars(s)) for s in signals)
     return text if len(text) <= notify.MAX_TEXT else text[:notify.MAX_TEXT - 1] + "…"
+
+
+# ---- the marks: 👍 and ⭐ ----------------------------------------------------
+def pair_key(signal: dict) -> str:
+    """A ticker + signal pair as the desk's best pairs key it: type_key::ticker,
+    where type_key is agent|setup|grade|direction."""
+    return (f'{signal.get("agent") or ""}|{signal.get("setup") or ""}|{signal.get("grade") or ""}'
+            f'|{signal.get("direction") or ""}::{signal.get("ticker") or ""}')
+
+
+def records_of(sessions: list[list[dict]]) -> dict[int, dict[str, tuple[int, int]]]:
+    """Each pair's (wins, losses) over the last 1, 3 and 7 of `sessions`, the
+    newest first. A target is a win and a stop a loss; nothing else counts."""
+    out: dict[int, dict[str, tuple[int, int]]] = {}
+    for back, _ in STAR_WINDOWS:
+        tally: dict[str, tuple[int, int]] = {}
+        for signals in sessions[:back]:
+            for s in signals:
+                outcome = s.get("outcome")
+                if outcome not in ("target", "stop"):
+                    continue
+                wins, losses = tally.get(pair_key(s), (0, 0))
+                tally[pair_key(s)] = (wins + 1, losses) if outcome == "target" else (wins, losses + 1)
+        out[back] = tally
+    return out
+
+
+class Marks:
+    """The best pairs, and each pair's (wins, losses) per STAR_WINDOWS."""
+
+    def __init__(self, pairs=(), records: dict[int, dict[str, tuple[int, int]]] | None = None):
+        self.pairs = frozenset(pairs)
+        self.records = records or {}
+
+    def best(self, signal: dict) -> bool:
+        return pair_key(signal) in self.pairs
+
+    def stars(self, signal: dict) -> int:
+        key = pair_key(signal)
+        for back, count in STAR_WINDOWS:
+            wins, losses = self.records.get(back, {}).get(key, (0, 0))
+            if wins + losses and 100 * wins / (wins + losses) > STAR_WIN_PCT:
+                return count
+        return 0
 
 
 def _signal_at(date: str, signal: dict) -> datetime | None:
@@ -231,19 +304,75 @@ def send_test(db, tenant_id: str, keyring) -> dict:
         raise notify.NotifyError("save a bot token and a chat first")
     return notify.send("telegram", token=token, chat_id=feed.chat_id,
                        text="✅ Vidura Super Signals: this chat will get new signals as "
-                            "the desk raises them.")
+                            "the desk raises them.\n\n" + LEGEND)
 
 
 # ---- the feed ---------------------------------------------------------------
-def _session() -> dict | None:
+def _desk(path: str, params: dict | None = None) -> dict:
+    """The one read of the signal desk. The seam tests substitute."""
     from app.services import super_signals as desk
 
+    return desk.get_json(path, params)
+
+
+def _session() -> dict | None:
     try:
-        return desk.get_json("/api/session")
+        return _desk("/api/session")
     except Exception as exc:                            # noqa: BLE001
         logger.info("super telegram: the signal desk did not answer (%s)",
                     type(exc).__name__)
         return None
+
+
+_pairs_cache: list = [0.0, None]           # [monotonic time read, frozenset of pair keys]
+_records_cache: dict = {}                  # session date -> records_of(the sessions before it)
+
+
+def _best_pairs(clock=time.monotonic) -> frozenset:
+    """The report's best pairs, read again every PAIRS_TTL_S. Unreadable: the
+    last list read (or none), and another try on the next pass."""
+    read_at, pairs = _pairs_cache
+    if pairs is not None and clock() - read_at < PAIRS_TTL_S:
+        return pairs
+    try:
+        listed = _desk("/api/best-pairs").get("pairs") or []
+    except Exception as exc:                            # noqa: BLE001
+        logger.info("super telegram: the best pairs did not answer (%s)", type(exc).__name__)
+        return pairs or frozenset()
+    pairs = frozenset(f'{p["type_key"]}::{p.get("ticker") or ""}' for p in listed if p.get("type_key"))
+    _pairs_cache[:] = [clock(), pairs]
+    return pairs
+
+
+def _records(session: dict) -> dict[int, dict[str, tuple[int, int]]]:
+    """The pairs' records over the sessions before `session`, following the
+    desk's previous-session links. Read once a day: those sessions are settled."""
+    day = str(session.get("date") or "")
+    if day in _records_cache:
+        return _records_cache[day]
+    deepest = max(back for back, _ in STAR_WINDOWS)
+    chain: list[list[dict]] = []
+    prev = (session.get("previous") or {}).get("date")
+    try:
+        while prev and len(chain) < deepest:
+            past = _desk("/api/session", {"date": prev})
+            chain.append(past.get("signals") or [])
+            prev = (past.get("previous") or {}).get("date")
+    except Exception as exc:                            # noqa: BLE001
+        logger.info("super telegram: a past session did not answer (%s)", type(exc).__name__)
+        return {}
+    _records_cache.clear()
+    _records_cache[day] = records_of(chain)
+    return _records_cache[day]
+
+
+def marks_for(session: dict) -> Marks:
+    """Never holds a signal back: anything amiss, and it goes without marks."""
+    try:
+        return Marks(_best_pairs(), _records(session))
+    except Exception as exc:                            # noqa: BLE001
+        logger.warning("super telegram: no marks this pass (%s)", type(exc).__name__)
+        return Marks()
 
 
 def sweep_all_tenants(now: datetime | None = None, sleep=time.sleep) -> int:
@@ -271,6 +400,7 @@ def sweep_all_tenants(now: datetime | None = None, sleep=time.sleep) -> int:
         return 0
     keyring = deps.keyring()
     sent = 0
+    marks = None                               # read once a pass, and only with something to post
     for tenant_id in tenant_ids:
         try:
             with session_scope() as db:
@@ -291,10 +421,12 @@ def sweep_all_tenants(now: datetime | None = None, sleep=time.sleep) -> int:
                     feed.last_error = "no bot token saved"
                     continue
                 fresh.sort(key=lambda s: (s.get("time") or "", s["id"]))
+                if marks is None:
+                    marks = marks_for(session)
                 for start in range(0, len(fresh), PER_MESSAGE):
                     batch = fresh[start:start + PER_MESSAGE]
                     try:
-                        notify.send("telegram", text=format_batch(batch),
+                        notify.send("telegram", text=format_batch(batch, marks),
                                     token=token, chat_id=feed.chat_id)
                     except notify.NotifyError as exc:
                         feed.last_error = str(exc)[:255]
