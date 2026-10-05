@@ -1182,3 +1182,70 @@
 .bs-runrow b { margin-left: auto; font-variant-numeric: tabular-nums; }
 .bs-runrow b.win { color: #2fd35b; }
 .bs-runrow b.loss { color: #ff6b6b; }
+
+/* ---- rain board ---------------------------------------------------------- */
+/* A dock like the luck parley's: a title bar closed, the city table open.
+   The refresh sits in the title bar so the board can be rebuilt without
+   opening it; its click must not also toggle the dock. */
+.bs-rain .bs-luck-hd { align-items: center; }
+.bs-rain .bs-rain-refresh { margin-left: auto; }
+.bs-rain-refresh .spin { display: inline-block; animation: bs-spin 0.8s linear infinite; }
+.bs-rain .bs-rain-refresh + .bs-luck-toggle { margin-left: 4px; }
+.bs-rain-table { max-height: 46vh; }
+.bs-rain-row { cursor: pointer; }
+.bs-rain-row:hover { background: rgba(79, 214, 230, 0.08) !important; }
+.bs-rain-true { color: var(--bs-good, #2fd35b); font-weight: 700; }
+.bs-rain-false { color: var(--bs-ink-2, #9aa3b5); font-weight: 700; }
+.bs-rain-conf { font-size: 10px; letter-spacing: 0.08em; color: var(--bs-ink-3); }
+.bs-rain-conf.settled { color: var(--bs-good, #2fd35b); }
+.bs-rain-conf.high { color: var(--bs-cyan, #4fd6e6); }
+.bs-rain-conf.low { color: var(--bs-sun, #fab219); }
+
+.bs-rain-sheet { width: min(760px, 100%); }
+.bs-rain-sheet .bs-modal-hd h2 { display: flex; gap: 6px; }
+.bs-rain-h {
+  margin: 14px 0 6px; font-family: var(--bs-sans); font-size: 11px;
+  font-weight: 700; letter-spacing: 0.14em; color: var(--bs-ink-3);
+}
+.bs-rain-why { margin: 0 0 10px; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+.bs-rain-why li + li { margin-top: 4px; }
+.bs-rain-why li:first-child { color: var(--bs-ink); }
+.bs-rain-facts {
+  display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px;
+  margin: 0 0 12px; font-size: 12px; line-height: 1.45;
+}
+.bs-rain-facts dt { color: var(--bs-ink-3); }
+.bs-rain-facts dd { margin: 0; }
+.bs-rain-sheet .bs-luck-legs { max-height: none; }
+
+/* NWS hourly PoP as a strip of bars, one per remaining local hour. */
+.bs-rain-pops {
+  display: flex; gap: 3px; align-items: flex-end; height: 56px;
+  margin: 8px 0 4px; font-size: 9px; color: var(--bs-ink-3);
+}
+.bs-rain-pops span {
+  flex: 1 1 0; display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: center; height: 100%; gap: 2px;
+}
+.bs-rain-pops i {
+  display: block; width: 100%; max-height: calc(100% - 12px);
+  background: var(--bs-cyan, #4fd6e6); opacity: 0.7;
+}
+
+.bs-rain-trade { flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.bs-rain-trade label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: var(--bs-ink-3); }
+.bs-rain-trade .bs-input { width: 84px; }
+.bs-rain-sides { display: flex; gap: 6px; }
+.bs-rain-side { opacity: 0.55; }
+.bs-rain-side.on { opacity: 1; }
+.bs-rain-side.yes.on { border-color: var(--bs-good, #2fd35b); color: var(--bs-good, #2fd35b); }
+.bs-rain-side.no.on { border-color: var(--bs-crit, #ff5a5a); color: var(--bs-crit, #ff5a5a); }
+.bs-rain-link {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--bs-cyan, #4fd6e6); font: inherit;
+}
+
+@media (max-width: 560px) {
+  .bs-rain-facts { grid-template-columns: 1fr; }
+  .bs-rain-facts dt { margin-top: 4px; }
+}

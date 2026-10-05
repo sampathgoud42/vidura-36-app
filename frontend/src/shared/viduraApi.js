@@ -336,6 +336,14 @@ export const vidura = {
   // One combo across the fifteen-minute markets, from the DMI boards: the
   // list with its default ticks, then the purchase, under the confirmation's
   // key so a retry is the same combo.
+  // The daily rain board (climate.rain_forecast): read it, rebuild it
+  // (truncate and load, 20-60s), quote one city's market live, and buy YES or
+  // NO on it under the confirmation's key so a retry is the same order.
+  rainForecast: () => api.get('/climate/rain-forecast'),
+  rainForecastRefresh: () => api.post('/climate/rain-forecast/refresh', {}, { timeout: 180000 }),
+  rainQuote: (ticker) => api.get(`/climate/rain-forecast/quote?ticker=${encodeURIComponent(ticker)}`),
+  rainTrade: (body, key) => api.post('/climate/rain-forecast/trade', body,
+    { idempotencyKey: key }),
   combo15Preview: () => api.post('/bots/combo15/preview', {}),
   combo15Place: (body, key) => api.post('/bots/combo15/place', body,
     { idempotencyKey: key }),

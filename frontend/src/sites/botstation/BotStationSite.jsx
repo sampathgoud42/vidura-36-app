@@ -1613,6 +1613,328 @@ function LuckPanel() {
 const loadCommodityBoard = (force) => vidura.commodityDmiSignals(force);
 const loadCryptoBoard = (force) => vidura.cryptoDmiSignals(force);
 
+// ── rain board: will it rain today, per Kalshi KXRAIN city ─────────────────
+// climate.rain_forecast, one TRUE/FALSE per city from the last refresh.
+// REFRESH re-reads every source and truncates and loads the table (the old
+// rows go to rain_forecast_hist first, where each day later gets the outcome
+// weather.com/kalshi settled it on). A row opens the city: why the call is
+// what it is, how earlier calls went, and a YES/NO buy on its market.
+// weather.com's page for each city, by Kalshi's code -- the city's own page
+// rather than the airport's coordinates, which land on the suburb the airport
+// sits in (MSY is Kenner). Each was checked to resolve; a city Kalshi adds
+// later falls back to a search.
+const WEATHER_COM_CITY = {
+  ABQ: 'new-mexico/city/albuquerque',
+  ATL: 'georgia/city/atlanta',
+  AUS: 'texas/city/austin',
+  BOS: 'massachusetts/city/boston',
+  CHI: 'illinois/city/chicago',
+  CLL: 'texas/city/college-station',
+  CMH: 'ohio/city/columbus',
+  DAL: 'texas/city/dallas',
+  DC: 'district-of-columbia/city/washington',
+  DEN: 'colorado/city/denver',
+  EWR: 'new-jersey/city/newark',
+  HOU: 'texas/city/houston',
+  LAX: 'california/city/los-angeles',
+  LEX: 'kentucky/city/lexington',
+  LV: 'nevada/city/las-vegas',
+  MIA: 'florida/city/miami',
+  MIN: 'minnesota/city/minneapolis',
+  MKE: 'wisconsin/city/milwaukee',
+  NOLA: 'louisiana/city/new-orleans',
+  NYC: 'new-york/city/new-york-city',
+  OKC: 'oklahoma/city/oklahoma-city',
+  PHIL: 'pennsylvania/city/philadelphia',
+  PHX: 'arizona/city/phoenix',
+  PIT: 'pennsylvania/city/pittsburgh',
+  PVD: 'rhode-island/city/providence',
+  SATX: 'texas/city/san-antonio',
+  SEA: 'washington/city/seattle',
+  SFO: 'california/city/san-francisco',
+  SGF: 'missouri/city/springfield',
+  TTN: 'new-jersey/city/trenton',
+};
+const weatherComUrl = (row) => (WEATHER_COM_CITY[row.city_code]
+  ? `https://weather.com/us/${WEATHER_COM_CITY[row.city_code]}/today`
+  : `https://weather.com/search/enhancedlocalsearch?where=${encodeURIComponent(row.city)}`);
+const RAIN_CONF = { settled: 'SETTLED', high: 'HIGH', medium: 'MED', low: 'LOW' };
+const inch = (v) => (v == null ? '—' : `${Number(v).toFixed(2)}"`);
+const dollarsC = (v) => (v == null ? '—' : `${Math.round(Number(v) * 100)}c`);
+
+function RainPanel() {
+  const [open, setOpen] = useState(false);
+  const [board, setBoard] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  const [pick, setPick] = useState(null);
+
+  const load = useCallback(async () => {
+    setBusy((b) => b || 'load'); setErr('');
+    try { setBoard(await vidura.rainForecast()); } catch (e) { setErr(errText(e)); }
+    finally { setBusy((b) => (b === 'load' ? '' : b)); }
+  }, []);
+  useEffect(() => { if (open && !board) load(); }, [open, board, load]);
+
+  const refresh = async (e) => {
+    if (e) e.stopPropagation();
+    setBusy('refresh'); setErr(''); setOpen(true);
+    try { setBoard(await vidura.rainForecastRefresh()); }
+    catch (ex) { setErr(errText(ex)); }
+    finally { setBusy(''); }
+  };
+
+  const rows = (board && board.rows) || [];
+  return (
+    <section className={`bs-luckdock bs-rain ${open ? 'open' : ''}`}>
+      <header className="bs-luck-hd" onClick={() => setOpen((v) => !v)}>
+        <h3>RAIN TODAY</h3>
+        <span className="sub">
+          {board && board.loaded_at
+            ? `${board.true_count}/${rows.length} TRUE · ${deskTime(board.loaded_at)} CST`
+            : 'Kalshi KXRAIN'}
+        </span>
+        <button type="button" className="bs-refresh bs-rain-refresh" onClick={refresh} disabled={!!busy}
+          aria-label="refresh the rain board"
+          title="read every source again and reload the board (20-60s)">
+          <span className={busy === 'refresh' ? 'spin' : ''} aria-hidden="true">↻</span>
+        </button>
+        <span className="bs-luck-toggle">{open ? '−' : '+'}</span>
+      </header>
+      {!open ? null : (
+        <div className="bs-luckdock-body">
+          {busy === 'refresh' ? <p className="bs-luck-note">reading Kalshi, NWS and the models for every city…</p> : null}
+          {err ? <p className="bs-luck-err">{err}</p> : null}
+          {board && !rows.length && !busy ? (
+            <p className="bs-luck-note">no forecast loaded yet — press ↻ to build one</p>
+          ) : null}
+          {rows.length ? (
+            <div className="bs-luck-legs bs-rain-table">
+              <table>
+                <thead>
+                  <tr><th>City</th><th>Call</th><th>Conf</th><th className="num">So far</th>
+                    <th className="num">NWS</th><th className="num">HRRR</th><th className="num">YES</th></tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.city_code} className="bs-rain-row" onClick={() => setPick(r)}
+                      title="open the city">
+                      <td>{r.city}</td>
+                      <td><b className={r.decision === 'TRUE' ? 'bs-rain-true' : 'bs-rain-false'}>{r.decision}</b></td>
+                      <td className={`bs-rain-conf ${r.confidence}`}>{RAIN_CONF[r.confidence] || r.confidence}</td>
+                      <td className="num">{r.observed_in ? inch(r.observed_in) : r.observed_trace ? 'T' : '—'}</td>
+                      <td className="num">{r.nws_max_pop == null ? '—' : `${r.nws_max_pop}%`}</td>
+                      <td className="num">{inch(r.hrrr_in)}</td>
+                      <td className="num">{dollarsC(r.kalshi_yes_ask)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      )}
+      {pick && <RainCitySheet row={pick} onClose={() => setPick(null)} />}
+    </section>
+  );
+}
+
+function RainCitySheet({ row, onClose }) {
+  const [quote, setQuote] = useState(null);
+  const [qErr, setQErr] = useState('');
+  const [side, setSide] = useState(row.decision === 'TRUE' ? 'yes' : 'no');
+  const [contracts, setContracts] = useState('5');
+  const [price, setPrice] = useState('');
+  const [edited, setEdited] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  const [result, setResult] = useState(null);
+  // One key per confirmation; a retry after a lost response is the same order.
+  const keyRef = useRef(newConfirmationKey());
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+
+  const loadQuote = useCallback(async () => {
+    if (!row.market_ticker) return;
+    setQErr('');
+    try {
+      const q = await vidura.rainQuote(row.market_ticker);
+      if (alive.current) setQuote(q);
+    } catch (e) { if (alive.current) setQErr(errText(e)); }
+  }, [row.market_ticker]);
+  useEffect(() => { loadQuote(); }, [loadQuote]);
+
+  const askOf = (s) => (quote ? quote[s === 'yes' ? 'yes_ask' : 'no_ask'] : null);
+  // The limit starts at the side's ask and follows it until it is edited.
+  useEffect(() => {
+    const a = quote ? quote[side === 'yes' ? 'yes_ask' : 'no_ask'] : null;
+    if (!edited && a != null) setPrice(String(Math.round(a * 100)));
+  }, [quote, side, edited]);
+
+  const n = Number(contracts);
+  const p = Number(price);
+  const okN = Number.isInteger(n) && n >= 1 && n <= 500;
+  const okP = Number.isInteger(p) && p >= 1 && p <= 99;
+  const tradable = !!quote && ['active', 'open'].includes(quote.status);
+  const done = !!(result && result.placed);
+  const canBuy = !busy && !done && okN && okP && tradable;
+  const cost = okN && okP ? (n * p) / 100 : null;
+
+  const buy = async () => {
+    if (!canBuy) return;
+    const ok = await confirmDialog({
+      title: `Buy ${n} ${side.toUpperCase()} on ${row.city} rain for up to $${cost.toFixed(2)}?`,
+      body: `${row.market_ticker}: a limit order at ${p}c per ${side.toUpperCase()} contract. `
+        + `Each pays $1 if ${row.city} ${side === 'yes' ? 'gets' : 'does not get'} measurable `
+        + 'rain today (a trace counts as none). Real money on your Kalshi account.',
+      confirmText: `Buy for $${cost.toFixed(2)}`,
+      cancelText: 'Cancel',
+    });
+    if (!ok) return;
+    setBusy('buy'); setErr('');
+    try {
+      const out = await vidura.rainTrade(
+        { ticker: row.market_ticker, side, contracts: n, price_c: p }, keyRef.current);
+      if (!alive.current) return;
+      setResult(out);
+      if (!out || !out.placed) setErr((out && out.detail) || 'not placed');
+    } catch (e) { if (alive.current) setErr(errText(e)); }
+    finally { if (alive.current) setBusy(''); }
+  };
+
+  const pops = row.nws_pops || [];
+  const hist = row.history;
+  const order = (result && result.order) || {};
+  return createPortal(
+    <div className="bs-luck-scrim" onClick={() => { if (busy !== 'buy') onClose(); }}>
+      <div className="bs-luck-sheet bs-rain-sheet" role="dialog" aria-modal="true"
+        aria-label={`${row.city} rain`} onClick={(e) => e.stopPropagation()}>
+        <header className="bs-modal-hd">
+          <h2>
+            {row.city.toUpperCase()} ·{' '}
+            <span className={row.decision === 'TRUE' ? 'bs-rain-true' : 'bs-rain-false'}>{row.decision}</span>
+          </h2>
+          <span className={`bs-rain-conf ${row.confidence}`}>{RAIN_CONF[row.confidence] || row.confidence}</span>
+          <button type="button" className="close" disabled={busy === 'buy'} onClick={onClose}>×</button>
+        </header>
+        <p className="bs-luck-note">
+          {row.market_ticker} · settles on CLI{row.station} ({row.icao}) · {row.local_time}
+          {' · '}a trace counts as 0{' · '}
+          <a className="bs-rain-link" href={weatherComUrl(row)} target="_blank" rel="noopener noreferrer">
+            weather.com ↗
+          </a>
+        </p>
+
+        <h4 className="bs-rain-h">Why {row.decision}</h4>
+        <ul className="bs-rain-why">
+          {(row.reasons || []).map((t, i) => <li key={i}>{t}</li>)}
+        </ul>
+
+        <dl className="bs-rain-facts">
+          <dt>Historical context</dt><dd>{row.historical_context || '—'}</dd>
+          <dt>Current dynamics</dt><dd>{row.current_dynamics || '—'}</dd>
+          <dt>Model trend</dt><dd>{row.model_trend || '—'}</dd>
+          <dt>NWS forecast</dt><dd>{row.nws_forecast || '—'}</dd>
+        </dl>
+
+        <div className="bs-luck-legs">
+          <table>
+            <thead>
+              <tr><th>So far</th><th className="num">HRRR</th><th className="num">NAM</th>
+                <th className="num">GFS</th><th className="num">ECMWF</th><th className="num">NWS QPF</th>
+                <th className="num">NWS PoP</th><th className="num">HRRR PoP</th><th className="num">Pressure</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{row.observed_in ? inch(row.observed_in) : row.observed_trace ? 'trace' : '0.00"'}</td>
+                <td className="num">{inch(row.hrrr_in)}</td>
+                <td className="num">{inch(row.nam_in)}</td>
+                <td className="num">{inch(row.gfs_in)}</td>
+                <td className="num">{inch(row.ecmwf_in)}</td>
+                <td className="num">{inch(row.nws_qpf_in)}</td>
+                <td className="num">{row.nws_max_pop == null ? '—' : `${row.nws_max_pop}%`}</td>
+                <td className="num">{row.hrrr_max_pop == null ? '—' : `${row.hrrr_max_pop}%`}</td>
+                <td className="num">
+                  {row.pressure_hpa ?? '—'}
+                  {row.pressure_tend_hpa != null
+                    ? ` (${row.pressure_tend_hpa > 0 ? '+' : ''}${row.pressure_tend_hpa}/3h)` : ''}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {pops.length ? (
+          <div className="bs-rain-pops" title="NWS hourly chance of rain for the rest of today, by local hour">
+            {pops.map(([h, v]) => (
+              <span key={h} title={`${h}:00 · ${v}%`}><i style={{ height: `${Math.max(2, v)}%` }} />{h}</span>
+            ))}
+          </div>
+        ) : null}
+        {row.error ? <p className="bs-luck-err">not read: {row.error}</p> : null}
+
+        {hist && hist.days && hist.days.length ? (
+          <p className="bs-luck-note">
+            Earlier calls: {hist.correct}/{hist.settled} right ·{' '}
+            {hist.days.slice(0, 7).map((d) => (
+              <span key={d.date}
+                className={d.actual == null ? '' : d.actual === d.decision ? 'bs-rain-true' : 'bs-rain-false'}>
+                {d.date.slice(5)} {d.decision[0]}{d.actual ? `→${d.actual[0]}` : '…'}{' '}
+              </span>
+            ))}
+          </p>
+        ) : null}
+
+        <h4 className="bs-rain-h">Trade on Kalshi</h4>
+        <p className="bs-luck-note">
+          {quote ? (
+            <>
+              YES {dollarsC(quote.yes_bid)} bid / {dollarsC(quote.yes_ask)} ask · NO {dollarsC(quote.no_bid)} bid
+              {' / '}{dollarsC(quote.no_ask)} ask · {quote.status}{' '}
+              <button type="button" className="bs-rain-link" onClick={loadQuote}>↻ quote</button>
+            </>
+          ) : (qErr || 'reading the market…')}
+        </p>
+        <div className="bs-luck-actions bs-rain-trade">
+          <div className="bs-rain-sides" role="group" aria-label="side">
+            {['yes', 'no'].map((s) => (
+              <button key={s} type="button" disabled={!!busy || done}
+                className={`bs-btn bs-rain-side ${s} ${side === s ? 'on' : ''}`}
+                onClick={() => { setSide(s); setEdited(false); }}>
+                {s.toUpperCase()} {dollarsC(askOf(s))}
+              </button>
+            ))}
+          </div>
+          <label>
+            Contracts
+            <input className="bs-input" type="number" min="1" max="500" step="1" value={contracts}
+              onChange={(e) => setContracts(e.target.value)} disabled={!!busy || done} />
+          </label>
+          <label>
+            Limit ¢
+            <input className="bs-input" type="number" min="1" max="99" step="1" value={price}
+              onChange={(e) => { setPrice(e.target.value); setEdited(true); }} disabled={!!busy || done} />
+          </label>
+          <button type="button" className="bs-btn live" onClick={buy} disabled={!canBuy}>
+            {busy === 'buy' ? 'BUYING…' : `BUY ${side.toUpperCase()}${cost != null ? ` · $${cost.toFixed(2)}` : ''}`}
+          </button>
+        </div>
+        {!okN ? <p className="bs-luck-err">contracts: a whole number, 1-500</p> : null}
+        {!okP ? <p className="bs-luck-err">limit: a whole number of cents, 1-99</p> : null}
+        {quote && !tradable ? <p className="bs-luck-err">this market is {quote.status} — it cannot be traded</p> : null}
+        {err ? <p className="bs-luck-err">{err}</p> : null}
+        {done ? (
+          <p className="bs-luck-ok">
+            ORDER SENT — {n} {side.toUpperCase()} @ {p}c
+            {order.status ? ` · ${order.status}` : ''}
+            {order.order_id ? ` · ${order.order_id}` : ''}
+          </p>
+        ) : null}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function CommoditiesStrip({ onSignal }) {
   return (
     <DmiStrip
@@ -4111,7 +4433,12 @@ export default function BotStationSite() {
 
           {/* right: what the account did, then what the bots did */}
           <div className="bs-col">
-            {/* FIRST on this column. The ACCOUNT's record, not the bots' --
+            {/* The two docks lead the column: each is a title bar until
+                opened, so they cost two lines above the trade log. */}
+            <LuckPanel />
+            <RainPanel />
+
+            {/* NEXT on this column. The ACCOUNT's record, not the bots' --
                 the ledger feed still loads (the per-bot 7d record is computed
                 from it), but a row a bot wrote at entry cannot know how the
                 market resolved, and where the two disagree this is the one
@@ -4161,7 +4488,6 @@ export default function BotStationSite() {
               </div>
             </div>
 
-            <LuckPanel />
 
           </div>
         </div>
