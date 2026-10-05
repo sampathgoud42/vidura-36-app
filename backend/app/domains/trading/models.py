@@ -210,3 +210,49 @@ class Signal(Base, Timestamped):
         # Feeds sort descending and cap; this is that query.
         Index("ix_signal_book_logged", "book", "logged_at"),
     )
+
+
+class PositionRollover(Base, TenantOwned, Timestamped):
+    """A position held over the close: one row per position per session.
+
+    Written at the close (risk.rollover) for every position marked to carry
+    -- bought on a 7+ day expiry, or carried by hand -- that is still open
+    with neither its target nor its stop hit. It is the record of what was
+    held overnight and in what state: the closing bid, the unrealised P&L,
+    and whether both exits were still resting at the venue to protect it.
+    """
+
+    __tablename__ = "position_rollover"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    position_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("position.id", ondelete="CASCADE"), nullable=False)
+    # The session it was held over, CST: 2026-10-05 means into 10-06.
+    rolled_on: Mapped[str] = mapped_column(String(10), nullable=False)
+    venue_sandbox: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    underlying: Mapped[str] = mapped_column(String(16), nullable=False)
+    occ_symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    option_type: Mapped[str] = mapped_column(String(4), nullable=False)
+    strike: Mapped[float] = mapped_column(Float, nullable=False)
+    expiration: Mapped[str] = mapped_column(String(10), nullable=False)
+    days_left: Mapped[int] = mapped_column(Integer, nullable=False)
+    contracts: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_price: Mapped[float | None] = mapped_column(Float)
+    close_bid: Mapped[float | None] = mapped_column(Float)
+    unrealised_usd: Mapped[float | None] = mapped_column(Float)
+    tp_price: Mapped[float | None] = mapped_column(Float)
+    sl_price: Mapped[float | None] = mapped_column(Float)
+    tp_order_id: Mapped[str | None] = mapped_column(String(64))
+    stop_order_id: Mapped[str | None] = mapped_column(String(64))
+    # The exits as the venue reported them at the close: open, filled, ...
+    tp_status: Mapped[str | None] = mapped_column(String(24))
+    stop_status: Mapped[str | None] = mapped_column(String(24))
+    stop_protection: Mapped[str] = mapped_column(String(16), nullable=False)
+    strategy: Mapped[str] = mapped_column(String(64), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "position_id", "rolled_on", name="one_roll_per_session"),
+        Index("ix_position_rollover_tenant_day", "tenant_id", "rolled_on"),
+    )

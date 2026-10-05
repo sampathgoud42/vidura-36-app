@@ -11,7 +11,8 @@ import { ExperienceSwitch } from '../../shared/ExperienceControls.jsx';
 import { READING_GUIDE_URL } from '../../config.js';
 import {
   AutoStatus, AutoTradeForm, CommoditiesPanel, deskOwnerNote, fmtMark, HotScan, LiteChart,
-  MiniChart, OptionsFlow, ORDER_TYPES, orderNote, orderPrice, STRIKE_PICKS, useMovers,
+  MiniChart, NearExpiryChip, OptionsFlow, ORDER_TYPES, orderNote, orderPrice, STRIKE_PICKS,
+  useMovers,
 } from '../tradier/TradierSite.jsx';
 import '../../shared/quotePopup.css';
 import './desk36.css';
@@ -482,6 +483,9 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
   // false on both /tradier/chain and POST /tradier/positions, so this asks
   // for them rather than being the only thing preventing them.
   const [zeroDte, setZeroDte] = useState(false);
+  // 0DTE off: the nearest expiry (on) or the first 7+ days out (off), which
+  // is held over the close and recorded as rolled over.
+  const [nearExpiry, setNearExpiry] = useState(true);
   // MKT, LIMIT or SMART -- the desk ticket's three (TradierSite ORDER_TYPES).
   // LIMIT bids the mark less the chosen discount, to the cent, and the server
   // cancels it if it has not filled in fifteen minutes. SMART, the mid on a
@@ -545,6 +549,7 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
     const id = setTimeout(() => {
       vidura.tradierChain(user.user_id, {
         symbol, side, live, zero_dte: zeroDte, pick: strikePick,
+        near_expiry: zeroDte || nearExpiry,
         ...(bandInput ? { delta_min: bandInput.lo, delta_max: bandInput.hi } : {}),
       }).then((r) => { if (!dead) setPick(r); })
         .catch((e) => {
@@ -553,7 +558,7 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
         });
     }, 350);
     return () => { dead = true; clearTimeout(id); };
-  }, [user.user_id, symbol, side, bandInput, live, zeroDte, strikePick]);
+  }, [user.user_id, symbol, side, bandInput, live, zeroDte, strikePick, nearExpiry]);
 
   // iOS keeps scrolling the page behind a fixed overlay; freezing the body is
   // the only reliable way to stop it there.
@@ -581,6 +586,7 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
     try {
       const row = await vidura.tradierOpen({
         user_id: user.user_id, symbol, side, live, zero_dte: zeroDte,
+        near_expiry: zeroDte || nearExpiry,
         order_type: otype,
         discount_pct: otype === 'limit' ? discount : 0,
         buy_pct: Number(f.buy_pct),
@@ -677,8 +683,13 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
           aria-pressed={zeroDte} onClick={() => setZeroDte((v) => !v)}>
           <span className="d36-dtebox" aria-hidden="true">{zeroDte ? '\u2713' : ''}</span>
           <span>0DTE {zeroDte ? 'on \u00b7 today\u2019s expiry allowed'
-            : 'off \u00b7 nearest expiry after today'}</span>
+            : nearExpiry ? 'off \u00b7 nearest expiry after today'
+              : 'off \u00b7 first expiry 7+ days out'}</span>
         </button>
+        <div className="d36-chiprow">
+          <NearExpiryChip zeroDte={zeroDte} value={nearExpiry} onChange={setNearExpiry}
+            className="d36-chip" />
+        </div>
 
         <div className="d36-otype">
           <div className="d36-chiprow" role="group" aria-label="order type">

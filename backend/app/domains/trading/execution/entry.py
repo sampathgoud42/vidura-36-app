@@ -24,23 +24,52 @@ from app.domains.trading.risk import clock
 PICKS = ("delta", "open_interest")
 
 
-def choose_expiration(expirations: list[str], *, zero_dte: bool) -> str:
-    """Nearest listed expiry, skipping today unless 0DTE was asked for.
+# Near Expiry off: the first expiry at least this many days out.
+FAR_MIN_DAYS = 7
+# What a position bought on a far expiry is marked with, so it is held over
+# the close and recorded as rolled over (risk.rollover) -- the same mark the
+# desk's 🌙 carry switch sets.
+CARRY_MARK = " +carry"
+
+
+def choose_expiration(expirations: list[str], *, zero_dte: bool,
+                      near_expiry: bool = True) -> str:
+    """Which listed expiry to buy:
+
+      0DTE on                    the nearest, today included
+      0DTE off, Near Expiry on   the nearest after today
+      0DTE off, Near Expiry off  the first at least FAR_MIN_DAYS out
 
     A same-day contract with hours left is a different trade from the one a
     delta band describes, so it has to be requested rather than fallen into.
     """
-    today = clock.today().isoformat()
+    from datetime import timedelta
+
+    today = clock.today()
+    floor = (today + timedelta(days=FAR_MIN_DAYS)).isoformat() \
+        if not zero_dte and not near_expiry else today.isoformat()
     for exp in sorted(expirations):
-        if exp == today and not zero_dte:
+        if exp == today.isoformat() and not zero_dte:
             continue
-        if exp >= today:
+        if exp >= floor:
             return exp
     return sorted(expirations)[-1]
 
 
+def far_expiry(zero_dte: bool, near_expiry: bool) -> bool:
+    """True when the buy is on a 7+ day expiry -- held over the close."""
+    return not zero_dte and not near_expiry
+
+
+def _carry(strategy: str, zero_dte: bool, near_expiry: bool) -> str:
+    """The strategy a far-expiry position is opened under: marked to roll over."""
+    if not far_expiry(zero_dte, near_expiry) or strategy.endswith(CARRY_MARK):
+        return strategy
+    return (strategy[:64 - len(CARRY_MARK)] + CARRY_MARK)
+
+
 def load_chain(symbol: str, *, cred, sandbox: bool, expiration: str | None = None,
-               zero_dte: bool = False) -> tuple[list[dict], str]:
+               zero_dte: bool = False, near_expiry: bool = True) -> tuple[list[dict], str]:
     """The chain to pick from, and the expiration it belongs to.
 
     Goes through the venue seam like every other broker call, so substituting
@@ -50,7 +79,8 @@ def load_chain(symbol: str, *, cred, sandbox: bool, expiration: str | None = Non
     listed = venue_mod.expirations(symbol, cred=cred, sandbox=sandbox)
     if not listed:
         raise ExecutionRefused(f"no listed expirations for {symbol}", status_code=404)
-    expiration = expiration or choose_expiration(listed, zero_dte=zero_dte)
+    expiration = expiration or choose_expiration(listed, zero_dte=zero_dte,
+                                                 near_expiry=near_expiry)
     return venue_mod.option_chain(symbol, expiration, cred=cred, sandbox=sandbox), expiration
 
 
@@ -60,7 +90,7 @@ def open_managed(db, *, tenant_id: str, cred, symbol: str, side: str, buy_pct: f
                  expiration: str | None = None, zero_dte: bool = False,
                  allow_add: bool = False, min_contracts: int = 1,
                  order_type: str = "smart", discount_pct: float = 0.0,
-                 pick: str = "delta") -> Position:
+                 pick: str = "delta", near_expiry: bool = True) -> Position:
     """Pick, price, size and place one managed entry through orders.open_position.
 
     ``order_type`` is how the buy is priced (selection.buy_price): "smart" --
@@ -76,7 +106,11 @@ def open_managed(db, *, tenant_id: str, cred, symbol: str, side: str, buy_pct: f
     "open_interest" -- the expiry's most-held out-of-the-money strike, the
     next most-held when that one cannot be placed (open_by_open_interest).
     The strikes passed over are written on the position's note.
+
+    ``near_expiry`` off (with 0DTE off) buys the first expiry 7+ days out, and
+    the position is opened marked to roll over at the close (CARRY_MARK).
     """
+    strategy = _carry(strategy, zero_dte, near_expiry)
     if pick not in PICKS:
         raise ExecutionRefused(f"unknown strike pick '{pick}' -- one of {', '.join(PICKS)}")
     if pick == "open_interest":
@@ -84,14 +118,15 @@ def open_managed(db, *, tenant_id: str, cred, symbol: str, side: str, buy_pct: f
             db, tenant_id=tenant_id, cred=cred, symbol=symbol, side=side,
             buy_pct=buy_pct, tp_pct=tp_pct, sl_pct=sl_pct, tolerance_pct=tolerance_pct,
             sandbox=sandbox, strategy=strategy, expiration=expiration, zero_dte=zero_dte,
-            allow_add=allow_add, min_contracts=min_contracts, order_type=order_type,
-            discount_pct=discount_pct)
+            near_expiry=near_expiry, allow_add=allow_add, min_contracts=min_contracts,
+            order_type=order_type, discount_pct=discount_pct)
         pos.note = (pos.note or "") + " — strike by open interest" + (
             f"; passed over {'; '.join(passed)}" if passed else "")
         pos.note = pos.note[:1000]
         return pos
     chain, expiration = load_chain(symbol, cred=cred, sandbox=sandbox,
-                                   expiration=expiration, zero_dte=zero_dte)
+                                   expiration=expiration, zero_dte=zero_dte,
+                                   near_expiry=near_expiry)
     opt = selection.pick_contract(chain, side, delta_min, delta_max)
     if opt is None:
         lo, hi = selection.delta_band(side, delta_min, delta_max)
@@ -151,6 +186,7 @@ def open_by_open_interest(db, *, tenant_id: str, cred, symbol: str, side: str,
                           buy_pct: float, tp_pct: float, sl_pct: float,
                           tolerance_pct: float, sandbox: bool, strategy: str,
                           expiration: str | None = None, zero_dte: bool = False,
+                          near_expiry: bool = True,
                           allow_add: bool = False, min_contracts: int = 1,
                           order_type: str = "smart", discount_pct: float = 0.0,
                           max_tries: int = OI_MAX_TRIES) -> tuple[Position, list[str]]:
@@ -161,8 +197,10 @@ def open_by_open_interest(db, *, tenant_id: str, cred, symbol: str, side: str,
     Priced, sized and guarded exactly as open_managed: the same buy_price,
     size_contracts and orders.open_position. Returns the position and what
     was tried before it, one line per strike passed over."""
+    strategy = _carry(strategy, zero_dte, near_expiry)
     chain, expiration = load_chain(symbol, cred=cred, sandbox=sandbox,
-                                   expiration=expiration, zero_dte=zero_dte)
+                                   expiration=expiration, zero_dte=zero_dte,
+                                   near_expiry=near_expiry)
     quote = next(iter(venue_mod.quotes([symbol], cred=cred, sandbox=sandbox)), None) or {}
     spot = float(quote.get("last") or quote.get("close") or 0)
     if spot <= 0:

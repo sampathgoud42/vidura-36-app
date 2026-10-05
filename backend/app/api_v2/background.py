@@ -145,6 +145,12 @@ def _post_superhot() -> None:
     super_telegram.sweep_tracker()
 
 
+def _record_rollovers() -> None:
+    from app.domains.trading.risk import rollover
+
+    rollover.sweep_all_tenants()
+
+
 def _answer_telegram_commands() -> None:
     from app.domains.notify import telegram_commands
 
@@ -173,6 +179,10 @@ def start_all() -> None:
         _LOOPS["superhot-telegram"] = _Loop("superhot-telegram",
                                             superhot_telegram.POLL_S,
                                             _post_superhot)
+        from app.domains.trading.risk import rollover
+
+        # After the close: the carried positions still open, recorded.
+        _LOOPS["rollover"] = _Loop("rollover", rollover.POLL_S, _record_rollovers)
         _LOOPS["telegram-commands"] = _Loop("telegram-commands",
                                             telegram_commands.POLL_S,
                                             _answer_telegram_commands)

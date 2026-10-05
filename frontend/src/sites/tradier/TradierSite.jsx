@@ -1339,6 +1339,7 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
   const named = !!open?.occ_symbol;
   const [side, setSide] = useState(open?.side === 'put' ? 'put' : 'call');
   const [zeroDte, setZeroDte] = useState(false);
+  const [nearExpiry, setNearExpiry] = useState(true);
   const [manualSym, setManualSym] = useState('');
   // SMART first: it is what every buy was before there was a choice.
   const [otype, setOtype] = useState('smart');
@@ -1377,6 +1378,7 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
     occ_symbol: open.occ_symbol,
     side,
     zero_dte: zeroDte,
+    near_expiry: zeroDte || nearExpiry,
     order_type: otype,
     discount_pct: otype === 'limit' ? discount : 0,
     pick,
@@ -1519,6 +1521,9 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
                 : 'same-day expiries skipped — the nearest expiry after today'}>
               0DTE {zeroDte ? 'ON' : 'OFF'}
             </button>
+          )}
+          {!named && (
+            <NearExpiryChip zeroDte={zeroDte} value={nearExpiry} onChange={setNearExpiry} />
           )}
           <span className="tr-note">
             {named
@@ -2528,6 +2533,24 @@ const STRATEGY_LABELS = {
 // the nearest expiry's most-held out-of-the-money strike (the next most-held
 // when that order is refused, up to six).
 export const STRIKE_PICKS = [['delta', 'DELTA'], ['open_interest', 'OPEN INT']];
+
+/* Near Expiry: only when 0DTE is off. ON buys the nearest expiry after today;
+   OFF buys the first one 7+ days out, and that position is held over the
+   close and recorded as rolled over. Every buy form shows this same chip. */
+export function NearExpiryChip({ zeroDte, value, onChange, className = 'tr-chip tr-0dte' }) {
+  const off = !!zeroDte;
+  return (
+    <button type="button" className={`${className} ${!off && value ? 'on' : ''}`}
+      aria-pressed={!off && value} disabled={off}
+      style={off ? { opacity: 0.4 } : undefined}
+      onClick={() => onChange(!value)}
+      title={off ? 'with 0DTE on, today’s expiry is the nearest — turn 0DTE off to choose'
+        : value ? 'the nearest expiry after today'
+          : 'the first expiry 7+ days out — held over the close, recorded as rolled over'}>
+      NEAR EXP {off ? '—' : value ? 'ON' : 'OFF · 7+ DAYS'}
+    </button>
+  );
+}
 const SIGNALS_SHOWN = 8;
 
 const signedR = (r) => (r == null ? '—' : `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r).toFixed(2)}R`);
@@ -2812,6 +2835,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
   const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
   const [zeroDte, setZeroDte] = useState(true);
+  const [nearExpiry, setNearExpiry] = useState(true);
   // How strikes are picked: the delta band, or open interest (STRIKE_PICKS).
   const [pick, setPick] = useState('delta');
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -3000,6 +3024,13 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
                   : "same-day expiries skipped — the nearest expiry after today"}>
               0DTE {zeroDte ? 'ON' : 'OFF'}
             </button>
+            <NearExpiryChip zeroDte={zeroDte} value={nearExpiry} onChange={setNearExpiry} />
+            {!zeroDte && !nearExpiry && (
+              <span className="tr-note tr-pick-note">
+                7+ day expiry — positions with no TP or SL hit by the close are held over and
+                recorded as rolled over
+              </span>
+            )}
           </div>
         </div>
         <p className="tr-note mt-3">
@@ -3096,7 +3127,8 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               // not ride along into theirs.
               onArm({ ...f, order_type: smartOnly ? 'smart' : otype,
                 discount_pct: !smartOnly && otype === 'limit' ? discount : 0,
-                zero_dte: zeroDte, delta_min: dMin, delta_max: dMax, pick });
+                zero_dte: zeroDte, near_expiry: zeroDte || nearExpiry,
+                delta_min: dMin, delta_max: dMax, pick });
             }}>{busy ? '…' : '🤖 Arm auto-trade'}</button>
           <button type="button" className="tr-btn sm" onClick={onClose}>Cancel</button>
         </div>
@@ -3717,6 +3749,7 @@ export default function TradierSite() {
         order_type: f.order_type || 'smart',
         discount_pct: parseFloat(f.discount_pct) || 0,
         pick: f.pick || 'delta',
+        near_expiry: f.near_expiry !== false,
         top_n: parseInt(f.top_n, 10) || 3,
         zero_dte: f.zero_dte !== false,
         signals: f.signals || [],
@@ -3920,6 +3953,7 @@ export default function TradierSite() {
           ...common,
           symbol: t.symbol, side: t.side,
           zero_dte: t.zero_dte,
+          near_expiry: t.near_expiry !== false,
           delta_min: dMin, delta_max: dMax,
           pick: t.pick || 'delta',
         });

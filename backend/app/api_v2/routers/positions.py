@@ -45,6 +45,9 @@ class OpenRequest(BaseModel):
     tolerance_pct: float = 25.0
     expiration: str | None = None
     zero_dte: bool = False
+    # 0DTE off: the nearest expiry (on), or the first 7+ days out (off), held
+    # over the close and recorded as rolled over.
+    near_expiry: bool = True
     live: bool = False
     strategy: str = "Manual"
     # Guard 3's deliberate override. The default answers no.
@@ -99,6 +102,10 @@ def _serialise(pos: Position) -> dict:
         "exit_price": pos.exit_price,
         "pnl_usd": pos.pnl_usd,
         "note": pos.note,
+        # Held over the close (the 🌙 switch, or bought on a 7+ day expiry).
+        # The desk's carry chip reads this; it was never sent, so the chip
+        # could not show a carried position as carried.
+        "carry_over": (pos.strategy or "").endswith(" +carry"),
     }
 
 
@@ -251,6 +258,7 @@ def open_position(payload: OpenRequest,
             delta_max=payload.delta_max, tolerance_pct=payload.tolerance_pct,
             sandbox=sandbox, strategy=payload.strategy,
             expiration=payload.expiration, zero_dte=payload.zero_dte,
+            near_expiry=payload.near_expiry,
             allow_add=payload.allow_add, order_type=order_type,
             discount_pct=payload.discount_pct if order_type == "limit" else 0.0,
             pick=payload.pick,

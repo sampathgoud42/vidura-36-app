@@ -332,6 +332,7 @@ def chain(symbol: str = Query(...), side: str = Query(default="call"),
           delta_min: float = Query(default=0.25),
           delta_max: float = Query(default=0.50),
           zero_dte: bool = Query(default=False),
+          near_expiry: bool = Query(default=True),
           live: bool = Query(default=False),
           pick: str = Query(default="delta", pattern="^(delta|open_interest)$"),
           tenant: Tenant = Depends(deps.current_tenant),
@@ -370,10 +371,11 @@ def chain(symbol: str = Query(...), side: str = Query(default="call"),
                             detail=f"no listed expirations for {symbol}")
     from app.domains.trading.risk import clock
 
-    today = clock.today().isoformat()
-    chosen = expiration or next(
-        (e for e in sorted(listed) if e > today or (zero_dte and e == today)),
-        sorted(listed)[-1])
+    from app.domains.trading.execution import entry as entry_choice
+
+    # The order path's own choice, so the preview shows the expiry it buys.
+    chosen = expiration or entry_choice.choose_expiration(
+        listed, zero_dte=zero_dte, near_expiry=near_expiry)
     rows = venue_mod.option_chain(symbol, chosen, cred=cred, sandbox=sandbox)
     lo, hi = selection.delta_band(side, delta_min, delta_max)
     if pick == "open_interest":
@@ -950,6 +952,9 @@ class AutoTradeStart(BaseModel):
     window_open: str | None = Field(default=None, max_length=5)
     window_close: str | None = Field(default=None, max_length=5)
     zero_dte: bool = False
+    # 0DTE off: the nearest expiry (on), or the first 7+ days out (off) --
+    # those positions are held over the close and recorded as rolled over.
+    near_expiry: bool = True
     # How its buys are priced, as on the BUY ticket: "smart", "market", or
     # "limit" -- the mark less discount_pct, withdrawn after 15 minutes
     # unfilled. Left out, a discount above 0 means limit and none means smart.
@@ -993,7 +998,7 @@ def autotrade_start(payload: AutoTradeStart,
             delta_max=payload.delta_max, signals=payload.signals,
             pairs=[p.model_dump() for p in payload.pairs],
             window_open=payload.window_open, window_close=payload.window_close,
-            zero_dte=payload.zero_dte,
+            zero_dte=payload.zero_dte, near_expiry=payload.near_expiry,
             order_type=payload.order_type or ("limit" if payload.discount_pct > 0 else "smart"),
             discount_pct=payload.discount_pct, pick=payload.pick)
     except autotrade.AutoTradeRefused as exc:

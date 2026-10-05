@@ -165,6 +165,9 @@ class Watcher:
     discount_pct: float = 0.0
     # How its strikes are picked: "delta" or "open_interest" (entry.PICKS).
     pick: str = "delta"
+    # 0DTE off: the nearest expiry, or (off) the first 7+ days out, held over
+    # the close and recorded as rolled over.
+    near_expiry: bool = True
     # The last entry that was refused or failed, for the desk to show in red:
     # {"at", "ticker", "message"}. The watcher carries on to the next signal.
     last_error: dict | None = None
@@ -232,6 +235,7 @@ class Watcher:
             "sl_pct": self.sl_pct, "min_contracts": self.min_contracts,
             "order_type": self.order_type, "discount_pct": self.discount_pct,
             "pick": self.pick, "last_error": self.last_error,
+            "near_expiry": self.near_expiry,
             "confirm_seconds": CONFIRM_SECONDS,
             "pending": [{"ticker": t, "cross": k,
                          "held_s": round(time.monotonic() - since, 1)}
@@ -346,7 +350,8 @@ def _place(watcher: Watcher, ticker: str, kind: str) -> None:
                 tolerance_pct=watcher.tolerance_pct, sandbox=not watcher.live,
                 strategy=watcher.label, zero_dte=zero_dte,
                 min_contracts=watcher.min_contracts, order_type=watcher.order_type,
-                discount_pct=watcher.discount_pct, pick=watcher.pick)
+                discount_pct=watcher.discount_pct, pick=watcher.pick,
+                near_expiry=watcher.near_expiry)
         except Exception as exc:
             idempotency.fail(db, attempt, reason=str(exc)[:500])
             db.commit()              # the scope rolls back on the way out
@@ -504,7 +509,7 @@ def _enter(watcher: Watcher, row: dict, side: str):
                 sandbox=not watcher.live, strategy=watcher.label,
                 zero_dte=zero_dte, min_contracts=watcher.min_contracts,
                 order_type=watcher.order_type, discount_pct=watcher.discount_pct,
-                pick=watcher.pick)
+                pick=watcher.pick, near_expiry=watcher.near_expiry)
         except Exception as exc:
             idempotency.fail(db, attempt, reason=str(exc)[:500])
             db.commit()              # the scope rolls back on the way out
@@ -780,7 +785,8 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
           signals: list[str] | None = None, pairs: list[dict] | None = None,
           window_open: str | None = None, window_close: str | None = None,
           zero_dte: bool = False, order_type: str = "smart",
-          discount_pct: float = 0.0, pick: str | None = None) -> dict:
+          discount_pct: float = 0.0, pick: str | None = None,
+          near_expiry: bool = True) -> dict:
     """Arm the watcher for one operator. One per operator, never two."""
     from app.core.config import get_settings
     from app.domains.trading.execution import selection
@@ -862,7 +868,7 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             signals=picked, pairs=chosen, window_open=w_open, window_close=w_close,
             zero_dte=bool(zero_dte), desk_holder=holder, order_type=order_type,
             discount_pct=float(discount_pct) if order_type == "limit" else 0.0,
-            pick=pick)
+            pick=pick, near_expiry=bool(near_expiry) or bool(zero_dte))
         # The cooldown carries over: a ticker the bot -- or an earlier arm --
         # entered twenty minutes ago is still inside its hour.
         watcher.last_entry.update(recent)
