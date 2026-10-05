@@ -1,7 +1,9 @@
 """Commands typed into the operator's Super Signals channel.
 
-    /hot        the HOT board on 5-minute bars, now
-    /superhot   the SUPERHOT list on 5-minute bars, now
+    /hot        the HOT board on 5-minute bars, now -- while "post HOT
+                boards" is ticked
+    /superhot   the SUPERHOT list on 5-minute bars, now -- while "post
+                SUPERHOT alerts" is ticked
 
 The bot LONG-POLLS its updates (getUpdates with a timeout: Telegram holds
 the request open until a message arrives or LONG_POLL_S passes; no webhook,
@@ -90,18 +92,22 @@ def sweep_all_tenants() -> int:
         feeds = []
         for tid in db.scalars(select(Tenant.id)).all():
             f = st._feed(db, tid)
-            # Answered while any of the channel's posts is switched on.
-            if f is not None and f.chat_id and (f.enabled or f.post_hot or f.post_superhot):
+            # Each command follows its own switch: /hot only while "post HOT
+            # boards" is ticked, /superhot only while "post SUPERHOT alerts"
+            # is. With both off the bot does not even listen.
+            allowed = {c for c, on in (("hot", f and f.post_hot),
+                                       ("superhot", f and f.post_superhot)) if on}
+            if f is not None and f.chat_id and allowed:
                 token = st._token(db, tid, keyring)
                 if token:
-                    feeds.append((tid, f.chat_id, token))
+                    feeds.append((tid, f.chat_id, token, allowed))
     if not feeds:
         # Nothing to listen for: wait as long as a poll would have, rather
         # than asking the database again every second.
         time.sleep(LONG_POLL_S)
         return 0
     answered = 0
-    for tenant_id, chat_id, token in feeds:
+    for tenant_id, chat_id, token, allowed in feeds:
         try:
             # One feed (the usual case) waits at Telegram; several take turns
             # with a short wait each, so one quiet channel cannot hold up the rest.
@@ -121,6 +127,8 @@ def sweep_all_tenants() -> int:
                 continue
             if now - float(post.get("date") or 0) > STALE_S:
                 continue
+            if m.group(1).lower() not in allowed:
+                continue            # that post type is switched off: no reply
             try:
                 with session_scope() as db:
                     cred, live = sh._credential(db, tenant_id, keyring)

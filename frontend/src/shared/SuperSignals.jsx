@@ -686,8 +686,8 @@ function TelegramViewer({ accent, onClose }) {
   });
   // The other posts, each its own switch on the same bot and chat.
   const POSTS = {
-    post_hot: ['HOT boards', 'every half hour 09:00-15:00 CT, on 5m, 15m and 1H bars'],
-    post_superhot: ['SUPERHOT alerts', 'each ticker that joins the SUPERHOT list, as it does'],
+    post_hot: ['HOT boards', 'every half hour 09:00-15:00 CT, on 5m, 15m and 1H bars -- and /hot answered in the channel'],
+    post_superhot: ['SUPERHOT alerts', 'each ticker that joins the SUPERHOT list, as it does -- and /superhot answered in the channel'],
   };
   const flip = (name, on) => run(name, async () => {
     const d = await vidura.setSuperSignalsTelegram({ ...typed(), [name]: on });
