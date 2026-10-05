@@ -210,7 +210,8 @@ def open_by_open_interest(db, *, tenant_id: str, cred, symbol: str, side: str,
     if not ranked:
         raise ExecutionRefused(
             f"no {side} on {symbol} {expiration} {'above' if side == 'call' else 'below'} "
-            f"{spot:.2f} with a two-sided quote", status_code=404)
+            f"{spot:.2f} with a two-sided quote of at least "
+            f"${selection.MIN_PREMIUM:.2f}", status_code=404)
     buying_power = float(
         (venue_mod.balance(cred=cred, sandbox=sandbox) or {}).get("option_buying_power") or 0)
     passed: list[str] = []

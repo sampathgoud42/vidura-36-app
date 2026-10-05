@@ -155,6 +155,10 @@ def pick_contract(chain: list[dict], side: str, delta_min: float,
 OI_WEIGHT = 0.4
 VOLUME_WEIGHT = 0.4
 SPREAD_WEIGHT = 0.2
+# The cheapest contract the open-interest pick will buy, by its mid. Below
+# this an option is a lottery ticket: a far strike with a big OI pile and a
+# quote of a few cents, which Buy % sizing turns into hundreds of contracts.
+MIN_PREMIUM = 0.20
 
 
 def rank_by_open_interest(chain: list[dict], side: str, spot: float) -> list[dict]:
@@ -168,7 +172,8 @@ def rank_by_open_interest(chain: list[dict], side: str, spot: float) -> list[dic
         score = OI_WEIGHT * oi / max_oi + VOLUME_WEIGHT * volume / max_volume
               + SPREAD_WEIGHT * (1 - min(1, (ask - bid) / mid))
 
-    highest first; more open interest breaks a tie. ``_score`` rides on each
+    highest first; more open interest breaks a tie. A contract whose mid is
+    under MIN_PREMIUM is never ranked at all. ``_score`` rides on each
     contract so a preview can show why it ranked where it did. A two-sided
     quote is required here as it is in pick_contract: no bid, no exit, no
     entry.
@@ -186,6 +191,8 @@ def rank_by_open_interest(chain: list[dict], side: str, spot: float) -> list[dic
         bid = float(opt.get("bid") or 0)
         ask = float(opt.get("ask") or 0)
         if bid <= 0 or ask <= 0:
+            continue
+        if (bid + ask) / 2 < MIN_PREMIUM:
             continue
         rows.append((int(opt.get("open_interest") or 0), int(opt.get("volume") or 0),
                      ask - bid, opt))
