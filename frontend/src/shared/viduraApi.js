@@ -525,7 +525,9 @@ export const vidura = {
   },
   superGexQuota: () => api.get('/super/gex/quota'),
   superEcon: () => api.get('/super/econ'),
-  // SPY 0DTE dealer gamma (getgamma.io). The read is a cheap DB snapshot.
+  // SPY dealer gamma from flashAlpha (all expiries -- the free plan has no
+  // 0DTE split): read at 08:45 and 11:19 CT, refreshed on demand. The read
+  // is a cheap DB snapshot; the refresh spends one of five daily calls.
   // Refresh takes no credentials — the vendor endpoint needs none.
   superGex0dte: () => api.get('/super/gex0dte'),
   superGex0dteRefresh: () => api.post('/super/gex0dte/refresh', {}, { timeout: 60000 }),

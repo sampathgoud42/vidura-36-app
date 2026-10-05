@@ -3192,6 +3192,8 @@ function loadGexMins() {
 export function GexInline() {
   const [slots, setSlots] = useState(null);
   const [live, setLive] = useState(null);
+  const [gexBusy, setGexBusy] = useState(false);
+  const [gexErr, setGexErr] = useState('');
   const [mins, setMins] = useState(loadGexMins);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -3241,8 +3243,20 @@ export function GexInline() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  if (!slots || slots.length === 0) return null;
-  const liveText = fmtNet(live?.net_gex) ?? slots[slots.length - 1].text;
+  // One of flashAlpha's five daily calls: the server refuses it (429) when it
+  // would leave the 08:45 / 11:19 CT reads without theirs, and says why.
+  const budget = live?.budget;
+  const left = budget?.on_demand_left;
+  const refreshGex = async () => {
+    if (gexBusy) return;
+    setGexBusy(true); setGexErr('');
+    try { setLive(await vidura.superGex0dteRefresh()); }
+    catch (e) { setGexErr(errText(e)); }
+    finally { setGexBusy(false); }
+  };
+
+  if ((!slots || slots.length === 0) && !live) return null;
+  const liveText = fmtNet(live?.net_gex) ?? (slots && slots.length ? slots[slots.length - 1].text : '—');
   const liveNeg = liveText.startsWith('-');
   const age = gexAge(live?.age_seconds);
   return (
@@ -3250,17 +3264,26 @@ export function GexInline() {
       <div className="k">
         SPY 0DTE GEX
         <button type="button" className="tr-gex-toggle"
+          onClick={refreshGex} disabled={gexBusy || left === 0}
+          title={`read SPY gamma from flashAlpha now — ${left ?? '?'} on-demand call${left === 1 ? '' : 's'} left today`
+            + ` (08:45 ${budget?.scheduled?.[0]?.taken ? '✓' : '·'} and 11:19 ${budget?.scheduled?.[1]?.taken ? '✓' : '·'} CT are scheduled).`
+            + ' All expiries: the free plan has no 0DTE split.'}>
+          {gexBusy ? '…' : `↻${left ?? ''}`}
+        </button>
+        <button type="button" className="tr-gex-toggle"
           onClick={() => setShowHistory((v) => !v)}
           title={showHistory ? 'hide GEX history' : 'show GEX history'}>
           {showHistory ? '▾' : '▸'}
         </button>
       </div>
       <div className="v tr-mono" style={{ color: liveNeg ? 'var(--tr-red)' : 'var(--tr-green)' }}
-        title={live ? `${live.regime || '—'} · spot ${live.spot ?? '—'} · flip ${live.flip ?? '—'}` : ''}>
+        title={live ? `${live.note || `${live.regime || '—'} · spot ${live.spot ?? '—'} · flip ${live.flip ?? '—'}`}`
+          + ' — flashAlpha, all expiries' : ''}>
         {liveText}
         {age && <span className="tr-gex-age" style={{ fontSize: '0.65em', marginLeft: 4 }}>({age})</span>}
       </div>
-      {showHistory && (
+      {gexErr && <div className="tr-note" style={{ color: 'var(--tr-red)' }}>{gexErr}</div>}
+      {showHistory && slots && (
         <div className="tr-gex-hist tr-mono">
           <div className="tr-gex-list">
             {[...slots].reverse().map((s, i) => (
@@ -3274,7 +3297,7 @@ export function GexInline() {
             ))}
           </div>
           {mins.length > 0 && (
-            <div className="tr-gex-mins" title="minute-by-minute pushes">
+            <div className="tr-gex-mins" title="the latest readings, newest first">
               {mins.map((m, i) => (
                 <span key={m.at} className="row">
                   {i > 0 && <span className="sep">&raquo;</span>}

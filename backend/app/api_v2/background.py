@@ -145,6 +145,12 @@ def _post_superhot() -> None:
     super_telegram.sweep_tracker()
 
 
+def _read_spy_gex() -> None:
+    from app.services import gex0dte
+
+    gex0dte.sweep()
+
+
 def _fetch_econ_calendar() -> None:
     from app.domains.trading.market import econ_calendar
 
@@ -194,6 +200,10 @@ def start_all() -> None:
         # News & Events: the US economic calendar, daily at 08:15 CT.
         _LOOPS["econ-calendar"] = _Loop("econ-calendar", econ_calendar.POLL_S,
                                         _fetch_econ_calendar)
+        from app.services import gex0dte
+
+        # SPY gamma from flashAlpha at 08:45 and 11:19 CT (2 of 5 daily calls).
+        _LOOPS["spy-gex"] = _Loop("spy-gex", gex0dte.POLL_S, _read_spy_gex)
         _LOOPS["telegram-commands"] = _Loop("telegram-commands",
                                             telegram_commands.POLL_S,
                                             _answer_telegram_commands)

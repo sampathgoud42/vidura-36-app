@@ -352,7 +352,7 @@ function useGexSeries(enabled = true) {
         let stale = false;
 
         // Nothing today yet. That is the normal state before the market
-        // opens, and every day until the getgamma pusher has run — showing
+        // opens and until the 08:45 CT flashAlpha read has run — showing
         // an empty space then reads as a bug rather than as "no data yet",
         // so the last session with data is shown instead, labelled.
         if (rows.length === 0) {
@@ -385,16 +385,16 @@ function GexStrip({ series, date, stale }) {
   if (!series.length) {
     return (
       <span className="d36-gexstrip"
-        title="No 0DTE gamma captured yet. Run the getgamma bookmarklet to push today's.">
+        title="No SPY gamma read yet today — flashAlpha is read at 08:45 and 11:19 CT, or refresh it on the Tradier desk.">
         <span className="d36-gexnone">gex — no data yet</span>
       </span>
     );
   }
   return (
     <span className="d36-gexstrip"
-      title={`SPY 0DTE net gamma, newest first, one value per hour (CST)`
+      title={`SPY net gamma (flashAlpha, all expiries), newest first, one value per hour read (CST)`
         + (date ? ` · ${date}` : '')
-        + (stale ? ' · last session, nothing pushed today yet' : '')}>
+        + (stale ? ' · last session, nothing read today yet' : '')}>
       {stale && <span className="d36-gexstale">{date?.slice(5)}</span>}
       {series.map((h, i) => (
         <React.Fragment key={h.hour_cst}>
