@@ -1,5 +1,16 @@
-"""SUPERHOT on Telegram: a ticker that joins the desk's SUPERHOT list is
-posted to the operator's Super Signals channel, with its DMI direction.
+"""HOT and SUPERHOT on Telegram, to the operator's Super Signals channel.
+
+SUPERHOT: a ticker that joins the desk's SUPERHOT list is posted at once,
+with its DMI direction (below). HOT: the whole HOT board is posted every half
+hour, 09:00 to 15:00 CT -- a snapshot, not a diff:
+
+    🌶️ HOT · 5m bars · 10:30 CT · 12 names
+    🟢 NVDA DMI UP · ADX 31.2 · +DI 30.1 / −DI 11.8 · 182.40
+    🔻 TSLA DMI DOWN · ADX 28.4 · +DI 12.0 / −DI 27.9 · 241.10
+
+Each half-hour slot is recorded as a TelegramPost ("hot:<date>:<HH:MM>"), so a
+restart does not post the same slot twice; a slot missed while the server was
+down is posted late, as long as its half hour has not passed.
 
 Same bot token, same chat, same on/off switch as the Super Signals feed
 (super_telegram.py) -- an operator who turned that on gets these too.
@@ -41,11 +52,25 @@ CT = ZoneInfo("America/Chicago")
 OPEN, CLOSE = (8, 30), (15, 0)
 DIRECTION = {"call": ("🟢", "UP"), "put": ("🔻", "DOWN")}
 HEAD = "🔥 SUPERHOT"
+HOT_HEAD = "🌶️ HOT"
+HOT_FIRST, HOT_LAST = (9, 0), (15, 0)      # the half-hour snapshots, inclusive
 
 
 def desk_open(now: datetime) -> bool:
     ct = now.astimezone(CT)
     return ct.weekday() < 5 and OPEN <= (ct.hour, ct.minute) < CLOSE
+
+
+def hot_slot(now: datetime) -> str | None:
+    """The half-hour HOT snapshot due now ("10:30"), or None outside them.
+    15:00 is the closing one, posted until 15:29."""
+    ct = now.astimezone(CT)
+    if ct.weekday() >= 5:
+        return None
+    slot = (ct.hour, 30 * (ct.minute // 30))
+    if not HOT_FIRST <= slot <= HOT_LAST:
+        return None
+    return f"{slot[0]:02d}:{slot[1]:02d}"
 
 
 def _fmt(v, nd=1) -> str:
@@ -69,6 +94,25 @@ def format_rows(rows: list[dict], interval: str) -> str:
             f" · +DI {_fmt(r.get('sh_plus_di'))} / −DI {_fmt(r.get('sh_minus_di'))}"
             + (f" · {float(last):,.2f}" if last not in (None, "") else ""))
     return "\n".join(lines)
+
+
+def format_hot(rows: list[dict], interval: str, slot: str) -> str:
+    from app.platform import notify
+
+    lines = [f"{HOT_HEAD} · {interval.replace('min', 'm')} bars · {slot} CT · "
+             f"{len(rows)} name{'s' if len(rows) != 1 else ''}"]
+    if not rows:
+        lines.append("Nothing clears the HOT gates right now.")
+    for r in rows:
+        side = r.get("side") or ("call" if (r.get("plus_di") or 0) >= (r.get("minus_di") or 0) else "put")
+        icon, word = DIRECTION.get(side, ("•", str(side).upper()))
+        last = r.get("last")
+        lines.append(
+            f"{icon} {r['symbol']} DMI {word} · ADX {_fmt(r.get('adx'))}"
+            f" · +DI {_fmt(r.get('plus_di'))} / −DI {_fmt(r.get('minus_di'))}"
+            + (f" · {float(last):,.2f}" if last not in (None, "") else ""))
+    text = "\n".join(lines)
+    return text if len(text) <= notify.MAX_TEXT else text[:notify.MAX_TEXT - 1] + "…"
 
 
 def superhot_rows(rows: list[dict]) -> list[dict]:
@@ -114,7 +158,8 @@ def _board(tenant_id: str, cred, live: bool, interval: str) -> list[dict]:
 
 
 def sweep_all_tenants(now: datetime | None = None) -> int:
-    """One pass: post every feed-on operator's new SUPERHOT names."""
+    """One pass: every feed-on operator's new SUPERHOT names, and the HOT
+    board when a half-hour slot is due. Returns how many messages went."""
     from app.api_v2 import deps
     from app.core.config import get_settings
     from app.domains.notify import super_telegram as st
@@ -125,7 +170,8 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
     from app.tenancy.models import Tenant
 
     now = now or datetime.now(timezone.utc)
-    if not desk_open(now):
+    slot = hot_slot(now)
+    if not desk_open(now) and slot is None:
         return 0
     with session_scope() as db:
         tenant_ids = [tid for tid in db.scalars(select(Tenant.id)).all()
@@ -142,36 +188,49 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
                 cred, live = _credential(db, tenant_id, keyring)
             if cred is None:
                 continue
-            listed = superhot_rows(_board(tenant_id, cred, live, interval))
-            if not listed:
+            hot_id = f"hot:{day}:{slot}" if slot else None
+            with session_scope() as db:
+                repo = TenantRepository(db, tenant_id)
+                hot_due = bool(hot_id) and db.scalar(repo.query(TelegramPost).where(
+                    TelegramPost.signal_id == hot_id)) is None
+            if not desk_open(now) and not hot_due:
                 continue
+            board = _board(tenant_id, cred, live, interval)
+            listed = superhot_rows(board) if desk_open(now) else []
             with session_scope() as db:
                 repo = TenantRepository(db, tenant_id)
                 feed = db.scalar(repo.query(TelegramFeed))
                 if feed is None or not feed.enabled or not feed.chat_id:
                     continue
-                ids = {post_id(day, r): r for r in listed}
-                posted = {p.signal_id for p in db.scalars(
-                    repo.query(TelegramPost).where(TelegramPost.signal_id.in_(list(ids)))).all()}
-                fresh = [r for pid, r in ids.items() if pid not in posted]
-                if not fresh:
-                    continue
                 token = st._token(db, tenant_id, keyring)
                 if not token:
                     feed.last_error = "no bot token saved"
                     continue
-                try:
-                    notify.send("telegram", text=format_rows(fresh, interval),
-                                token=token, chat_id=feed.chat_id)
-                except notify.NotifyError as exc:
-                    feed.last_error = str(exc)[:255]
-                    continue
-                for r in fresh:
-                    repo.add(TelegramPost(signal_id=post_id(day, r)[:255]))
-                feed.posted = (feed.posted or 0) + len(fresh)
-                feed.last_post_at = st._naive_utc(datetime.now(timezone.utc))
-                feed.last_error = None
-                sent += len(fresh)
+                messages: list[tuple[str, list[str]]] = []
+                ids = {post_id(day, r): r for r in listed}
+                if ids:
+                    posted = {p.signal_id for p in db.scalars(repo.query(TelegramPost).where(
+                        TelegramPost.signal_id.in_(list(ids)))).all()}
+                    fresh = [(pid, r) for pid, r in ids.items() if pid not in posted]
+                    if fresh:
+                        messages.append((format_rows([r for _, r in fresh], interval),
+                                         [pid for pid, _ in fresh]))
+                if hot_due:
+                    messages.append((format_hot(board, interval, slot), [hot_id]))
+                for text, record in messages:
+                    try:
+                        notify.send("telegram", text=text, token=token, chat_id=feed.chat_id)
+                    except notify.NotifyError as exc:
+                        feed.last_error = str(exc)[:255]
+                        break
+                    for pid in record:
+                        repo.add(TelegramPost(signal_id=pid[:255]))
+                    feed.posted = (feed.posted or 0) + len(record)
+                    feed.last_post_at = st._naive_utc(datetime.now(timezone.utc))
+                    feed.last_error = None
+                    sent += 1
+                    db.commit()
+                    time.sleep(st.SEND_GAP_S)
         except Exception as exc:                        # noqa: BLE001
             logger.warning("superhot telegram for one operator: %s: %s",
                            type(exc).__name__, exc)
