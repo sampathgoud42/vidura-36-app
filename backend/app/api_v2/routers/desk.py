@@ -333,10 +333,15 @@ def chain(symbol: str = Query(...), side: str = Query(default="call"),
           delta_max: float = Query(default=0.50),
           zero_dte: bool = Query(default=False),
           live: bool = Query(default=False),
+          pick: str = Query(default="delta", pattern="^(delta|open_interest)$"),
           tenant: Tenant = Depends(deps.current_tenant),
           db: DbSession = Depends(deps.get_db),
           kr: Keyring = Depends(deps.keyring)) -> dict:
     """What an entry WOULD pick, without placing anything.
+
+    ``pick=open_interest`` previews the open-interest pick instead of the
+    delta band's: the most-held out-of-the-money strike first, and in
+    ``ranked`` the ones an order would fall back to, in order.
 
     Shares selection with the order path rather than reimplementing it -- a
     preview that disagrees with the trade is worse than no preview.
@@ -370,8 +375,23 @@ def chain(symbol: str = Query(...), side: str = Query(default="call"),
         (e for e in sorted(listed) if e > today or (zero_dte and e == today)),
         sorted(listed)[-1])
     rows = venue_mod.option_chain(symbol, chosen, cred=cred, sandbox=sandbox)
-    picked = selection.pick_contract(rows, side, delta_min, delta_max)
     lo, hi = selection.delta_band(side, delta_min, delta_max)
+    if pick == "open_interest":
+        from app.domains.trading.execution import entry as entry_mod
+
+        quote = next(iter(venue_mod.quotes([symbol], cred=cred, sandbox=sandbox)), None) or {}
+        spot = float(quote.get("last") or quote.get("close") or 0)
+        ranked = selection.rank_by_open_interest(rows, side, spot) if spot > 0 else []
+        top = ranked[:entry_mod.OI_MAX_TRIES]
+        brief = [{"symbol": o["symbol"], "strike": o["strike"], "delta": o["_delta"],
+                  "bid": o["bid"], "ask": o["ask"],
+                  "open_interest": int(o.get("open_interest") or 0),
+                  "volume": int(o.get("volume") or 0)} for o in top]
+        return {"symbol": symbol, "side": side, "expiration": chosen, "pick": "open_interest",
+                "spot": spot, "delta_band": [lo, hi],
+                "picked": brief[0] if brief else None, "ranked": brief,
+                "candidates": len(rows)}
+    picked = selection.pick_contract(rows, side, delta_min, delta_max)
     return {"symbol": symbol, "side": side, "expiration": chosen,
             "delta_band": [lo, hi],
             "picked": {"symbol": picked["symbol"], "strike": picked["strike"],
@@ -935,6 +955,9 @@ class AutoTradeStart(BaseModel):
     # unfilled. Left out, a discount above 0 means limit and none means smart.
     order_type: Literal["smart", "market", "limit"] | None = None
     discount_pct: float = Field(default=0, ge=0, le=50)
+    # How strikes are chosen: the delta band or open interest. Left out,
+    # best_picks picks by open interest and every other strategy by delta.
+    pick: Literal["delta", "open_interest"] | None = None
 
 
 @market_router.get("/autotrade/status", operation_id="getTradierAutoTradeStatus")
@@ -972,7 +995,7 @@ def autotrade_start(payload: AutoTradeStart,
             window_open=payload.window_open, window_close=payload.window_close,
             zero_dte=payload.zero_dte,
             order_type=payload.order_type or ("limit" if payload.discount_pct > 0 else "smart"),
-            discount_pct=payload.discount_pct)
+            discount_pct=payload.discount_pct, pick=payload.pick)
     except autotrade.AutoTradeRefused as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
 

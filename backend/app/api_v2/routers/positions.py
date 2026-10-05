@@ -56,6 +56,9 @@ class OpenRequest(BaseModel):
     # desk that only knew the discount was asking for.
     order_type: Literal["smart", "market", "limit"] | None = None
     discount_pct: float = Field(default=0, ge=0, le=50)
+    # How the strike is chosen: the delta band, or the expiry's most-held
+    # out-of-the-money strike (the next most-held when that one is refused).
+    pick: Literal["delta", "open_interest"] = "delta"
 
 
 def _order_type(order_type: str | None, discount_pct: float) -> str:
@@ -250,6 +253,7 @@ def open_position(payload: OpenRequest,
             expiration=payload.expiration, zero_dte=payload.zero_dte,
             allow_add=payload.allow_add, order_type=order_type,
             discount_pct=payload.discount_pct if order_type == "limit" else 0.0,
+            pick=payload.pick,
         )
         result = _serialise(pos)
         idempotency.succeed(db, attempt, result=result, position_id=pos.id,

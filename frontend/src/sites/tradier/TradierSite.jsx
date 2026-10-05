@@ -1343,6 +1343,8 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
   // SMART first: it is what every buy was before there was a choice.
   const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
+  // How the strike is chosen: the delta band, or open interest (STRIKE_PICKS).
+  const [pick, setPick] = useState('delta');
   const [midDayWarn, setMidDayWarn] = useState(false);
   useEffect(() => {
     setSide(open?.side === 'put' ? 'put' : 'call');
@@ -1377,6 +1379,7 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
     zero_dte: zeroDte,
     order_type: otype,
     discount_pct: otype === 'limit' ? discount : 0,
+    pick,
     ...desk,
   });
 
@@ -1431,10 +1434,28 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
                 + 'Contracts are indivisible, so Buy % is a target: at 50% of $100 '
                 + 'with ±25% the window is $37.50–$62.50. 0 makes it a hard cap.'} /></div>
           {!named && (
+            <div><span className="tr-label">Strike pick</span>
+              <div className="tr-pick-toggle" role="group" aria-label="strike pick">
+                {STRIKE_PICKS.map(([id, text]) => (
+                  <button key={id} type="button" aria-pressed={pick === id}
+                    className={`tr-chip ${pick === id ? 'on' : ''}`}
+                    onClick={() => { onErr?.(null); setPick(id); }}>{text}</button>
+                ))}
+              </div>
+              {pick === 'open_interest' && (
+                <span className="tr-note tr-pick-note">
+                  most open interest, {side === 'put' ? 'below' : 'above'} the price, nearest
+                  expiry — the next one if refused, up to 6
+                </span>
+              )}</div>
+          )}
+          {!named && (
             <div><span className="tr-label">Delta range</span>
               <input className="tr-input" value={desk.delta} placeholder="0.25-0.45"
                 onChange={set('delta')}
-                title={'Typed as a magnitude and searched signed — a CALL runs 0..+1 '
+                disabled={pick === 'open_interest'}
+                style={pick === 'open_interest' ? { opacity: 0.45 } : undefined}
+                title={pick === 'open_interest' ? 'not used: the strike is picked by open interest' : 'Typed as a magnitude and searched signed — a CALL runs 0..+1 '
                   + `and a PUT runs 0..-1, so this ${side.toUpperCase()} searches `
                   + `${signedBandLabel(side, desk.delta)}.`} /></div>
           )}
@@ -2500,7 +2521,13 @@ function TargetCell({ pos, busy, onSave }) {
 // Exported with the rest, so another board arms the auto-trader through
 // the SAME form and the same knobs rather than a second one that drifts.
 const AUTO_DISCOUNT_OPTIONS = [10, 20, 40];
-const STRATEGY_LABELS = { super_signals: 'super signals', best_pairs: 'best pairs' };
+const STRATEGY_LABELS = {
+  super_signals: 'super signals', best_pairs: 'best pairs', best_picks: 'best picks today',
+};
+// How a strike is chosen, everywhere a contract is picked: the delta band, or
+// the nearest expiry's most-held out-of-the-money strike (the next most-held
+// when that order is refused, up to six).
+export const STRIKE_PICKS = [['delta', 'DELTA'], ['open_interest', 'OPEN INT']];
 const SIGNALS_SHOWN = 8;
 
 const signedR = (r) => (r == null ? '—' : `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r).toFixed(2)}R`);
@@ -2785,13 +2812,20 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
   const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
   const [zeroDte, setZeroDte] = useState(true);
+  // How strikes are picked: the delta band, or open interest (STRIKE_PICKS).
+  const [pick, setPick] = useState('delta');
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const isHot = f.strategy === 'hot_tickers';
   const isSuperHot = f.strategy === 'super_hot_tickers';
   const isAutoScan = isHot || isSuperHot;
   const isSuper = f.strategy === 'super_signals';
   const isPairs = f.strategy === 'best_pairs';
-  const onDesk = isSuper || isPairs;        // trades the signal desk's live signals
+  // best picks today: any ticker's live signal with ⭐⭐⭐ or 👍
+  const isPicks = f.strategy === 'best_picks';
+  const onDesk = isSuper || isPairs || isPicks;   // trades the signal desk's live signals
+  // the signal strategies buy at the desk's smart limit -- all but best picks,
+  // which offers every order type the BUY ticket has
+  const smartOnly = onDesk && !isPicks;
   // the server refuses a second trader on the signal desk; say so before it has to
   const deskTaken = onDesk && !!deskOwner;
   const confirmS = defaults?.confirm_s ?? 300;
@@ -2807,7 +2841,15 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
     }
     // Each strategy opens on its own window: the level cross is an opening-
     // range play, the desk's signals fire all session.
-    if (onDesk) {
+    if (isPicks) {
+      // best picks: its own window, the strike by open interest, and same-day
+      // contracts off -- each changeable before arming.
+      setF((p) => ({ ...p,
+        window_open: defaults?.picks_window_open || '09:15',
+        window_close: defaults?.picks_window_close || '13:15' }));
+      setPick('open_interest');
+      setZeroDte(false);
+    } else if (onDesk) {
       setF((p) => ({ ...p,
         tickers: p.tickers && !p.tickers.startsWith('(') ? p.tickers : (defaults?.tickers || 'SPY,QQQ,SPX'),
         window_open: defaults?.super_window_open || '08:30',
@@ -2847,9 +2889,11 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           <div><span className="tr-label">Tickers</span>
             <input className="tr-input"
               value={isHot ? '(auto from HOT scan)' : isSuperHot ? '(auto from SUPERHOT scan)'
-                : isPairs ? '(each pair’s own ticker)' : f.tickers}
+                : isPairs ? '(each pair’s own ticker)'
+                : isPicks ? '(any ticker with ⭐⭐⭐ or 👍)' : f.tickers}
               onChange={set('tickers')} placeholder="SPY,QQQ,SPX"
-              disabled={isAutoScan || isPairs} style={isAutoScan || isPairs ? { opacity: 0.45 } : undefined}
+              disabled={isAutoScan || isPairs || isPicks}
+              style={isAutoScan || isPairs || isPicks ? { opacity: 0.45 } : undefined}
               title={isHot ? 'HOT tickers strategy auto-picks from 5min+15min scan intersection'
                 : isSuperHot ? 'SUPERHOT strategy auto-picks top N from the superhot scan'
                 : isPairs ? 'a best pair is a signal type on one ticker, so the pairs name the tickers'
@@ -2875,10 +2919,26 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           {isPairs && (
             <PairPicker value={f.pairs} onChange={(v) => setF((p) => ({ ...p, pairs: v }))} />
           )}
+          <div><span className="tr-label">Strike pick</span>
+            <div className="tr-pick-toggle" role="group" aria-label="strike pick">
+              {STRIKE_PICKS.map(([id, text]) => (
+                <button key={id} type="button" aria-pressed={pick === id}
+                  className={`tr-chip ${pick === id ? 'on' : ''}`}
+                  onClick={() => setPick(id)}>{text}</button>
+              ))}
+            </div>
+            <span className="tr-note tr-pick-note">
+              {pick === 'open_interest'
+                ? 'most open interest, out of the money (CALL above / PUT below the price), nearest expiry — the next one if refused, up to 6'
+                : 'the contract closest to the middle of the delta band'}
+            </span></div>
           <div><span className="tr-label">Delta range</span>
             <input className="tr-input" value={f.delta}
               onChange={set('delta')} placeholder="0.12-0.30"
-              title="delta band for contract selection, e.g. 0.12-0.30" /></div>
+              disabled={pick === 'open_interest'}
+              style={pick === 'open_interest' ? { opacity: 0.45 } : undefined}
+              title={pick === 'open_interest' ? 'not used: the strike is picked by open interest'
+                : 'delta band for contract selection, e.g. 0.12-0.30'} /></div>
           <div><span className="tr-label">Buy % of balance</span>
             <input className="tr-input" type="number" min="1" max="100" value={f.buy_pct}
               onWheel={(e) => e.currentTarget.blur()} onChange={set('buy_pct')}
@@ -2897,7 +2957,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
             <input className="tr-input" type="number" min="1" max="1000" value={f.min_contracts}
               onWheel={(e) => e.currentTarget.blur()} onChange={set('min_contracts')}
               title="the Buy % sizing must reach this many contracts, or the trade is skipped" /></div>
-          {onDesk ? (
+          {smartOnly ? (
             // The watcher buys through the desk's own BUY, which bids a smart
             // limit; a MKT / discount toggle here would promise what it ignores.
             <div><span className="tr-label">Order type</span>
@@ -2943,7 +3003,24 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           </div>
         </div>
         <p className="tr-note mt-3">
-          {isPairs ? (
+          {isPicks ? (
+            <>
+              Best picks today: watches the signal desk live, and any ticker&rsquo;s new signal
+              marked ⭐⭐⭐ (its pair won over 66% across the last 7 sessions) or 👍 (one of the
+              report&rsquo;s best pairs) buys a CALL for a LONG and a PUT for a SHORT. Only signals
+              fired live inside {f.window_open}–{f.window_close} CST, at most{' '}
+              {defaults?.super_max_age_min ?? 6} min old and still open, and at most one entry per
+              ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}
+              {pick === 'open_interest'
+                ? 'The strike is the nearest expiry’s most-held out-of-the-money one, whatever its delta; when that order is refused the next most-held is tried, up to 6 — then the error shows here and the next signal is taken.'
+                : `The strike is picked by delta ${f.delta}.`}{' '}
+              {zeroDte
+                ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
+                : 'The nearest expiry after today.'}{' '}
+              Bought {orderTag(otype, discount)}, sized by Buy % (TP {f.tp_pct}% / SL {f.sl_pct}%).
+              Disarms itself at the 15:00 close.
+            </>
+          ) : isPairs ? (
             <>
               Watches the signal desk live: a new signal that is one of the picked best pairs —
               that signal type on that ticker — buys a CALL for a LONG and a PUT for a SHORT. Only
@@ -3017,9 +3094,9 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               // The signal strategies buy at the smart limit, as the form
               // says for them; a LIMIT left chosen on another strategy must
               // not ride along into theirs.
-              onArm({ ...f, order_type: onDesk ? 'smart' : otype,
-                discount_pct: !onDesk && otype === 'limit' ? discount : 0,
-                zero_dte: zeroDte, delta_min: dMin, delta_max: dMax });
+              onArm({ ...f, order_type: smartOnly ? 'smart' : otype,
+                discount_pct: !smartOnly && otype === 'limit' ? discount : 0,
+                zero_dte: zeroDte, delta_min: dMin, delta_max: dMax, pick });
             }}>{busy ? '…' : '🤖 Arm auto-trade'}</button>
           <button type="button" className="tr-btn sm" onClick={onClose}>Cancel</button>
         </div>
@@ -3372,7 +3449,16 @@ export function AutoStatus({ st, className = '' }) {
         {scope ? ` · ${scope}` : ''}
         {st.window ? ` · ${st.window} CST` : ''}
         {st.order_type && st.order_type !== 'smart' ? ` · ${orderTag(st.order_type, st.discount_pct)}` : ''}
+        {st.pick === 'open_interest' ? ' · strike by OI' : ''}
         {st.placed ? ` · ${st.placed} placed` : ''}
+        {st.last_error && (
+          // The last refusal, in red, so a strike list that ran out is seen;
+          // the watcher has already moved on to the next signal.
+          <span className="tr-autoerr" role="alert"
+            title={`${st.errors || 1} refused or failed since arming`}>
+            ⚠ {st.last_error.at} {st.last_error.message}
+          </span>
+        )}
       </p>
     );
   }
@@ -3630,6 +3716,7 @@ export default function TradierSite() {
         cooldown_min: parseInt(f.cooldown_min, 10),
         order_type: f.order_type || 'smart',
         discount_pct: parseFloat(f.discount_pct) || 0,
+        pick: f.pick || 'delta',
         top_n: parseInt(f.top_n, 10) || 3,
         zero_dte: f.zero_dte !== false,
         signals: f.signals || [],
@@ -3834,6 +3921,7 @@ export default function TradierSite() {
           symbol: t.symbol, side: t.side,
           zero_dte: t.zero_dte,
           delta_min: dMin, delta_max: dMax,
+          pick: t.pick || 'delta',
         });
       }
       setTicket(null);

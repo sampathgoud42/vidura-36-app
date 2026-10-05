@@ -11,7 +11,7 @@ import { ExperienceSwitch } from '../../shared/ExperienceControls.jsx';
 import { READING_GUIDE_URL } from '../../config.js';
 import {
   AutoStatus, AutoTradeForm, CommoditiesPanel, deskOwnerNote, fmtMark, HotScan, LiteChart,
-  MiniChart, OptionsFlow, ORDER_TYPES, orderNote, orderPrice, useMovers,
+  MiniChart, OptionsFlow, ORDER_TYPES, orderNote, orderPrice, STRIKE_PICKS, useMovers,
 } from '../tradier/TradierSite.jsx';
 import '../../shared/quotePopup.css';
 import './desk36.css';
@@ -491,6 +491,11 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
   const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
   const [midDayWarn, setMidDayWarn] = useState(false);
+  // How the strike is chosen: the delta band, or open interest (STRIKE_PICKS)
+  // -- the nearest expiry's most-held out-of-the-money strike, the next one
+  // if that order is refused.
+  const [strikePick, setStrikePick] = useState('delta');
+  const byOI = strikePick === 'open_interest';
 
   // Prefill from the desk's own configured defaults rather than hard-coding a
   // second set that could drift from the one the auto-traders use.
@@ -529,7 +534,7 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
   // Which contract this would actually buy, before it is bought.
   useEffect(() => {
     if (!symbol) { setPick(null); return undefined; }
-    if (!bandInput) {
+    if (!byOI && !bandInput) {
       setPick(null);
       setErr('delta band must be between 0 and 1, lower value first');
       return undefined;
@@ -539,13 +544,16 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
     // Debounced, so a four-character delta is one request rather than four.
     const id = setTimeout(() => {
       vidura.tradierChain(user.user_id, {
-        symbol, side, delta_min: bandInput.lo, delta_max: bandInput.hi, live,
-        zero_dte: zeroDte,
+        symbol, side, live, zero_dte: zeroDte, pick: strikePick,
+        ...(bandInput ? { delta_min: bandInput.lo, delta_max: bandInput.hi } : {}),
       }).then((r) => { if (!dead) setPick(r); })
-        .catch((e) => { if (!dead) setErr(errMsg(e) || 'no contract in that delta band'); });
+        .catch((e) => {
+          if (!dead) setErr(errMsg(e) || (byOI ? 'no out-of-the-money contract with a quote'
+            : 'no contract in that delta band'));
+        });
     }, 350);
     return () => { dead = true; clearTimeout(id); };
-  }, [user.user_id, symbol, side, bandInput, live, zeroDte]);
+  }, [user.user_id, symbol, side, bandInput, live, zeroDte, strikePick]);
 
   // iOS keeps scrolling the page behind a fixed overlay; freezing the body is
   // the only reliable way to stop it there.
@@ -576,7 +584,8 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
         order_type: otype,
         discount_pct: otype === 'limit' ? discount : 0,
         buy_pct: Number(f.buy_pct),
-        delta_min: bandInput.lo, delta_max: bandInput.hi,
+        pick: strikePick,
+        ...(bandInput ? { delta_min: bandInput.lo, delta_max: bandInput.hi } : {}),
         tp_pct: Number(f.tp_pct), sl_pct: Number(f.sl_pct),
       });
       onDone(`${side.toUpperCase()} ${symbol} · ${row.contracts ?? ''} contract(s) · ${row.status}`);
@@ -597,10 +606,13 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
   // /tradier/chain returns `pick` as the chosen OCC symbol and `band` as the
   // candidates it was chosen from; the strike, delta and quote live on the
   // band row, not at the top level.
-  const chosen = useMemo(
-    () => (pick?.band || []).find((c) => c.occ_symbol === pick.pick) || null,
-    [pick],
-  );
+  // /tradier/chain answers with `picked` -- the contract an order would buy
+  // -- and, for an open-interest pick, `ranked`: the ones it falls back to.
+  const chosen = useMemo(() => {
+    const p = pick?.picked;
+    return p ? { ...p, occ_symbol: p.symbol } : null;
+  }, [pick]);
+  const fallbacks = (pick?.ranked || []).slice(1);
   // What the order type would bid on the contract shown -- the server prices
   // it again from the quote it reads as the order goes in.
   const preview = chosen ? orderPrice(otype, chosen.bid, chosen.ask, discount) : null;
@@ -640,13 +652,25 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
           {err && !chosen ? <span style={{ color: '#ffc9d2' }}>{err}</span>
             : pick ? (
               <>
-                <b>{pick.pick || '—'}</b><br />
+                <b>{chosen?.occ_symbol || '—'}</b>
+                {byOI && <span> · most open interest</span>}<br />
                 strike <b>{chosen?.strike ?? '—'}</b> · exp <b>{pick.expiration ?? '—'}</b><br />
                 delta <b>{chosen?.delta != null ? chosen.delta.toFixed(3) : '—'}</b>
                 {' · '}bid <b>{chosen?.bid ?? '—'}</b> · ask <b>{chosen?.ask ?? '—'}</b>
                 {chosen?.open_interest != null && <><br />OI <b>{chosen.open_interest.toLocaleString()}</b> · vol <b>{chosen.volume?.toLocaleString() ?? '—'}</b></>}
+                {byOI && fallbacks.length > 0 && (
+                  <><br />if refused: {fallbacks.map((c) => `${c.strike} (OI ${c.open_interest.toLocaleString()})`).join(' → ')}</>
+                )}
               </>
-            ) : 'finding a contract in the delta band…'}
+            ) : byOI ? 'finding the most-held strike…' : 'finding a contract in the delta band…'}
+        </div>
+
+        <div className="d36-chiprow" role="group" aria-label="strike pick">
+          {STRIKE_PICKS.map(([id, text]) => (
+            <button key={id} type="button" className={`d36-chip ${strikePick === id ? 'on' : ''}`}
+              aria-pressed={strikePick === id}
+              onClick={() => { setErr(''); setStrikePick(id); }}>{text}</button>
+          ))}
         </div>
 
         <button type="button" className={`d36-dte ${zeroDte ? 'on' : ''}`}
@@ -690,8 +714,8 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
         <div className="d36-grid">
           {num('buy_pct', '% of buying power', '1')}
           {num('tp_pct', 'take profit %', '1')}
-          {num('delta_min', 'delta min', '0.05')}
-          {num('delta_max', 'delta max', '0.05')}
+          {!byOI && num('delta_min', 'delta min', '0.05')}
+          {!byOI && num('delta_max', 'delta max', '0.05')}
           {num('sl_pct', 'stop loss %', '1')}
         </div>
 

@@ -147,6 +147,42 @@ def pick_contract(chain: list[dict], side: str, delta_min: float,
     return picked
 
 
+def rank_by_open_interest(chain: list[dict], side: str, spot: float) -> list[dict]:
+    """Contracts of one side, out of the money, most open interest first.
+
+    The best_picks auto-trader's pick, which ignores delta: a CALL must have
+    its strike ABOVE the underlying's price and a PUT below it, and among
+    those the strike the market holds most of comes first -- volume, then
+    the tighter spread, break ties. A two-sided quote is required here as it
+    is in pick_contract: no bid, no exit, no entry.
+    """
+    ranked = []
+    for opt in chain:
+        if (opt.get("option_type") or "").lower() != side:
+            continue
+        try:
+            strike = float(opt.get("strike"))
+        except (TypeError, ValueError):
+            continue
+        if (side == "call" and strike <= spot) or (side == "put" and strike >= spot):
+            continue
+        bid = float(opt.get("bid") or 0)
+        ask = float(opt.get("ask") or 0)
+        if bid <= 0 or ask <= 0:
+            continue
+        oi = int(opt.get("open_interest") or 0)
+        vol = int(opt.get("volume") or 0)
+        ranked.append((-oi, -vol, ask - bid, opt))
+    ranked.sort(key=lambda r: r[:3])
+    out = []
+    for _, _, _, opt in ranked:
+        picked = dict(opt)
+        delta = (opt.get("greeks") or {}).get("delta")
+        picked["_delta"] = float(delta) if delta is not None else None
+        out.append(picked)
+    return out
+
+
 @dataclass(frozen=True)
 class Sizing:
     contracts: int

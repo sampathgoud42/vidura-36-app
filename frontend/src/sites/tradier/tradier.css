@@ -1571,3 +1571,13 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
   .tr-lite { gap: 12px; }
 }
 .tr-pairmins .tr-input.bad { border-color: var(--tr-amber); }
+
+/* The auto-trader's last refused entry, under its armed line: red, wrapping,
+   so a strike list that ran out is seen. The watcher has moved on already. */
+.tr-autoline .tr-autoerr {
+  display: block; margin-top: 4px; color: var(--tr-red, #f87171);
+  white-space: normal; overflow-wrap: anywhere; line-height: 1.35;
+}
+/* DELTA | OPEN INT strike-pick toggle, on the BUY tickets and the arm form. */
+.tr-pick-toggle { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.tr-pick-note { display: block; margin-top: 4px; line-height: 1.35; }

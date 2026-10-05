@@ -1,6 +1,6 @@
 """The auto-trader: a watcher that opens managed positions when a signal fires.
 
-Three strategies, and the arm form offers exactly these (``STRATEGIES``):
+Four strategies, and the arm form offers exactly these (``STRATEGIES``):
 
 ``10min_intraday_move`` -- the level-cross watcher described below. Its buys
 go through entry.open_managed like every other entry, priced by the order type
@@ -25,6 +25,19 @@ record on that one ticker -- poc_72h LONG has earned its place on TSLA, not on
 every symbol it fires on. Every other rule is super_signals' own, the
 idempotency key included, so a signal either strategy has acted on is never
 bought again by the other.
+
+``best_picks`` -- "best picks today": any ticker, any signal type, as long
+as the signal carries the channel's strongest marks -- three stars (its
+ticker + signal pair won more than 66% over the last 7 sessions) OR a thumbs
+up (one of the report's best pairs). It opens on a 09:15-13:15 CST window and
+picks its strike by open interest unless told otherwise. Every other rule --
+live, fresh, still open, one entry per ticker per hour, the shared
+idempotency key -- is the other signal strategies' own.
+
+Every strategy picks its strike one of two ways (``pick``, entry.PICKS):
+"delta", the band on the form, or "open_interest" -- the nearest expiry's
+most-held out-of-the-money strike (above the price for a CALL, below it for
+a PUT), and the next most-held when that order cannot be placed.
 
 The desk is shared with one more trader: the standalone best-pairs bot
 (backend/bot_best_pair), a separate process running the same tick. Only one of
@@ -86,9 +99,9 @@ _SIDE_FOR_CROSS = {
 
 # The strategies this watcher runs -- the arm form lists exactly these, so a
 # strategy name can no longer label one behaviour while running another.
-STRATEGIES = ("10min_intraday_move", "super_signals", "best_pairs")
+STRATEGIES = ("10min_intraday_move", "super_signals", "best_pairs", "best_picks")
 # the strategies that trade the signal desk's live signals (_run_super)
-SIGNAL_STRATEGIES = ("super_signals", "best_pairs")
+SIGNAL_STRATEGIES = ("super_signals", "best_pairs", "best_picks")
 
 # super_signals. The desk publishes each 5m bar about half a minute after it
 # closes, so a 15s poll sees a signal within a minute of its candle.
@@ -99,6 +112,7 @@ SUPER_MAX_AGE_S = 6 * 60
 # signal types agreeing on SPY is one idea, not two positions.
 SUPER_COOLDOWN_S = 60 * 60
 SUPER_WINDOW = ("08:30", "14:30")
+PICKS_WINDOW = ("09:15", "13:15")
 # agent|setup|grade|direction, as /super-signals/rank keys a signal type
 _TYPE_KEY = re.compile(r"^[a-z_]+\|[^|\s]{1,80}\|[^|\s]{0,24}\|(LONG|SHORT)$")
 _HHMM = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
@@ -149,6 +163,22 @@ class Watcher:
     # far under the mark. The signal strategies' form offers only smart.
     order_type: str = "smart"
     discount_pct: float = 0.0
+    # How its strikes are picked: "delta" or "open_interest" (entry.PICKS).
+    pick: str = "delta"
+    # The last entry that was refused or failed, for the desk to show in red:
+    # {"at", "ticker", "message"}. The watcher carries on to the next signal.
+    last_error: dict | None = None
+    # best_picks: the channel's marks for the session being read, refreshed
+    # each pass (super_telegram.Marks -- stars and thumbs).
+    marks: object = None
+
+    def fail(self, ticker: str, message: str) -> None:
+        """An entry that did not happen: counted, logged, and kept as the
+        last error the desk shows -- the watcher moves on to the next one."""
+        self.errors += 1
+        self.last_error = {"at": clock.now().strftime("%H:%M:%S"), "ticker": ticker,
+                           "message": message[:400]}
+        self.log(f"{ticker}: {message}")
 
     def log(self, message: str) -> None:
         stamp = clock.now().strftime("%H:%M:%S")
@@ -168,6 +198,9 @@ class Watcher:
         super_signals a picked type on any picked ticker."""
         if self.strategy == "best_pairs":
             return (type_key(row), row.get("ticker")) in self.pairs
+        if self.strategy == "best_picks":
+            return self.marks is not None and (self.marks.stars(row) == 3
+                                               or self.marks.best(row))
         return type_key(row) in self.signals and row.get("ticker") in self.tickers
 
     def public(self) -> dict:
@@ -184,6 +217,8 @@ class Watcher:
             out["signals"] = list(self.signals)
         if self.strategy == "best_pairs":
             out["pairs"] = [{"type_key": k, "ticker": t} for k, t in sorted(self.pairs)]
+        if self.strategy == "best_picks":
+            out["rule"] = "any ticker's live signal with ⭐⭐⭐ or 👍"
         return out
 
     def _public_common(self) -> dict:
@@ -196,6 +231,7 @@ class Watcher:
             "buy_pct": self.buy_pct, "tp_pct": self.tp_pct,
             "sl_pct": self.sl_pct, "min_contracts": self.min_contracts,
             "order_type": self.order_type, "discount_pct": self.discount_pct,
+            "pick": self.pick, "last_error": self.last_error,
             "confirm_seconds": CONFIRM_SECONDS,
             "pending": [{"ticker": t, "cross": k,
                          "held_s": round(time.monotonic() - since, 1)}
@@ -310,7 +346,7 @@ def _place(watcher: Watcher, ticker: str, kind: str) -> None:
                 tolerance_pct=watcher.tolerance_pct, sandbox=not watcher.live,
                 strategy=watcher.label, zero_dte=zero_dte,
                 min_contracts=watcher.min_contracts, order_type=watcher.order_type,
-                discount_pct=watcher.discount_pct)
+                discount_pct=watcher.discount_pct, pick=watcher.pick)
         except Exception as exc:
             idempotency.fail(db, attempt, reason=str(exc)[:500])
             db.commit()              # the scope rolls back on the way out
@@ -365,8 +401,7 @@ def _run(watcher: Watcher) -> None:
                 try:
                     _place(watcher, key[0], key[1])
                 except Exception as exc:                # noqa: BLE001
-                    watcher.errors += 1
-                    watcher.log(f"{key[0]} {key[1]}: refused — {exc}")
+                    watcher.fail(key[0], f"{key[1]}: refused — {exc}")
         except Exception as exc:                        # noqa: BLE001
             watcher.errors += 1
             watcher.log(f"watch loop error: {type(exc).__name__}: {exc}")
@@ -468,7 +503,8 @@ def _enter(watcher: Watcher, row: dict, side: str):
                 delta_max=watcher.delta_max, tolerance_pct=watcher.tolerance_pct,
                 sandbox=not watcher.live, strategy=watcher.label,
                 zero_dte=zero_dte, min_contracts=watcher.min_contracts,
-                order_type=watcher.order_type, discount_pct=watcher.discount_pct)
+                order_type=watcher.order_type, discount_pct=watcher.discount_pct,
+                pick=watcher.pick)
         except Exception as exc:
             idempotency.fail(db, attempt, reason=str(exc)[:500])
             db.commit()              # the scope rolls back on the way out
@@ -506,6 +542,13 @@ def _super_tick(watcher: Watcher, now: datetime, baseline_day: str | None) -> st
         return baseline_day
     _feed(watcher, "ok")
     rows = payload.get("signals") or []
+    if watcher.strategy == "best_picks":
+        from app.domains.notify import super_telegram
+
+        # The channel's own marks, so a signal posted with ⭐⭐⭐ or 👍 is the
+        # one bought. Cached by the feed: the pairs every 10 min, the past
+        # sessions once a day.
+        watcher.marks = super_telegram.marks_for(payload)
     if baseline_day != today:
         # Everything already on the desk when the watcher arms -- or when a new
         # session begins -- is history, not a trigger: arming must never fire a
@@ -541,12 +584,10 @@ def _super_tick(watcher: Watcher, now: datetime, baseline_day: str | None) -> st
             # Refused before the venue was touched: nothing was bought, so the
             # ticker is not on cooldown for it.
             _restore(watcher, row["ticker"], before)
-            watcher.errors += 1
-            watcher.log(f"{what}: refused -- {exc}")
+            watcher.fail(row["ticker"], f"{what}: refused -- {exc}")
         except Exception as exc:                        # noqa: BLE001
             # Unknown failure: an order may have gone out, so the cooldown stands.
-            watcher.errors += 1
-            watcher.log(f"{what}: failed -- {type(exc).__name__}: {exc}")
+            watcher.fail(row["ticker"], f"{what}: failed -- {type(exc).__name__}: {exc}")
     return baseline_day
 
 
@@ -600,8 +641,9 @@ def _release_desk(watcher: Watcher) -> None:
 
 def _run_super(watcher: Watcher) -> None:
     what = (f"{len(watcher.pairs)} best pair(s) on" if watcher.strategy == "best_pairs"
+            else "⭐⭐⭐ or 👍 signals on" if watcher.strategy == "best_picks"
             else f"{len(watcher.signals)} signal type(s) for")
-    watcher.log(f"armed on {what} {', '.join(watcher.tickers)} · "
+    watcher.log(f"armed on {what} {', '.join(watcher.tickers) or 'any ticker'} · "
                 f"{watcher.window_open}-{watcher.window_close} CST"
                 f" ({'LIVE' if watcher.live else 'paper'})")
     baseline_day: str | None = None
@@ -619,7 +661,7 @@ def _run_super(watcher: Watcher) -> None:
                 # differently -- so the watcher ends with the session it traded.
                 watcher.log("session closed -- disarming; "
                             + ("the best pairs are re-ranked by today's report"
-                               if watcher.strategy == "best_pairs"
+                               if watcher.strategy in ("best_pairs", "best_picks")
                                else "the signal list was picked for today"))
                 break
         except Exception as exc:                        # noqa: BLE001
@@ -738,7 +780,7 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
           signals: list[str] | None = None, pairs: list[dict] | None = None,
           window_open: str | None = None, window_close: str | None = None,
           zero_dte: bool = False, order_type: str = "smart",
-          discount_pct: float = 0.0) -> dict:
+          discount_pct: float = 0.0, pick: str | None = None) -> dict:
     """Arm the watcher for one operator. One per operator, never two."""
     from app.core.config import get_settings
     from app.domains.trading.execution import selection
@@ -747,6 +789,13 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
     if order_type not in selection.ORDER_TYPES:
         raise AutoTradeRefused(f"unknown order type '{order_type}' -- one of "
                                f"{', '.join(selection.ORDER_TYPES)}")
+    from app.domains.trading.execution import entry as entry_mod
+
+    # best_picks picks by open interest unless told otherwise; the rest by delta.
+    pick = pick or ("open_interest" if strategy == "best_picks" else "delta")
+    if pick not in entry_mod.PICKS:
+        raise AutoTradeRefused(f"unknown strike pick '{pick}' -- one of "
+                               f"{', '.join(entry_mod.PICKS)}")
     if not 0 <= discount_pct <= 50:
         raise AutoTradeRefused("the limit discount must be between 0% and 50%")
 
@@ -758,8 +807,9 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
         raise AutoTradeRefused(f"unknown strategy '{strategy}' -- this server runs "
                                f"{', '.join(STRATEGIES)}")
 
-    w_open = (window_open or SUPER_WINDOW[0]).strip()
-    w_close = (window_close or SUPER_WINDOW[1]).strip()
+    window = PICKS_WINDOW if strategy == "best_picks" else SUPER_WINDOW
+    w_open = (window_open or window[0]).strip()
+    w_close = (window_close or window[1]).strip()
     risk = {"buy_pct": buy_pct, "tp_pct": tp_pct, "sl_pct": sl_pct, "delta_min": delta_min,
             "delta_max": delta_max, "min_contracts": min_contracts}
     picked: list[str] = []
@@ -768,6 +818,10 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
         # A pair names its own ticker, so the form's ticker field plays no part.
         chosen = _check_pairs(pairs, w_open, w_close, **risk)
         wanted = sorted({t for _, t in chosen})
+    elif strategy == "best_picks":
+        # Any ticker: the marks pick them, signal by signal.
+        wanted = []
+        _check_window_and_risk(w_open, w_close, **risk)
     else:
         wanted = [t.strip().upper() for t in tickers.split(",") if t.strip()]
         if not wanted:
@@ -807,7 +861,8 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             delta_min=delta_min, delta_max=delta_max, armed_at=clock.now(),
             signals=picked, pairs=chosen, window_open=w_open, window_close=w_close,
             zero_dte=bool(zero_dte), desk_holder=holder, order_type=order_type,
-            discount_pct=float(discount_pct) if order_type == "limit" else 0.0)
+            discount_pct=float(discount_pct) if order_type == "limit" else 0.0,
+            pick=pick)
         # The cooldown carries over: a ticker the bot -- or an earlier arm --
         # entered twenty minutes ago is still inside its hour.
         watcher.last_entry.update(recent)
@@ -835,6 +890,8 @@ def defaults() -> dict:
         "strategy": STRATEGIES[0], "strategies": list(STRATEGIES),
         "tickers": "SPY,QQQ,SPX", "window_open": "08:30", "window_close": "09:30",
         "super_window_open": SUPER_WINDOW[0], "super_window_close": SUPER_WINDOW[1],
+        "picks_window_open": PICKS_WINDOW[0], "picks_window_close": PICKS_WINDOW[1],
+        "picks": ["delta", "open_interest"],
         "buy_pct": 50.0, "tolerance_pct": 25.0, "tp_pct": 15.0, "sl_pct": 30.0,
         "delta_min": 0.35, "delta_max": 0.65, "min_contracts": 1,
         "confirm_s": CONFIRM_SECONDS,
