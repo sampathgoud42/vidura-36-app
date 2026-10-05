@@ -473,3 +473,111 @@ def sweep_all_tenants(now: datetime | None = None, sleep=time.sleep) -> int:
         except Exception as exc:                        # noqa: BLE001
             logger.warning("super telegram for one operator: %s", type(exc).__name__)
     return sent
+
+
+# ---- the tracker: today's ⭐⭐⭐ 👍 signals, every half hour --------------------
+# The signals that are BOTH a best pair and three-star -- the strongest the
+# channel marks -- re-posted each half hour (the HOT slots, 09:00-15:00 CT)
+# with where each one stands now, newest first:
+#
+#   ⭐⭐⭐👍 TRACKER · 12:30 CT · 4 signals · 1 TP · 1 SL · 0 TIMEOUT · 2 OPEN
+#   🟢 GOOGL LONG · levels · 12:15 · 345.86 → 347.24 / 344.48 · 🟡 OPEN
+#
+# One TelegramPost per slot ("tracker:<date>:<HH:MM>"), as the HOT posts.
+TRACK_STATUS = {"open": "🟡 OPEN", "target": "✅ TP-hit", "stop": "❌ SL-hit",
+                "timeout": "⏱️ TIMEOUT"}
+TRACK_HEAD = f"{STAR * 3}{THUMBS} TRACKER"
+
+
+def tracked(session: dict, marks: Marks) -> list[dict]:
+    """Today's live signals that are three-star AND a best pair, newest first."""
+    out = [s for s in session.get("signals") or []
+           if str(s.get("source") or "live") == "live"
+           and marks.stars(s) == 3 and marks.best(s)]
+    out.sort(key=lambda s: (s.get("time") or "", s.get("id") or ""), reverse=True)
+    return out
+
+
+def format_tracker(signals: list[dict], slot: str) -> str:
+    from app.platform import notify
+
+    count = {k: sum(1 for s in signals if s.get("outcome") == k) for k in TRACK_STATUS}
+    head = (f"{TRACK_HEAD} · {slot} CT · {len(signals)} signal{'s' if len(signals) != 1 else ''}"
+            f" · {count['target']} TP · {count['stop']} SL · {count['timeout']} TIMEOUT"
+            f" · {count['open']} OPEN")
+    if not signals:
+        return head + "\nNo signal today is both three-star and a best pair yet."
+    lines = []
+    for s in signals:
+        direction = str(s.get("direction") or "").upper()
+        status = TRACK_STATUS.get(s.get("outcome"), str(s.get("outcome") or "?").upper())
+        if s.get("outcome") != "open" and s.get("exit_time"):
+            status += f" {s['exit_time']}"
+        if s.get("r") is not None:
+            status += f" ({float(s['r']):+.2f}R)"
+        lines.append(f"{SIDE.get(direction, '•')} {s.get('ticker', '?')} {direction} · "
+                     f"{s.get('agent', '')} · {s.get('time', '')} · {_num(s.get('price'))} → "
+                     f"{_num(s.get('target'))} / {_num(s.get('stop'))} · {status}")
+    text = head
+    for i, line in enumerate(lines):
+        more = f"\n… and {len(lines) - i} more" if i < len(lines) else ""
+        if len(text) + 1 + len(line) + len(more) > notify.MAX_TEXT:
+            return text + more
+        text += "\n" + line
+    return text
+
+
+def sweep_tracker(now: datetime | None = None) -> int:
+    """Post the tracker for the half-hour slot due now, once per operator."""
+    from app.api_v2 import deps
+    from app.domains.notify import superhot_telegram as sh
+    from app.domains.notify.models import TelegramFeed, TelegramPost
+    from app.platform import notify
+    from app.platform.db.repository import TenantRepository
+    from app.platform.db.session import session_scope
+    from app.tenancy.models import Tenant
+
+    now = now or _now()
+    slot = sh.hot_slot(now)
+    if slot is None:
+        return 0
+    day = now.astimezone(CT).date().isoformat()
+    post = f"tracker:{day}:{slot}"
+    with session_scope() as db:
+        due = []
+        for tid in db.scalars(select(Tenant.id)).all():
+            f = _feed(db, tid)
+            if f is None or not f.enabled or not f.chat_id:
+                continue
+            if db.scalar(TenantRepository(db, tid).query(TelegramPost).where(
+                    TelegramPost.signal_id == post)) is None:
+                due.append(tid)
+    if not due:
+        return 0
+    session = _session()
+    if not session or not session.get("is_today"):
+        return 0
+    text = format_tracker(tracked(session, marks_for(session)), slot)
+    keyring = deps.keyring()
+    sent = 0
+    for tenant_id in due:
+        try:
+            with session_scope() as db:
+                repo = TenantRepository(db, tenant_id)
+                feed = db.scalar(repo.query(TelegramFeed))
+                token = _token(db, tenant_id, keyring)
+                if feed is None or not token:
+                    continue
+                try:
+                    notify.send("telegram", text=text, token=token, chat_id=feed.chat_id)
+                except notify.NotifyError as exc:
+                    feed.last_error = str(exc)[:255]
+                    continue
+                repo.add(TelegramPost(signal_id=post))
+                feed.posted = (feed.posted or 0) + 1
+                feed.last_post_at = _naive_utc(_now())
+                feed.last_error = None
+                sent += 1
+        except Exception as exc:                        # noqa: BLE001
+            logger.warning("super telegram tracker for one operator: %s", type(exc).__name__)
+    return sent

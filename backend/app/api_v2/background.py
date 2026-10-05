@@ -137,9 +137,12 @@ def _post_super_signals() -> None:
 
 
 def _post_superhot() -> None:
-    from app.domains.notify import superhot_telegram
+    from app.domains.notify import super_telegram, superhot_telegram
 
     superhot_telegram.sweep_all_tenants()
+    # The half-hourly tracker of today's three-star best pairs rides the same
+    # five-minute pass: it shares the slots, not the scan.
+    super_telegram.sweep_tracker()
 
 
 def _answer_telegram_commands() -> None:
