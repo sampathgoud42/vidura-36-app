@@ -4,6 +4,7 @@ import { ApiError, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
 import SiteFooter from '../../shared/SiteFooter.jsx';
 import SuperSignals, { BestPair } from '../../shared/SuperSignals.jsx';
+import NewsEvents from '../../shared/NewsEvents.jsx';
 import BestBetsLink from '../../shared/BestBets.jsx';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
@@ -4465,6 +4466,8 @@ export default function TradierSite() {
         <div className="tr-resize-handle" onMouseDown={(e) => colResize.onMouseDown('right', e)} />
         <aside className="tr-col side"
           style={colResize.right > 232 ? { fontSize: `${Math.min(12, 9 * (colResize.right / 232))}px` } : undefined}>
+          {/* the US economic calendar -- collapsed to its next release */}
+          <NewsEvents />
           <LevelCrosses maxPerTicker={3} />
           {railOrder.order.map((sid) => {
             if (sid === 'signals') return (

@@ -145,6 +145,12 @@ def _post_superhot() -> None:
     super_telegram.sweep_tracker()
 
 
+def _fetch_econ_calendar() -> None:
+    from app.domains.trading.market import econ_calendar
+
+    econ_calendar.sweep()
+
+
 def _record_rollovers() -> None:
     from app.domains.trading.risk import rollover
 
@@ -183,6 +189,11 @@ def start_all() -> None:
 
         # After the close: the carried positions still open, recorded.
         _LOOPS["rollover"] = _Loop("rollover", rollover.POLL_S, _record_rollovers)
+        from app.domains.trading.market import econ_calendar
+
+        # News & Events: the US economic calendar, daily at 08:15 CT.
+        _LOOPS["econ-calendar"] = _Loop("econ-calendar", econ_calendar.POLL_S,
+                                        _fetch_econ_calendar)
         _LOOPS["telegram-commands"] = _Loop("telegram-commands",
                                             telegram_commands.POLL_S,
                                             _answer_telegram_commands)

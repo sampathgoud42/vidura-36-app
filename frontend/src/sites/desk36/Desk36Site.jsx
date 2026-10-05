@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { api, auth, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
 import SuperSignals, { BestPair } from '../../shared/SuperSignals.jsx';
+import NewsEvents from '../../shared/NewsEvents.jsx';
 import BestBetsLink from '../../shared/BestBets.jsx';
 import { useExperience } from '../../shared/experience.js';
 import { ExperienceSwitch } from '../../shared/ExperienceControls.jsx';
@@ -1571,6 +1572,9 @@ export default function Desk36Site() {
 
           Otherwise: order and visibility both come from SECTIONS, so the
           tabs, the running order and what is rendered can never disagree. */}
+      {/* News & Events: the US economic calendar, on both views of the board */}
+      <div className="d36-news"><NewsEvents touch /></div>
+
       {lite ? (
         <>
           <AutoStatus st={autoST} className="d36-autoline" />

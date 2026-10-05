@@ -1008,3 +1008,6 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
 /* DELTA | OPEN INT strike-pick toggle, on the BUY tickets and the arm form. */
 .tr-pick-toggle { display: inline-flex; gap: 6px; flex-wrap: wrap; }
 .tr-pick-note { display: block; margin-top: 4px; line-height: 1.35; }
+
+/* News & Events sits at the top of the board, inside the page gutter. */
+.d36-news { padding: 0 12px; margin-top: 8px; }

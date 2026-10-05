@@ -485,6 +485,10 @@ export const vidura = {
     api.get('/tradier/quotes', { params: { symbols } }),
 
   // SPY/QQQ/SPX level-cross watcher (levels_watcher.py in the day-trade repo)
+  // News & Events: the US economic calendar (Apify, daily 08:15 CT); the
+  // refresh is a paid run, so it waits up to three minutes for the actor.
+  econCalendar: () => api.get('/tradier/econ-calendar'),
+  econCalendarRefresh: () => api.post('/tradier/econ-calendar/refresh', {}, { timeout: 200000 }),
   levelsStatus: () => api.get('/levels/status'),
   levelsStart: () => api.post('/levels/start'),
   levelsStop: () => api.post('/levels/stop'),

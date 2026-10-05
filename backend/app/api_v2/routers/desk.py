@@ -1068,6 +1068,35 @@ def dmi(symbols: str = Query(...), live: bool = Query(default=False),
 # not catch, because it checks that declared paths ARE served and these were
 # declared under a name I never wired up.
 
+# ---- News & Events: the US economic calendar ---------------------------------
+
+@market_router.get("/econ-calendar", operation_id="getEconCalendar")
+@deps.tenant_scoped
+def econ_calendar(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """The stored US economic calendar -- CPI, jobs, GDP, PCE, FOMC, claims,
+    Treasury auctions -- yesterday through two weeks ahead, fetched daily at
+    08:15 CT and on demand. The same for every operator."""
+    from app.domains.trading.market import econ_calendar as cal
+
+    return cal.snapshot()
+
+
+@market_router.post("/econ-calendar/refresh", operation_id="refreshEconCalendar")
+@deps.tenant_scoped
+def econ_calendar_refresh(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """Fetch the calendar now (a paid Apify run, a few cents). Refused while a
+    run is underway rather than queued."""
+    from app.domains.trading.market import econ_calendar as cal
+
+    try:
+        cal.refresh(trigger=f"refresh by {tenant.slug}")
+    except cal.RefreshBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except cal.CalendarUnavailable as exc:
+        raise HTTPException(status_code=424, detail=str(exc)) from None
+    return cal.snapshot()
+
+
 levels_router = APIRouter(prefix="/levels", tags=["levels"])
 
 @levels_router.get("/status", operation_id="getLevelsStatus")
