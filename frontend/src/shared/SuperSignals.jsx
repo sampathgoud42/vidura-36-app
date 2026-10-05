@@ -174,6 +174,7 @@ export default function SuperSignals({
   const [shown, setShown] = useState(PAGE);
   const [viewer, setViewer] = useState(null);     // report date on screen
   const [best, setBest] = useState(false);        // the best-pairs sheet
+  const [tg, setTg] = useState(false);            // the Telegram feed sheet
 
   const setScope = (v) => {
     setScopeState(v);
@@ -361,6 +362,14 @@ export default function SuperSignals({
           <span className="ss-day" title={`session ${data.date}`}>
             {data.is_today ? 'today' : `${data.weekday} ${md(data.date)}`}
           </span>
+        )}
+        {/* New signals to the operator's own Telegram chat. Not in
+            Lightweight: its panels are for trading, and so are its paths. */}
+        {!lite && (
+          <button type="button" className="ss-tgbtn" onClick={() => setTg(true)}
+            title="post new signals to a Telegram channel" aria-label="Telegram feed">
+            ✈
+          </button>
         )}
       </div>
 
@@ -585,7 +594,160 @@ export default function SuperSignals({
           onClose={() => setViewer(null)} />
       )}
       {best && <BestPairsViewer accent={accent} onClose={() => setBest(false)} />}
+      {tg && <TelegramViewer accent={accent} onClose={() => setTg(false)} />}
     </section>
+  );
+}
+
+// ── new signals to Telegram ─────────────────────────────────────────────────
+// The operator's own bot posts the desk's new signals to their chat. A
+// private channel's invite link is not something a bot can post to, so the
+// sheet finds the channel's id from the bot's own updates once the bot is an
+// admin there. The token is typed once and never shown again.
+function TelegramViewer({ accent, onClose }) {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState('load');
+  const [err, setErr] = useState('');
+  const [note, setNote] = useState('');
+  const [token, setToken] = useState('');
+  const [chat, setChat] = useState('');
+  const [title, setTitle] = useState('');
+  const [chats, setChats] = useState(null);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+
+  const adopt = (d) => {
+    setSt(d);
+    setChat(d.chat_id || '');
+    setTitle(d.chat_title || '');
+  };
+  const run = async (kind, fn) => {
+    setBusy(kind); setErr(''); setNote('');
+    try {
+      return await fn();
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+      return null;
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  };
+  useEffect(() => {
+    run('load', async () => { const d = await vidura.superSignalsTelegram(); if (alive.current) adopt(d); });
+  }, []);                                              // eslint-disable-line react-hooks/exhaustive-deps
+
+  const typed = () => ({
+    ...(token.trim() ? { token: token.trim() } : {}),
+    chat_id: chat.trim(), chat_title: title.trim(),
+  });
+  const save = () => run('save', async () => {
+    const d = await vidura.setSuperSignalsTelegram(typed());
+    if (!alive.current) return;
+    adopt(d); setToken(''); setNote('saved');
+  });
+  const find = () => run('find', async () => {
+    const d = await vidura.superSignalsTelegramChats(token.trim() ? { token: token.trim() } : {});
+    if (alive.current) setChats((d && d.chats) || []);
+  });
+  const test = () => run('test', async () => {
+    await vidura.testSuperSignalsTelegram();
+    if (alive.current) setNote('sent — look in the chat');
+  });
+  const toggle = (on) => run('toggle', async () => {
+    const d = await vidura.setSuperSignalsTelegram({ ...typed(), enabled: on });
+    if (!alive.current) return;
+    adopt(d); setToken('');
+    setNote(on ? 'on — new signals from now on are posted' : 'off');
+  });
+
+  const dirty = !!st && (token.trim() !== '' || chat.trim() !== (st.chat_id || ''));
+  const ready = !!st && !!(st.token_saved || token.trim()) && !!chat.trim();
+  const when = (iso) => (iso ? new Date(iso).toLocaleString('en-US', {
+    timeZone: 'America/Chicago', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) + ' CT' : '—');
+
+  return createPortal(
+    <div className="ss-scrim" style={{ '--ss-accent': accent }}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ss-viewer ss-tg" role="dialog" aria-modal="true"
+        aria-label="post new super signals to Telegram">
+        <div className="ss-vhead">
+          <span className="ss-vtitle">super signals → telegram</span>
+          <button type="button" className="ss-vbtn" onClick={onClose}
+            aria-label="close the Telegram feed" title="close">×</button>
+        </div>
+        <div className="ss-tg-body">
+          {st && (
+            <p className={`ss-tg-state ${st.enabled ? 'on' : ''}`}>
+              {st.enabled
+                ? `ON — posting new signals to ${st.chat_title || st.chat_id}`
+                : 'OFF — nothing is posted'}
+              {st.posted ? ` · ${st.posted} posted, last ${when(st.last_post_at)}` : ''}
+            </p>
+          )}
+          {st && st.last_error && <p className="ss-tg-err">⚠ {st.last_error}</p>}
+          <ol className="ss-tg-steps">
+            <li>In Telegram, message <b>@BotFather</b>, send <b>/newbot</b>, and copy the token it gives you.</li>
+            <li>In your channel: Administrators → add the bot, allowed to <b>post messages</b>.</li>
+            <li>Paste the token, post anything in the channel, then <b>find channel</b>.</li>
+          </ol>
+          <label className="ss-tg-f">
+            <span>bot token</span>
+            <input type="password" autoComplete="off" spellCheck={false} value={token}
+              onChange={(e) => setToken(e.target.value)}
+              placeholder={st && st.token_saved ? 'saved — paste a new one to replace it' : '123456789:AA…'} />
+          </label>
+          <div className="ss-tg-row">
+            <button type="button" className="ss-vbtn wide" onClick={find}
+              disabled={!!busy || !(token.trim() || (st && st.token_saved))}>
+              {busy === 'find' ? 'looking…' : 'find channel'}
+            </button>
+          </div>
+          {chats && (
+            chats.length ? (
+              <ul className="ss-tg-chats">
+                {chats.map((c) => (
+                  <li key={c.id}>
+                    <button type="button" className={chat === c.id ? 'on' : ''}
+                      onClick={() => { setChat(c.id); setTitle(c.title); }}>
+                      <b>{c.title}</b> <span>{c.type} · {c.id}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="ss-tg-note">The bot sees no chat yet — add it to the channel as an admin,
+                post something there, and try again.</p>
+            )
+          )}
+          <label className="ss-tg-f">
+            <span>chat id</span>
+            <input type="text" autoComplete="off" spellCheck={false} value={chat}
+              onChange={(e) => { setChat(e.target.value); setTitle(''); }}
+              placeholder="-1001234567890 or @channel" />
+          </label>
+          <div className="ss-tg-row">
+            <button type="button" className="ss-vbtn wide" onClick={save} disabled={!!busy || !dirty}>
+              {busy === 'save' ? 'saving…' : 'save'}
+            </button>
+            <button type="button" className="ss-vbtn wide" onClick={test}
+              disabled={!!busy || dirty || !(st && st.token_saved && st.chat_id)}>
+              {busy === 'test' ? 'sending…' : 'send test'}
+            </button>
+            <label className="ss-tg-switch" title="post each new signal as the desk raises it">
+              <input type="checkbox" checked={!!(st && st.enabled)} disabled={!!busy || !ready}
+                onChange={(e) => toggle(e.target.checked)} />
+              <span>post new signals</span>
+            </label>
+          </div>
+          {note && <p className="ss-tg-ok">{note}</p>}
+          {err && <p className="ss-tg-err">⚠ {err}</p>}
+        </div>
+      </div>
+    </div>,
+    document.body,
   );
 }
 

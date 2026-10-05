@@ -85,7 +85,9 @@ def send(channel: str, *, text: str, token: str | None = None, chat_id: str | No
         logger.info("notify: %s refused a message (HTTP %s)", channel, response.status_code)
         hints = {"telegram": {401: " -- check the bot token",
                               400: " -- check the chat id, and that the bot has been "
-                                   "started or added to it"},
+                                   "started or added to it",
+                              403: " -- make the bot an admin of the chat, allowed "
+                                   "to post"},
                  "discord": {401: " -- check the webhook", 404: " -- check the webhook"}}
         raise DeliveryFailed(f"{channel} refused the message (HTTP {response.status_code})"
                              f"{hints[channel].get(response.status_code, '')}")

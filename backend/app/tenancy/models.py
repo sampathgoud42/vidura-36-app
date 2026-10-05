@@ -91,7 +91,8 @@ class TenantCredential(Base, TenantOwned, Timestamped):
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "venue", "label", name="tenant_venue_label"),
-        CheckConstraint("venue in ('tradier','tradier_sandbox','kalshi')",
+        # telegram: the bot that posts an operator's Super Signals.
+        CheckConstraint("venue in ('tradier','tradier_sandbox','kalshi','telegram')",
                         name="venue_known"),
     )
 

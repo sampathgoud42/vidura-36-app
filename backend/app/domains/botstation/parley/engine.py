@@ -155,17 +155,78 @@ def open_collections(cred, *, force: bool = False) -> list[dict]:
     return found
 
 
+def side_allowed(chosen: dict, leg) -> bool:
+    """Whether the collection takes this leg on the side it is on.
+
+    Listing an event is not the whole of it: Kalshi marks some events YES-only
+    -- tennis, the NBA, MLB and much of the long tail -- and a NO leg on one
+    gets the combination refused with a bare 400 "invalid parameters" that
+    names no leg. A NO-side ticket is exactly the ticket that finds this out.
+    """
+    if (leg.market.side or "yes") == "yes":
+        return True
+    chosen = chosen or {}
+    return not (chosen.get("all_yes")
+                or (leg.event_ticker or leg.ticker) in (chosen.get("yes_only") or ()))
+
+
 def legs_in_collection(chosen: dict, candidates: list) -> list:
-    """The legs this collection can actually host.
+    """The legs this collection can actually host, on the sides they are on.
 
     A collection that lists no events hosts everything -- Kalshi leaves the
     field empty on the broad cross-category ones rather than enumerating a few
     thousand tickers.
     """
     events = (chosen or {}).get("events")
-    if events is None:
-        return list(candidates)
-    return [c for c in candidates if (c.event_ticker or c.ticker) in events]
+    hosted = (list(candidates) if events is None else
+              [c for c in candidates if (c.event_ticker or c.ticker) in events])
+    return [c for c in hosted if side_allowed(chosen, c)]
+
+
+def within_event_limits(chosen: dict, legs: list) -> list:
+    """These legs, in this order, holding no more of one event than it allows.
+
+    Nearly every event takes ONE of its markets into a combination, and one
+    over the limit is refused with the same bare "invalid parameters" as a
+    wrong side. Pass the legs in preference order: the first of an event's
+    legs is the one kept. The collection's own ceiling, when it sets one,
+    bounds the total.
+    """
+    chosen = chosen or {}
+    limits = chosen.get("event_size_max") or {}
+    single = chosen.get("single_market_per_event")
+    taken: dict[str, int] = {}
+    kept = []
+    for leg in legs:
+        event = leg.event_ticker or leg.ticker
+        cap = 1 if single else limits.get(event)
+        if cap is not None and taken.get(event, 0) >= cap:
+            continue
+        taken[event] = taken.get(event, 0) + 1
+        kept.append(leg)
+    ceiling = int(chosen.get("size_max") or 0)
+    return kept[:ceiling] if ceiling > 0 else kept
+
+
+def collection_terms(cred, collection: str) -> dict:
+    """One collection's description, by ticker -- from the discovery cache."""
+    for found in open_collections(cred):
+        if found.get("collection_ticker") == collection:
+            return found
+    return {}
+
+
+def selected_markets(legs: list) -> list[dict]:
+    """The legs as the exchange takes them when building a combination.
+
+    The SIDE comes from the leg, not from a constant. A soccer leg picked
+    from the other side of its market is "this team does not win", and
+    sending it as yes would create a combined market on the opposite of
+    every reason it was chosen.
+    """
+    return [{"event_ticker": leg.event_ticker or leg.ticker,
+             "market_ticker": leg.ticker, "side": leg.market.side}
+            for leg in legs]
 
 
 def choose_collection(collections: list[dict], candidates: list) -> dict | None:
@@ -184,8 +245,11 @@ def choose_collection(collections: list[dict], candidates: list) -> dict | None:
     best, best_n = None, 0
     for collection in collections:
         events = collection.get("events") or set()
+        # Counted on the side each leg is on: a NO leg on an event the
+        # collection takes YES-only is a leg it cannot host.
         n = sum(1 for c in candidates
-                if (c.event_ticker or c.ticker) in events)
+                if (c.event_ticker or c.ticker) in events
+                and side_allowed(collection, c))
         if n > best_n:
             best, best_n = collection, n
     if best is None or best_n < max(2, int(best.get("size_min") or 2)):
@@ -269,13 +333,7 @@ def place_combo(cred, combo: ComboOrder, collection: str, *,
     """
     from app.domains.botstation import venue as kalshi
 
-    # The SIDE comes from the leg, not from a constant. A soccer leg picked
-    # from the other side of its market is "this team does not win", and
-    # sending it as yes would create a combined market on the opposite of
-    # every reason it was chosen.
-    legs = [{"event_ticker": leg.event_ticker or leg.ticker,
-             "market_ticker": leg.ticker, "side": leg.market.side}
-            for leg in combo.legs]
+    legs = selected_markets(combo.legs)
     fair_c = theoretical_price_c(combo)
     limit_c = min(MAX_COMBO_PRICE_C, fair_c + slippage_c)
     count = contracts_for(stake_usd, limit_c)

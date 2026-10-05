@@ -129,7 +129,7 @@ export default function WorldHeader({ accent = '#34d399', title, right = null, s
   // timer) and not one of Lightweight's five panels, so in that mode the bell
   // has nothing to switch and is not shown -- nor the sound that only plays
   // with it.
-  const { lite } = useExperience();
+  const { lite, bot } = useExperience();
 
   // close on route change, Escape, or outside tap (tap matters on iPad)
   useEffect(() => { setOpen(null); }, [pathname]);
@@ -253,7 +253,7 @@ export default function WorldHeader({ accent = '#34d399', title, right = null, s
             in) so it rides in the header row instead of floating below it */}
         <span className="vw-hdr-slot" id="vw-header-slot" />
 
-        {showSound && !lite && (
+        {showSound && !lite && !bot && (
           <button
             type="button"
             className={`vw-icon-btn ${sound ? 'on' : 'off'}`}
@@ -265,7 +265,7 @@ export default function WorldHeader({ accent = '#34d399', title, right = null, s
           </button>
         )}
 
-        {!lite && (
+        {!lite && !bot && (
           <button
             type="button"
             className={`vw-icon-btn ${notify ? 'on' : 'off'}`}
@@ -312,7 +312,8 @@ export default function WorldHeader({ accent = '#34d399', title, right = null, s
                 <span className="vw-worldicon" aria-hidden>{w.icon}</span>
                 <span className="vw-worldtext">
                   <b>{w.label}</b>
-                  <small>{w.blurb}{lite && w.lite === false ? ' · regular only' : ''}</small>
+                  <small>{w.blurb}{lite && w.lite === false ? ' · regular only' : ''}
+                    {bot && !w.path.startsWith('/bot-station') ? ' · not in bot only mode' : ''}</small>
                 </span>
                 {active && <span className="vw-worlddot" aria-label="current" />}
               </Link>

@@ -33,13 +33,14 @@ function osNotify(title, body) {
 
 export default function GlobalViduraNotify() {
   const seen = useRef(null); // Set of signal ids; null until first baseline poll
-  const { lite } = useExperience();
+  const { lite, bot } = useExperience();
 
   useEffect(() => {
     // A feed of its own -- the signal list, on a 30s timer -- that is not one
     // of Lightweight's five panels, so that mode leaves it off. The header
     // hides the bell that would turn it on.
-    if (lite) return undefined;
+    // Bot only likewise: the Super Signals feed is another world's.
+    if (lite || bot) return undefined;
     initAudio();
     let stopped = false;
 
@@ -72,7 +73,7 @@ export default function GlobalViduraNotify() {
     poll();
     const t = setInterval(poll, 30000);
     return () => { stopped = true; clearInterval(t); };
-  }, [lite]);
+  }, [lite, bot]);
 
   return null;
 }

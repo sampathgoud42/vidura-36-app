@@ -3,12 +3,24 @@
 // auth/ExperienceGate.jsx.
 
 import React from 'react';
-import { LITE, REGULAR, useExperience } from './experience.js';
+import { BOT, LITE, REGULAR, useExperience } from './experience.js';
 import './experienceControls.css';
 
-/** A bolt for Lightweight, a full grid for Regular. Inline SVG in
- * currentColor, so it wears whichever header it is in. */
+/** A bolt for Lightweight, a full grid for Regular, a bot's head for Bot
+ * only. Inline SVG in currentColor, so it wears whichever header it is in. */
 export function ExperienceIcon({ mode, className = '' }) {
+  if (mode === BOT) {
+    return (
+      <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="7.5" width="16" height="12" rx="3" fill="none"
+          stroke="currentColor" strokeWidth="1.8" />
+        <circle cx="9.3" cy="13.4" r="1.6" fill="currentColor" />
+        <circle cx="14.7" cy="13.4" r="1.6" fill="currentColor" />
+        <path d="M12 7.5V4.2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="12" cy="3.4" r="1.3" fill="currentColor" />
+      </svg>
+    );
+  }
   if (mode === LITE) {
     return (
       <svg className={className} viewBox="0 0 24 24" aria-hidden="true">
@@ -29,11 +41,13 @@ export function ExperienceIcon({ mode, className = '' }) {
 const SWITCH = [
   [LITE, 'lite', 'Lightweight: five panels, each refreshing on its own'],
   [REGULAR, 'regular', 'Regular: the full desk'],
+  [BOT, 'bot', 'Bot only: just the Bot Station, nothing else called'],
 ];
 
-/** Lightweight | Regular, as two buttons rather than one toggle: a lone
+/** Lightweight | Regular | Bot only, as buttons rather than one toggle: a lone
  * "lite" button cannot say whether it names the mode you are in or the one
- * you would switch to. Switching remounts the board (ExperienceGate.jsx). */
+ * you would switch to. Switching remounts the board (ExperienceGate.jsx), and
+ * Bot only lands on the Bot Station. */
 export function ExperienceSwitch({ className = '' }) {
   const { mode, choose } = useExperience();
   return (

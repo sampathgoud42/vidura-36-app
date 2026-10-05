@@ -4,7 +4,7 @@
 edit by hand -- re-run it after a migration and the shape follows the
 database instead of drifting from it.
 
-SQLite, one schema, 20 tables. Every tenant-owned table
+SQLite, one schema, 25 tables. Every tenant-owned table
 carries a `tenant_id` foreign key that is NOT NULL, so a row without an
 owner cannot be written even by a raw INSERT.
 
@@ -24,14 +24,19 @@ erDiagram
     tenant ||--o{ bot_run : owns
     tenant ||--o{ bot_trade : owns
     tenant ||--o{ execution_attempt : owns
+    tenant ||--o{ luck_run : owns
+    tenant ||--o{ luck_schedule : owns
     tenant ||--o{ position : owns
     tenant ||--o{ risk_heartbeat : owns
+    tenant ||--o{ signal_trade : owns
+    tenant ||--o{ telegram_feed : owns
+    tenant ||--o{ telegram_post : owns
     tenant ||--o{ tenant_credential : owns
-    tenant ||--o{ tenant_secret_audit : owns
     tenant_credential |o--o{ tenant_secret_audit : credential_id
+    tenant ||--o{ tenant_secret_audit : owns
     tenant ||--o{ tenant_world_access : owns
-    wellness_profile ||--o{ wellness_goal : profile_id
     tenant ||--o{ wellness_goal : owns
+    wellness_profile ||--o{ wellness_goal : profile_id
     tenant ||--o{ wellness_profile : owns
     execution_lease {
         text standalone
@@ -376,6 +381,42 @@ One trade a bot recorded, mirrored into the shared ledger. Nothing here names a 
 **Checks:** `ck_bot_trade_status_known`
 
 **Indexes:** `ix_bot_trade_tenant_bot_opened`, `ix_bot_trade_tenant_id`
+
+### `signal_trade` · tenant-scoped
+
+One position bought by hand from a Bot Station DMI signal on a Kalshi fifteen-minute market (CALL buys YES, PUT buys NO). The row IS the watch: the background loop reads every watching row each pass to apply the +20% take-profit and -40% stop-loss, so a trade outlives a restart. Entries and exits are immediate-or-cancel, so nothing rests on the exchange.
+
+| column | type | null | notes |
+| --- | --- | --- | --- |
+| `id` | INTEGER | no | **PK** |
+| `tenant_id` | VARCHAR(36) | no | FK → `tenant` |
+| `request_id` | VARCHAR(64) | no |  |
+| `asset` | VARCHAR(16) | no |  |
+| `series` | VARCHAR(24) | no |  |
+| `ticker` | VARCHAR(64) | no |  |
+| `signal` | VARCHAR(4) | no |  |
+| `confirmed` | BOOLEAN | no |  |
+| `side` | VARCHAR(3) | no |  |
+| `contracts` | FLOAT | no |  |
+| `filled` | FLOAT | no |  |
+| `entry_c` | FLOAT | yes |  |
+| `tp_c` | FLOAT | yes |  |
+| `sl_c` | FLOAT | yes |  |
+| `close_at` | DATETIME | no |  |
+| `order_id` | VARCHAR(64) | yes |  |
+| `status` | VARCHAR(16) | no |  |
+| `exited` | FLOAT | no |  |
+| `exit_c` | FLOAT | yes |  |
+| `note` | VARCHAR(255) | yes |  |
+| `closed_at` | DATETIME | yes |  |
+| `created_at` | DATETIME | no |  |
+| `updated_at` | DATETIME | no |  |
+
+**Unique:** `(tenant_id, request_id)`
+
+**Checks:** `ck_signal_trade_side_known`, `ck_signal_trade_signal_known`, `ck_signal_trade_status_known`
+
+**Indexes:** `ix_signal_trade_tenant_id`, `ix_signal_trade_tenant_status`
 
 ## market-scans
 

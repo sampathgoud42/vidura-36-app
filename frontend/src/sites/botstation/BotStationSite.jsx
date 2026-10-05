@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ApiError, ensureUser, vidura } from '../../shared/viduraApi.js';
 import SiteFooter from '../../shared/SiteFooter.jsx';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
 import LiveModeNotice, { useLiveLock } from '../../shared/LiveModeNotice.jsx';
+import { deskTime } from '../../shared/cst.js';
 import '../../shared/worldHeader.css';
 import './botstation.css';
 
@@ -705,7 +707,7 @@ function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
 // `load` is what differs, plus the title and how a row is labelled. Everything
 // about how a reading is DISPLAYED is shared, which is the part that has to
 // stay consistent across the desk.
-function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2 }) {
+function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2, onSignal, extra = null }) {
   const [snap, setSnap] = useState(null);
   const [err, setErr] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -780,6 +782,7 @@ function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2 }) {
             spot {snap.meta.spot_age_s == null ? 'not read' : ago(snap.meta.spot_age_s)}
           </span>
         )}
+        {extra}
         <button type="button" className="bs-refresh" onClick={doRefresh} disabled={busy}
           title="force a fresh scan now">↻</button>
       </div>
@@ -808,13 +811,17 @@ function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2 }) {
                   marked when it agrees, rather than folded into the rule —
                   widening what fires a trade is a trading change, not a
                   display one. */}
-              <span className="sig" style={{ color: sideColor(r.signal) }}
-                title={r.signal
+              {/* A link to trade it: CALL buys YES and PUT buys NO on the
+                  asset's Kalshi 15-minute market, after a confirmation.
+                  "mixed" opens the same form, to say why there is nothing. */}
+              <button type="button" className="sig sig-btn" style={{ color: sideColor(r.signal) }}
+                onClick={() => onSignal?.(r, label, accent)}
+                title={`${r.signal
                   ? `1m and 2m agree${r.m5_confirms ? '; 5m confirms' : '; 5m does not confirm'}`
-                  : '1m and 2m disagree — no clear signal'}>
+                  : '1m and 2m disagree — no clear signal'} — click to trade it on Kalshi`}>
                 {r.signal ? sideLabel(r.signal) : 'mixed'}
                 {r.signal && r.m5_confirms && <span className="slope" title="5m confirms">✓</span>}
-              </span>
+              </button>
             </div>
           );
         })}
@@ -1031,6 +1038,26 @@ function TradeHistoryPanel({ data, busy, error, onRefresh, disabled,
 }
 
 
+// Past ten legs the sheet opens with a random 75% of them ticked rather than
+// all of them -- 15 of 20, the other 5 left unticked for the operator to add
+// by hand. Never fewer than the min legs, or the ticket it opens with could
+// not be placed.
+const LUCK_RANDOM_OVER = 10;
+const LUCK_RANDOM_SHARE = 0.75;
+
+function luckDefaultKeep(legs, minLegs) {
+  const tickers = legs.map((l) => l.ticker);
+  if (tickers.length <= LUCK_RANDOM_OVER) return new Set(tickers);
+  const want = Math.min(tickers.length,
+    Math.max(minLegs, Math.round(tickers.length * LUCK_RANDOM_SHARE)));
+  // A Fisher-Yates shuffle, stopped once `want` legs are drawn.
+  for (let i = 0; i < want; i += 1) {
+    const j = i + Math.floor(Math.random() * (tickers.length - i));
+    [tickers[i], tickers[j]] = [tickers[j], tickers[i]];
+  }
+  return new Set(tickers.slice(0, want));
+}
+
 function LuckPanel() {
   const [open, setOpen] = useState(false);
   const [sheet, setSheet] = useState(false);
@@ -1042,14 +1069,108 @@ function LuckPanel() {
     // The engine's own gates, now the operator's. Seeded with what the
     // long shot used to inherit silently: 3c wide, closing within 72h.
     max_spread_c: '3', max_hours: '72',
+    // NO sides only: every leg read as "this does not happen", game props
+    // included. It changes the sides and nothing else -- the min volume and
+    // max spread above apply exactly as set.
+    no_side: false,
   });
   const [preview, setPreview] = useState(null);
   const [keep, setKeep] = useState(() => new Set());
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  // The sport picker. Kept as the sports UNticked, so every sport starts
+  // ticked, and "all ticked" goes to the server as no list at all -- which
+  // covers a sport that opens after this one was read, too.
+  const [sportList, setSportList] = useState(null);
+  const [sportErr, setSportErr] = useState('');
+  const [sportsOff, setSportsOff] = useState(() => new Set());
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const setNoSide = (e) => setForm((f) => ({ ...f, no_side: e.target.checked }));
   const n = (v, d) => { const x = Number(v); return Number.isFinite(x) ? x : d; };
+
+  // Read when the panel first opens. A failed read is tried again the next
+  // time it opens, and until then the scan simply covers every sport.
+  useEffect(() => {
+    if (!open || sportList !== null) return undefined;
+    let alive = true;
+    setSportErr('');
+    vidura.luckSports()
+      .then((r) => { if (alive) setSportList((r && r.sports) || []); })
+      .catch((e) => { if (alive) setSportErr(String((e && e.message) || e)); });
+    return () => { alive = false; };
+  }, [open, sportList]);
+
+  // The schedule: read whenever the panel opens -- its runs happen in the
+  // background, so an open panel is where the latest is wanted.
+  const [sched, setSched] = useState(null);
+  const [schedBusy, setSchedBusy] = useState(false);
+  const [schedErr, setSchedErr] = useState('');
+  useEffect(() => {
+    if (!open) return undefined;
+    let alive = true;
+    vidura.luckSchedule()
+      .then((s) => { if (alive) setSched(s); })
+      .catch((e) => { if (alive) setSchedErr(String((e && e.message) || e)); });
+    return () => { alive = false; };
+  }, [open]);
+
+  const toggleSport = (sport) => setSportsOff((prev) => {
+    const next = new Set(prev);
+    if (next.has(sport)) next.delete(sport); else next.add(sport);
+    return next;
+  });
+  const sportNames = (sportList || []).map((s) => s.sport);
+  const sportsOn = sportNames.filter((s) => !sportsOff.has(s));
+  const noSport = sportNames.length > 0 && sportsOn.length === 0;
+
+  // The ticket as the form holds it now -- what switching the schedule on
+  // saves, and what UPDATE puts in place of the saved one.
+  const ticketNow = () => ({
+    min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
+    min_usd: n(form.min_usd, 5), max_usd: n(form.max_usd, 7.5),
+    min_leg_c: n(form.min_leg_c, 60), max_leg_c: n(form.max_leg_c, 98),
+    min_volume_usd: n(form.min_volume_usd, 0), max_spread_c: n(form.max_spread_c, 3),
+    max_hours: n(form.max_hours, 72), no_side_only: !!form.no_side,
+    sports: sportsOff.size ? [...sportsOn].sort() : [],
+  });
+  const sameTicket = (a, b) => !!a && !!b && Object.keys(ticketNow()).every((k) => (
+    k === 'sports' ? [...(a.sports || [])].sort().join() === [...(b.sports || [])].sort().join()
+      : Number(a[k]) === Number(b[k]) || a[k] === b[k]));
+  const schedDiffers = !!(sched && sched.enabled && sched.config && !sameTicket(ticketNow(), sched.config));
+  const ticketText = (t) => `${t.min_legs}–${t.max_legs} legs · $${Number(t.min_usd).toFixed(2)}–$`
+    + `${Number(t.max_usd).toFixed(2)} · ${t.min_leg_c}–${t.max_leg_c}c · vol ≥ $${Number(t.min_volume_usd).toLocaleString()}`
+    + ` · ≤${t.max_spread_c}c · ${t.max_hours}h · ${(t.sports || []).length ? t.sports.join(', ') : 'all sports'}`
+    + (t.no_side_only ? ' · NO side' : '');
+  const saveSchedule = async (body) => {
+    setSchedBusy(true); setSchedErr('');
+    try {
+      setSched(await vidura.setLuckSchedule(body));
+    } catch (e) {
+      setSchedErr(String((e && e.message) || e));
+    } finally { setSchedBusy(false); }
+  };
+  const toggleSchedule = async (e) => {
+    if (!e.target.checked) { saveSchedule({ enabled: false }); return; }
+    const t = ticketNow();
+    const ok = await confirmDialog({
+      title: 'Schedule the luck parley?',
+      body: 'Every day at 9:00 AM and 6:00 PM CT, in the background: if the combo shards '
+        + `hold at least $${t.max_usd.toFixed(2)}, a ticket is built with these settings — `
+        + `${ticketText(t)} — and placed, spending $${t.min_usd.toFixed(2)}–$${t.max_usd.toFixed(2)} `
+        + 'each time with nobody confirming it.',
+      confirmText: 'Switch on',
+      cancelText: 'Cancel',
+    });
+    if (ok) saveSchedule({ enabled: true, config: t });
+  };
+  const slotText = (slot) => {
+    const [d, t] = String(slot || '').split(' ');
+    const [, mo, da] = (d || '').split('-').map(Number);
+    const [hh, mm] = (t || '').split(':').map(Number);
+    const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][mo - 1];
+    return `${month} ${da}, ${((hh + 11) % 12) + 1}:${String(mm).padStart(2, '0')} ${hh < 12 ? 'AM' : 'PM'}`;
+  };
 
   // The scan runs well past the tunnel's ~100s ceiling, so the server hands
   // back a job id and we poll rather than holding a request open.
@@ -1075,11 +1196,13 @@ function LuckPanel() {
         min_volume_usd: n(form.min_volume_usd, 0),
         max_spread_c: n(form.max_spread_c, 3),
         max_hours: n(form.max_hours, 72),
+        no_side_only: !!form.no_side,
+        sports: sportsOff.size ? sportsOn : [],
       });
       const out = await awaitJob(job.job_id);
       if (out && out.ok) {
         setPreview(out);
-        setKeep(new Set(out.legs.map((l) => l.ticker)));
+        setKeep(luckDefaultKeep(out.legs, n(form.min_legs, 5)));
         setSheet(true);
       } else {
         // A failed build is exactly when the funnel is worth reading, and
@@ -1104,6 +1227,9 @@ function LuckPanel() {
   });
   const allOn = () => setKeep(new Set((preview ? preview.legs : []).map((l) => l.ticker)));
   const allOff = () => setKeep(new Set());
+  // A fresh random 75%, for after ALL or NONE has replaced the first one.
+  const reroll = () => setKeep(luckDefaultKeep(preview ? preview.legs : [], n(form.min_legs, 5)));
+  const randomStart = !!preview && preview.legs.length > LUCK_RANDOM_OVER;
 
   // The odds of what is SELECTED, not of what was proposed. Deselect a leg
   // and this moves -- showing the preview's original number beside an edited
@@ -1141,17 +1267,92 @@ function LuckPanel() {
 
         {!open ? null : (
           <div className="bs-luckdock-body">
+            {/* The schedule: on, the server builds and places this ticket at
+                9:00 and 18:00 Chicago time every day, with nobody here. It
+                keeps the ticket saved when it was switched on (or UPDATEd),
+                not whatever the form says later. */}
+            <div className="bs-luckrow bs-lucksched">
+              <span className="lbl">Schedule</span>
+              <label className="bs-luckswitch" title="place this ticket automatically at 9:00 AM and 6:00 PM CT, every day">
+                <input type="checkbox" checked={!!(sched && sched.enabled)}
+                  disabled={schedBusy || sched === null} onChange={toggleSchedule}
+                  aria-label="Schedule the luck parley at 9 AM and 6 PM CT daily" />
+                <span className="track" /><span className="knob" />
+              </label>
+              <span className="txt">9:00 AM &amp; 6:00 PM CT · daily</span>
+            </div>
+            {sched && sched.enabled && sched.config ? (
+              <p className="bs-luck-note bs-lucksched-on">
+                ON · next {new Date(sched.next_run).toLocaleString('en-US', {
+                  timeZone: 'America/Chicago', weekday: 'short', hour: 'numeric', minute: '2-digit' })} CT
+                {' · '}{ticketText(sched.config)}
+                {schedDiffers ? (
+                  <button type="button" className="bs-btn bs-lucksched-up" disabled={schedBusy}
+                    onClick={() => saveSchedule({ enabled: true, config: ticketNow() })}
+                    title="the form differs from the scheduled ticket — schedule the form's settings instead">
+                    UPDATE SCHEDULE
+                  </button>
+                ) : null}
+              </p>
+            ) : null}
+            {schedErr ? <p className="bs-luck-err">{schedErr}</p> : null}
+            {sched && sched.runs && sched.runs.length ? (
+              <ul className="bs-luckruns">
+                {sched.runs.slice(0, 3).map((r) => (
+                  <li key={r.slot}>
+                    <b>{slotText(r.slot)}</b>
+                    <span className={`st st-${r.status}`}>{r.status}</span>
+                    {r.cost_usd != null ? ` $${r.cost_usd.toFixed(2)}` : ''}
+                    {r.detail ? <span className="dim"> · {r.detail}</span> : null}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
             {/* Paired as ranges rather than six separate boxes: they ARE
                 three ranges, and in a sidebar column six labelled fields wrap
                 into a wall the panel cannot show without scrolling. */}
             <div className="bs-luckform">
+              {/* Which sports the scan reads -- every one, ticked, to start.
+                  One line closed; the ticks open beneath it. */}
+              <div className="bs-luckrow bs-lucksportrow">
+                <span className="lbl">Sports</span>
+                <details className="bs-lucksports">
+                  <summary title="the sports this ticket's legs may come from">
+                    {sportList === null
+                      ? (sportErr ? 'All sports (list unavailable)' : 'All sports…')
+                      : noSport ? 'None — tick at least one'
+                        : sportsOff.size ? `${sportsOn.length} of ${sportNames.length} sports`
+                          : `All sports · ${sportNames.length}`}
+                  </summary>
+                  {sportList && sportList.length ? (
+                    <div className="bs-sportgrid">
+                      <div className="bs-sportquick">
+                        <button type="button" className="bs-btn"
+                          onClick={() => setSportsOff(new Set())}>ALL</button>
+                        <button type="button" className="bs-btn"
+                          onClick={() => setSportsOff(new Set(sportNames))}>NONE</button>
+                      </div>
+                      {sportList.map((s) => (
+                        <label key={s.sport}
+                          title={`${s.series} series with something open`}>
+                          <input type="checkbox" checked={!sportsOff.has(s.sport)}
+                            onChange={() => toggleSport(s.sport)} />
+                          <span>{s.sport}</span>
+                        </label>
+                      ))}
+                    </div>
+                  ) : null}
+                </details>
+              </div>
               <label className="bs-luckrow">
                 <span className="lbl">Legs</span>
-                <input className="bs-input" type="number" min="2" max="24"
+                <input className="bs-input" type="number" min="2" max="40"
                   value={form.min_legs} onChange={set('min_legs')} />
                 <i>–</i>
-                <input className="bs-input" type="number" min="2" max="24"
-                  value={form.max_legs} onChange={set('max_legs')} />
+                <input className="bs-input" type="number" min="2" max="40"
+                  value={form.max_legs} onChange={set('max_legs')}
+                  title="up to 40 legs" />
               </label>
               <label className="bs-luckrow">
                 <span className="lbl">Spend $</span>
@@ -1174,6 +1375,19 @@ function LuckPanel() {
                 <input className="bs-input" type="number" min="6" max="99"
                   value={form.max_leg_c} onChange={set('max_leg_c')}
                   title="dearest leg to accept, in cents — above this the outcome is already decided" />
+              </label>
+              {/* NO side only. Off, the ticket backs whichever side of a market
+                  is the stronger one. On, every leg is a NO -- "Ecuador do
+                  not win", "Penn St. do not win by over 7.5" -- with the game
+                  props behind each fixture (spreads, totals, both teams to
+                  score) offered too. Every other field still applies as set:
+                  leg price, min volume, max spread, closes in. */}
+              <label className="bs-luckrow bs-lucknoside"
+                title="only NO sides: every market — game props included — read as 'this does not happen'; leg price, min volume, max spread and closes-in still apply">
+                <span className="lbl">NO side</span>
+                <input type="checkbox" checked={form.no_side} onChange={setNoSide}
+                  aria-label="NO side only" />
+                <span className="txt">only · game props</span>
               </label>
               <label className="bs-luckrow">
                 <span className="lbl">Min vol</span>
@@ -1204,7 +1418,8 @@ function LuckPanel() {
 
             <div className="bs-luck-actions">
               <button type="button" className="bs-btn" onClick={build}
-                disabled={!!busy}>
+                disabled={!!busy || noSport}
+                title={noSport ? 'tick at least one sport' : undefined}>
                 {busy === 'preview' ? 'SCANNING\u2026' : 'BUILD TICKET'}
               </button>
               {preview && !sheet ? (
@@ -1216,14 +1431,14 @@ function LuckPanel() {
             {busy === 'preview' ? (
               <p className="bs-luck-note">
                 Reading every live market and its sub-events
-                {elapsed ? ` \u00b7 ${Math.round(elapsed)}s` : ''}\u2026
+                {elapsed ? ` \u00b7 ${Math.round(elapsed)}s` : ''}…
                 this takes a couple of minutes.
               </p>
             ) : null}
             {error && !sheet ? <p className="bs-luck-err">{error}</p> : null}
             {result && result.placed ? (
               <p className="bs-luck-ok">
-                PLACED \u2014 {result.legs_used} legs, {result.contracts} contracts
+                PLACED — {result.legs_used} legs, {result.contracts} contracts
                 {result.filled_c != null ? ` at ${result.filled_c}c` : ''}
                 {result.cost_usd != null ? ` \u00b7 $${result.cost_usd}` : ''}
                 {result.contracts ? ` \u00b7 max payout $${Math.round(result.contracts).toLocaleString()}` : ''}
@@ -1239,23 +1454,40 @@ function LuckPanel() {
             <header className="bs-modal-hd">
               <h2>SELECT LEGS</h2>
               <button type="button" className="close"
-                onClick={() => { if (!busy) setSheet(false); }}>\u00d7</button>
+                onClick={() => { if (!busy) setSheet(false); }}>×</button>
             </header>
             <p className="bs-luck-note">
               {chosen.length} of {preview.legs.length} kept
+              {randomStart ? ', a random 75% ticked to start' : null}
               {' \u00b7 '}chance {(chosenOdds * 100).toFixed(3)}%
               {' \u00b7 '}{preview.scanned.toLocaleString()} markets scanned
+              {preview.sports && preview.sports.length
+                ? ` (${preview.sports.join(', ')})` : null}
               {preview.max_spread_c == null ? null
                 : ` \u00b7 \u2264${preview.max_spread_c}c wide`}
               {preview.max_hours == null ? null
                 : `, closing within ${preview.max_hours}h`}
+              {preview.no_side_only
+                ? ' \u00b7 NO sides only, game props in \u2014 one leg per game, highest price first'
+                : null}
+              {/* The server had Kalshi accept these exact legs before the
+                  sheet opened; dropping any of them cannot undo that. */}
+              {preview.confirmed ? ' \u00b7 Kalshi accepted this combination' : null}
+              {preview.tennis_rankings_at && preview.legs.some((l) => l.sport === 'tennis')
+                ? ` \u00b7 tennis favourites by the rankings of ${new Date(preview.tennis_rankings_at)
+                  .toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/Chicago' })}`
+                : null}
               {' \u00b7 '}buys at market, spending
-              ${n(form.min_usd, 5).toFixed(2)}\u2013${n(form.max_usd, 7.5).toFixed(2)}
+              ${n(form.min_usd, 5).toFixed(2)}–${n(form.max_usd, 7.5).toFixed(2)}
             </p>
 
             <div className="bs-luck-actions">
               <button type="button" className="bs-btn" onClick={allOn} disabled={!!busy}>ALL</button>
               <button type="button" className="bs-btn" onClick={allOff} disabled={!!busy}>NONE</button>
+              {randomStart ? (
+                <button type="button" className="bs-btn" onClick={reroll} disabled={!!busy}
+                  title="tick a fresh random 75% of the legs">RANDOM 75%</button>
+              ) : null}
               <button type="button" className="bs-btn live" onClick={place}
                 disabled={!!busy || !enough}>
                 {busy === 'place'
@@ -1290,14 +1522,15 @@ function LuckPanel() {
                       <td className="num">{i + 1}</td>
                       <td title={l.event}>{l.market}</td>
                       {/* A leg taken from the other side of its market is
-                          the opposite bet, and the outcome text already says
-                          "NOT X" -- the chip is so it cannot be skim-read as
-                          a backing of the team it names. */}
+                          the opposite bet. The chip says so, the way the
+                          exchange writes it ("No · Ecuador to win"), so the
+                          text beside it is the outcome itself: "NO" next to
+                          "NOT Ecuador" read as a double negative. */}
                       <td>
                         {l.side === 'no'
                           ? <span className="chip pl" style={{ marginRight: 5 }}>NO</span>
                           : null}
-                        {l.outcome}
+                        {l.side === 'no' ? String(l.outcome || '').replace(/^NOT\s+/, '') : l.outcome}
                       </td>
                       <td className="dim">{l.sport}</td>
                       <td className="num">{l.price_c}c</td>
@@ -1354,8 +1587,14 @@ function LuckPanel() {
                   Live → Eligible is your leg price, spread and horizon.
                   Eligible → On volume is the min-volume floor.
                   On volume → In collection is Kalshi's: a parlay can only be
-                  built from events one collection carries, and the one
-                  hosting the most legs is the one used.
+                  built from events one collection carries, on the sides it
+                  takes, and the one hosting the most legs is the one used.
+                  Some events take YES legs only (tennis, NBA and MLB among
+                  them), so a NO-side ticket loses those here.
+                  Tennis is the match favourite alone — by ATP/WTA/ITF
+                  ranking, else by price — above 85c, or above 75c while
+                  leading on the scoreboard, and on YES even on a NO-side
+                  ticket; its horizon is when the match settles.
                 </p>
               </details>
             )}
@@ -1367,11 +1606,18 @@ function LuckPanel() {
 }
 
 
-function CommoditiesStrip() {
+// The boards' loaders, made ONCE. DmiStrip fetches whenever its loader
+// changes, and an arrow written inline was a new loader on every render of
+// the station -- whose clock re-renders it every second -- so both boards
+// were fetched every second instead of every minute.
+const loadCommodityBoard = (force) => vidura.commodityDmiSignals(force);
+const loadCryptoBoard = (force) => vidura.cryptoDmiSignals(force);
+
+function CommoditiesStrip({ onSignal }) {
   return (
     <DmiStrip
-      title="COMMODITIES" icon="🛢"
-      load={(force) => vidura.commodityDmiSignals(force)}
+      title="COMMODITIES" icon="🛢" onSignal={onSignal}
+      load={loadCommodityBoard}
       labelFor={(r) => ({ label: BOT_BY_KEY[r.bot]?.label || r.label || r.bot,
                           accent: BOT_BY_KEY[r.bot]?.accent })}
     />
@@ -1386,14 +1632,676 @@ const CRYPTO_ACCENT = {
   doge: '#c2a633', xrp: '#25a768',
 };
 
-function CryptoStrip() {
+function CryptoStrip({ onSignal, onCombo }) {
   return (
     <DmiStrip
-      title="CRYPTO" icon="₿"
-      load={(force) => vidura.cryptoDmiSignals(force)}
+      title="CRYPTO" icon="₿" onSignal={onSignal}
+      load={loadCryptoBoard}
       labelFor={(r) => ({ label: r.label || r.bot.toUpperCase(),
                           accent: CRYPTO_ACCENT[r.bot] })}
+      extra={(
+        <button type="button" className="bs-btn bs-combo15-btn" onClick={onCombo}
+          title="build one Kalshi combo across every fifteen-minute market, crypto and commodities, from these DMI signals">
+          15M COMBO
+        </button>
+      )}
     />
+  );
+}
+
+// ── move money: cash between Kalshi's exchange shards ──────────────────────
+// Kalshi keeps cash per shard, and an order spends only the cash on its
+// market's shard: every 15-minute market settles on shard 2. This moves cash
+// between shards inside the operator's own account, after the amount, the
+// direction and a confirmation -- shard 0 to 2 by default, ⇄ to swap.
+function MoveMoneyCell() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bs-cell"><span className="k">Kalshi shards</span>
+      <button type="button" className="bs-btn bs-move-btn" onClick={() => setOpen(true)}
+        title="move cash between Kalshi exchange shards — 15-minute markets spend only shard 2">
+        ⇄ MOVE MONEY
+      </button>
+      {open && <MoveMoneySheet onClose={() => setOpen(false)} />}
+    </div>
+  );
+}
+
+function MoveMoneySheet({ onClose }) {
+  const [snap, setSnap] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState('load');
+  const [from, setFrom] = useState(0);
+  const [to, setTo] = useState(2);
+  const [amount, setAmount] = useState('');
+  const [result, setResult] = useState(null);
+  // One key per confirmation; a fresh one after each move that lands.
+  const keyRef = useRef(newConfirmationKey());
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+
+  const load = useCallback(async () => {
+    setBusy('load'); setErr('');
+    try {
+      const d = await vidura.kalshiShards();
+      if (alive.current) setSnap(d);
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape' && busy !== 'move') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [busy, onClose]);
+
+  const shards = snap?.shards || [];
+  const held = (n) => shards.find((s) => s.shard === n)?.usd;
+  const usdTxt = (v) => (v == null ? '—' : `$${Number(v).toFixed(Number(v) < 1 && Number(v) > 0 ? 4 : 2)}`);
+  const amt = Number(amount);
+  const valid = Number.isFinite(amt) && amt > 0 && from !== to
+    && held(from) != null && amt <= held(from) + 1e-9;
+  const problem = !amount ? '' : !(Number.isFinite(amt) && amt > 0) ? 'enter an amount above $0'
+    : from === to ? 'the source and destination are the same shard'
+      : held(from) != null && amt > held(from) + 1e-9 ? `shard ${from} holds ${usdTxt(held(from))}` : '';
+
+  const swap = () => { setFrom(to); setTo(from); setResult(null); };
+
+  const move = async () => {
+    if (!valid || busy) return;
+    const money = `$${amt.toFixed(2)}`;
+    const ok = await confirmDialog({
+      title: `Move ${money} from shard ${from} to shard ${to}?`,
+      body: `Kalshi's intra-account transfer, inside your own account: shard ${from} `
+        + `(${usdTxt(held(from))}) → shard ${to} (${usdTxt(held(to))}). It is sent once and `
+        + 'never retried; Kalshi processes it within a few seconds.',
+      confirmText: `Move ${money}`,
+      cancelText: 'Cancel',
+    });
+    if (!ok) return;
+    setBusy('move'); setErr(''); setResult(null);
+    try {
+      const out = await vidura.kalshiShardTransfer(
+        { usd: Math.round(amt * 100) / 100, source_shard: from, destination_shard: to },
+        keyRef.current);
+      if (!alive.current) return;
+      setResult(out);
+      if (out && out.moved) {
+        keyRef.current = newConfirmationKey();
+        setAmount('');
+        if (out.shards) setSnap({ shards: out.shards, transfers: out.transfers || snap?.transfers || [] });
+      }
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  };
+
+  const options = shards.length ? shards.map((s) => s.shard) : [0, 1, 2, 3];
+  return createPortal(
+    <div className="bs-luck-scrim" onClick={() => { if (busy !== 'move') onClose(); }}>
+      <div className="bs-luck-sheet bs-sigsheet bs-movesheet" role="dialog" aria-modal="true"
+        aria-label="move money between Kalshi shards" onClick={(e) => e.stopPropagation()}>
+        <header className="bs-modal-hd">
+          <h2>MOVE MONEY · KALSHI SHARDS</h2>
+          <button type="button" className="bs-refresh" onClick={load} disabled={!!busy}
+            aria-label="refresh the balances" title="re-read the balances">
+            <span className={busy === 'load' ? 'spin' : ''} aria-hidden="true">↻</span>
+          </button>
+          <button type="button" className="close" disabled={busy === 'move'} onClick={onClose}>×</button>
+        </header>
+
+        <div className="bs-shards">
+          {shards.map((s) => (
+            <div key={s.shard} className={`bs-shard ${s.shard === from ? 'from' : ''} ${s.shard === to ? 'to' : ''}`}>
+              <span className="n">shard {s.shard}</span>
+              <b>{usdTxt(s.usd)}</b>
+              {s.purpose ? <span className="p">{s.purpose}</span> : null}
+            </div>
+          ))}
+          {!shards.length && busy === 'load' ? <p className="bs-luck-note">reading the balances…</p> : null}
+        </div>
+
+        <div className="bs-move-row">
+          <label className="bs-move-field">
+            <span>from</span>
+            <select className="bs-input" value={from} disabled={busy === 'move'}
+              onChange={(e) => { setFrom(Number(e.target.value)); setResult(null); }}>
+              {options.map((n) => <option key={n} value={n}>shard {n}</option>)}
+            </select>
+          </label>
+          <button type="button" className="bs-btn bs-swap" onClick={swap} disabled={busy === 'move'}
+            aria-label="swap source and destination" title="swap source and destination">⇄</button>
+          <label className="bs-move-field">
+            <span>to</span>
+            <select className="bs-input" value={to} disabled={busy === 'move'}
+              onChange={(e) => { setTo(Number(e.target.value)); setResult(null); }}>
+              {options.map((n) => <option key={n} value={n}>shard {n}</option>)}
+            </select>
+          </label>
+          <label className="bs-move-field amt">
+            <span>amount $</span>
+            <input className="bs-input" type="number" min="0.01" step="0.01" inputMode="decimal"
+              placeholder="15.00" value={amount} disabled={busy === 'move'}
+              onChange={(e) => { setAmount(e.target.value); setResult(null); }} />
+          </label>
+          {held(from) != null ? (
+            <button type="button" className="bs-linkbtn" disabled={busy === 'move'}
+              onClick={() => setAmount(String(Math.floor(held(from) * 100) / 100))}>max</button>
+          ) : null}
+        </div>
+
+        {problem ? <p className="bs-luck-err">⚠ {problem}</p> : null}
+        {err ? <p className="bs-luck-err">⚠ {err}</p> : null}
+        {result && result.moved === true ? (
+          <p className="bs-luck-ok">
+            MOVED ${Number(result.usd).toFixed(2)} · shard {result.source} → shard {result.destination}
+            {' · '}{result.status || 'accepted'}{result.transfer_id ? ` · ${result.transfer_id}` : ''}
+          </p>
+        ) : null}
+        {result && result.moved === false ? <p className="bs-luck-err">⚠ {result.detail}</p> : null}
+        {result && result.moved == null && result.detail ? <p className="bs-luck-err">⚠ {result.detail}</p> : null}
+
+        <div className="bs-luck-actions">
+          <button type="button" className="bs-btn live" onClick={move} disabled={!valid || !!busy}>
+            {busy === 'move' ? 'MOVING…'
+              : `MOVE ${Number.isFinite(amt) && amt > 0 ? `$${amt.toFixed(2)}` : ''} · SHARD ${from} → ${to}`}
+          </button>
+          <button type="button" className="bs-btn" onClick={onClose} disabled={busy === 'move'}>CLOSE</button>
+        </div>
+
+        {(snap?.transfers || []).length ? (
+          <div className="bs-move-hist">
+            <div className="hd">latest transfers</div>
+            {snap.transfers.slice(0, 6).map((t) => (
+              <div key={t.id || `${t.at}-${t.usd}`} className="row">
+                <span>{t.at ? `${deskTime(t.at)} CST` : '—'}</span>
+                <span>shard {t.from} → {t.to}</span>
+                <b>{usdTxt(t.usd)}</b>
+                <span className={`st ${t.status}`}>{t.status}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+// ── signal trades: a strip's CALL/PUT, bought on its Kalshi 15-minute market ─
+// The two strips and what was traded from them. A signal is a link: it opens
+// a confirmation of exactly what would be bought, and only that form's button
+// reaches the account. The API re-checks everything at that moment -- the
+// signal, the quarter, the bid range -- and then watches the position for its
+// take-profit and stop-loss, every two seconds, until it is out.
+function SignalStrips() {
+  const [open, setOpen] = useState(null);           // { row, label, accent }
+  const [placed, setPlaced] = useState(0);
+  const onSignal = useCallback((row, label, accent) => setOpen({ row, label, accent }), []);
+  const [combo, setCombo] = useState(false);
+  const onCombo = useCallback(() => setCombo(true), []);
+  return (
+    <>
+      <CommoditiesStrip onSignal={onSignal} />
+      <CryptoStrip onSignal={onSignal} onCombo={onCombo} />
+      <SignalTrades refreshKey={placed} />
+      {open && (
+        <SignalTradeSheet {...open} onClose={() => setOpen(null)}
+          onPlaced={() => setPlaced((k) => k + 1)} />
+      )}
+      {combo && <Combo15Sheet onClose={() => setCombo(false)} />}
+    </>
+  );
+}
+
+// ── the fifteen-minute combo ───────────────────────────────────────────────
+// Every fifteen-minute market Kalshi lets a combo hold, crypto and
+// commodities, for the quarter trading now: CALL as YES, PUT as NO. Ticked by
+// default when the DMI is under five minutes old, the bid is 35-90c and the
+// side is at most 5c wide; the rest are listed unticked with the reason. A
+// market with no side (no signal, mixed) or whose quarter the collection does
+// not host cannot be ticked. One stake, $5 unless changed, at most $99.
+function Combo15Sheet({ onClose }) {
+  const [pv, setPv] = useState(null);
+  const [busy, setBusy] = useState('load');
+  const [err, setErr] = useState('');
+  const [keep, setKeep] = useState(() => new Set());
+  const [stake, setStake] = useState('5');
+  const [result, setResult] = useState(null);
+  // One key per confirmation; a fresh build is a fresh confirmation.
+  const keyRef = useRef(newConfirmationKey());
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+
+  const load = useCallback(async () => {
+    setBusy('load'); setErr(''); setResult(null);
+    try {
+      const d = await vidura.combo15Preview();
+      if (!alive.current) return;
+      setPv(d);
+      setKeep(new Set((d.legs || []).filter((l) => l.default).map((l) => l.ticker)));
+      keyRef.current = newConfirmationKey();
+      if (d && d.ok === false) setErr(d.detail || 'no combo can be built');
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const legs = (pv && pv.legs) || [];
+  const chosen = legs.filter((l) => l.selectable && keep.has(l.ticker));
+  const odds = chosen.reduce((acc, l) => acc * ((l.bid_c || 0) / 100), 1);
+  const maxStake = (pv && pv.max_stake_usd) || 99;
+  const stakeN = Number(stake);
+  const stakeOk = Number.isFinite(stakeN) && stakeN > 0 && stakeN <= maxStake;
+  const done = !!(result && result.placed);
+  const canPlace = !busy && !done && chosen.length >= 2 && stakeOk;
+  const toggle = (ticker) => setKeep((prev) => {
+    const next = new Set(prev);
+    if (next.has(ticker)) next.delete(ticker); else next.add(ticker);
+    return next;
+  });
+
+  const place = async () => {
+    if (!canPlace) return;
+    const money = `$${stakeN.toFixed(2)}`;
+    const ok = await confirmDialog({
+      title: `Buy a ${chosen.length}-leg combo for up to ${money}?`,
+      body: `One Kalshi combo on this quarter's fifteen-minute markets: ${chosen
+        .map((l) => `${l.label} ${l.side.toUpperCase()}`).join(', ')}. It pays only if every `
+        + `leg lands — about ${(odds * 100).toFixed(1)}% on the bids. Bought at the market `
+        + `through Kalshi's request-for-quote, spending at most ${money}.`,
+      confirmText: `Buy for ${money}`,
+      cancelText: 'Cancel',
+    });
+    if (!ok) return;
+    setBusy('place'); setErr('');
+    try {
+      const out = await vidura.combo15Place({
+        legs: chosen.map((l) => ({ ticker: l.ticker, side: l.side })),
+        stake_usd: Math.round(stakeN * 100) / 100,
+      }, keyRef.current);
+      if (!alive.current) return;
+      setResult(out);
+      if (!out || !out.placed) setErr((out && out.detail) || 'not placed');
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  };
+
+  const rule = (pv && pv.rule) || {};
+  return createPortal(
+    <div className="bs-luck-scrim" onClick={() => { if (busy !== 'place') onClose(); }}>
+      <div className="bs-luck-sheet bs-combo15" role="dialog" aria-modal="true"
+        aria-label="fifteen-minute combo" onClick={(e) => e.stopPropagation()}>
+        <header className="bs-modal-hd">
+          <h2>15-MINUTE COMBO</h2>
+          <button type="button" className="bs-refresh" onClick={load} disabled={!!busy}
+            aria-label="build again" title="read the markets and the DMI boards again">
+            <span className={busy === 'load' ? 'spin' : ''} aria-hidden="true">↻</span>
+          </button>
+          <button type="button" className="close" disabled={busy === 'place'} onClick={onClose}>×</button>
+        </header>
+        <p className="bs-luck-note">
+          {busy === 'load' && !pv ? 'reading every fifteen-minute market and the DMI boards…' : (
+            <>
+              {chosen.length} of {legs.length} ticked · chance {(odds * 100).toFixed(2)}%
+              {' · '}ticked by default: DMI ≤ {Math.round((rule.fresh_s || 300) / 60)}m old,
+              {' '}CALL → YES / PUT → NO, bid {rule.bid_min_c ?? 35}–{rule.bid_max_c ?? 90}c,
+              {' '}≤ {rule.max_spread_c ?? 5}c wide
+            </>
+          )}
+        </p>
+        <div className="bs-luck-actions">
+          <label className="bs-combo15-stake">
+            Max investment $
+            <input className="bs-input" type="number" min="1" max={maxStake} step="1"
+              value={stake} onChange={(e) => setStake(e.target.value)} disabled={!!busy || done}
+              aria-label="maximum investment in dollars" />
+          </label>
+          <button type="button" className="bs-btn live" onClick={place} disabled={!canPlace}>
+            {busy === 'place' ? 'PLACING…' : `PLACE COMBO — ${chosen.length} LEGS`}
+          </button>
+        </div>
+        {!stakeOk ? <p className="bs-luck-err">max investment is above $0 and at most ${maxStake}</p> : null}
+        {pv && !busy && !done && chosen.length < 2 ? (
+          <p className="bs-luck-err">a combo needs at least two ticked legs</p>
+        ) : null}
+        {err ? <p className="bs-luck-err">{err}</p> : null}
+        {done ? (
+          <p className="bs-luck-ok">
+            PLACED — {result.legs_used} legs, {result.contracts} contracts
+            {result.filled_c != null ? ` at ${result.filled_c}c` : ''}
+            {result.cost_usd != null ? ` · $${Number(result.cost_usd).toFixed(2)}` : ''}
+            {result.detail ? ` · ${result.detail}` : ''}
+          </p>
+        ) : null}
+        <div className="bs-luck-legs">
+          <table>
+            <thead>
+              <tr><th>Keep</th><th>Market</th><th>Signal</th><th>Side</th>
+                <th className="num">Bid</th><th className="num">Ask</th>
+                <th className="num">Spread</th><th className="num">DMI age</th>
+                <th className="num">Closes</th><th>Not ticked because</th></tr>
+            </thead>
+            <tbody>
+              {legs.map((l) => {
+                const on = l.selectable && keep.has(l.ticker);
+                return (
+                  <tr key={l.series} className={on ? '' : 'off'}>
+                    <td>
+                      <input type="checkbox" checked={on} disabled={!l.selectable || !!busy || done}
+                        onChange={() => toggle(l.ticker)}
+                        aria-label={`${l.label}${l.side ? ` ${l.side.toUpperCase()}` : ''}`} />
+                    </td>
+                    <td title={l.ticker || l.series}>{l.label}</td>
+                    <td>{l.signal ? `${SIG_TEXT[l.signal]}${l.confirms ? '✓' : ''}` : '—'}</td>
+                    <td>{l.side ? l.side.toUpperCase() : '—'}</td>
+                    <td className="num">{cents(l.bid_c)}</td>
+                    <td className="num">{cents(l.ask_c)}</td>
+                    <td className="num">{cents(l.spread_c)}</td>
+                    <td className="num">{l.dmi_age_s == null ? '—' : mmss(l.dmi_age_s)}</td>
+                    <td className="num">{l.left_s == null ? '—' : mmss(l.left_s)}</td>
+                    <td className="dim why">{(l.why || []).join('; ')}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+const SIG_TEXT = { call: 'CALL', put: 'PUT' };
+const mmss = (secs) => {
+  const s = Math.max(0, Math.floor(secs));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+};
+const cents = (v) => (v == null ? '—' : `${Number(v).toFixed(Number.isInteger(Number(v)) ? 0 : 1)}c`);
+
+function newConfirmationKey() {
+  try { return `sig-${crypto.randomUUID()}`; } catch { /* older webview */ }
+  return `sig-${Date.now()}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function SignalTradeSheet({ row, label, accent, onClose, onPlaced }) {
+  const signal = row.signal || null;                 // 'call' | 'put' | null (mixed)
+  const [pv, setPv] = useState(null);
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(signal ? 'preview' : '');
+  const [qty, setQty] = useState('10');
+  const [result, setResult] = useState(null);
+  const [now, setNow] = useState(() => Date.now());
+  const [readAt, setReadAt] = useState(null);
+  // ONE key per confirmation: a retry of this same form is the same order.
+  const keyRef = useRef(newConfirmationKey());
+
+  // The quote, read when the form opens and again on ↻. A fifteen-minute
+  // market moves while the form is open, and a bid read a minute ago is not
+  // the one an order would meet. The contracts typed are kept: only the first
+  // read fills in the default.
+  const alive = useRef(true);
+  const seeded = useRef(false);
+  // Set on every mount, not only cleared on unmount: React re-runs effects
+  // (fast refresh, strict mode), and a flag left false never cleared `busy`
+  // -- the form sat with both buttons disabled.
+  useEffect(() => {
+    alive.current = true;
+    return () => { alive.current = false; };
+  }, []);
+  const loadPreview = useCallback(async () => {
+    if (!signal) return;
+    setBusy('preview'); setErr('');
+    try {
+      const d = await vidura.signalTradePreview({ asset: row.bot, signal, confirms: !!row.m5_confirms });
+      if (!alive.current) return;
+      setPv(d);
+      setReadAt(Date.now());
+      if (!seeded.current && d && d.contracts) {
+        seeded.current = true;
+        setQty(String(d.contracts));
+      }
+    } catch (e) {
+      if (alive.current) setErr(errText(e));
+    } finally {
+      if (alive.current) setBusy('');
+    }
+  }, [row.bot, signal, row.m5_confirms]);
+  useEffect(() => { loadPreview(); }, [loadPreview]);
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    const onKey = (e) => { if (e.key === 'Escape' && busy !== 'place') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => { clearInterval(t); window.removeEventListener('keydown', onKey); };
+  }, [busy, onClose]);
+
+  const n = Number(qty);
+  const count = Number.isFinite(n) ? Math.max(1, Math.min(pv?.max_contracts || 100, Math.round(n))) : 0;
+  const maxCost = pv?.max_entry_c != null ? (count * pv.max_entry_c) / 100 : null;
+  const left = pv?.close_time ? (Date.parse(pv.close_time) - now) / 1000 : null;
+  const inRange = pv?.bid_c != null && pv.bid_c > 35 && pv.bid_c < 70;
+  const shortCash = pv?.shard_cash_usd != null && maxCost != null && pv.shard_cash_usd < maxCost;
+  const sideWord = pv?.side === 'no' ? 'NO' : 'YES';
+  // The API refuses an out-of-range bid itself; the form does not offer it
+  // either, so the button can never disagree with the check beside the bid.
+  const canPlace = !!pv?.ok && inRange && !busy && count >= 1 && !(result && result.placed)
+    && (left == null || left > 60);
+
+  // RISKY-BUY: the same market buy, whatever the bid, and nothing watches it
+  // afterwards -- no take-profit, no stop-loss. Still needs a market, a price
+  // to buy at and a minute left, and it asks once more before it spends.
+  const canRisky = !!signal && !!pv?.ticker && pv?.ask_c != null && !busy && count >= 1
+    && !(result && result.placed) && (left == null || left > 60);
+
+  const send = async (risky) => {
+    setBusy('place'); setErr(''); setResult(null);
+    try {
+      const out = await vidura.signalTradePlace({
+        asset: row.bot, signal, confirms: !!row.m5_confirms,
+        ticker: pv.ticker, contracts: count, risky,
+      }, keyRef.current);
+      setResult(out);
+      if (out && out.placed) onPlaced?.();
+    } catch (e) {
+      setErr(errText(e));
+    } finally { setBusy(''); }
+  };
+
+  const place = async () => {
+    if (!canPlace) return;
+    await send(false);
+  };
+
+  const placeRisky = async () => {
+    if (!canRisky) return;
+    const ok = await confirmDialog({
+      title: `RISKY-BUY ${count} ${sideWord} on ${pv.ticker}?`,
+      body: `Buys at market whatever the bid (now ${cents(pv.bid_c)}, ask ${cents(pv.ask_c)}), `
+        + `paying up to ${cents(pv.max_entry_c)}. Nothing watches it afterwards: no `
+        + 'take-profit and no stop-loss. It is held until you sell it or the quarter settles.',
+      confirmText: `Risky-buy ${count} ${sideWord}`,
+      cancelText: 'Cancel',
+    });
+    if (ok) await send(true);
+  };
+
+  const sigColor = signal === 'call' ? 'var(--bs-good, #2fd35b)' : signal === 'put' ? 'var(--bs-crit, #ff4d4d)' : 'var(--bs-ink-3)';
+  return (
+    <div className="bs-luck-scrim" onClick={() => { if (busy !== 'place') onClose(); }}>
+      <div className="bs-luck-sheet bs-sigsheet" role="dialog" aria-modal="true"
+        aria-label={`trade the ${label} signal`} onClick={(e) => e.stopPropagation()}>
+        <header className="bs-modal-hd">
+          <h2>
+            <span style={{ color: accent }}>{label}</span>{' · '}
+            <span style={{ color: sigColor }}>
+              {signal ? SIG_TEXT[signal] : 'mixed'}{signal && row.m5_confirms ? ' ✓' : ''}
+            </span>
+          </h2>
+          <button type="button" className="close" disabled={busy === 'place'} onClick={onClose}>×</button>
+        </header>
+
+        {!signal ? (
+          <p className="bs-luck-err bs-sig-invalid">
+            NOT a valid signal — 1m and 2m disagree (mixed), so there is no direction to trade.
+          </p>
+        ) : null}
+
+        {signal && busy === 'preview' && !pv ? (
+          <p className="bs-luck-note">Reading the current Kalshi 15-minute market…</p>
+        ) : null}
+
+        {signal && pv && pv.valid_signal !== false && pv.ticker ? (
+          <dl className="bs-sig-grid">
+            <dt>Order</dt>
+            <dd>
+              <b>BUY {sideWord}</b> at market
+              <span className="dim"> · {signal === 'call' ? 'CALL → YES (finishes up)' : 'PUT → NO (does not finish up)'}</span>
+            </dd>
+            <dt>Market</dt>
+            <dd>
+              <b>{pv.ticker}</b>
+              <span className="dim">{pv.title ? ` · ${pv.title}` : ''}</span>
+              <span className="dim">{left != null ? ` · closes in ${mmss(left)}` : ''}</span>
+            </dd>
+            <dt>Current bid</dt>
+            <dd>
+              <b>{cents(pv.bid_c)}</b>
+              <span className="dim"> · ask {cents(pv.ask_c)}</span>
+              <span className={`bs-sig-chk ${inRange ? 'ok' : 'bad'}`}>
+                {inRange ? '✓ inside 35–70c' : '✗ must be strictly between 35 and 70c'}
+              </span>
+              <button type="button" className="bs-refresh bs-sig-refresh" onClick={loadPreview}
+                disabled={!!busy || !!(result && result.placed)}
+                aria-label="refresh the bid and ask"
+                title={`re-read the bid and ask now${readAt ? ` — last read ${Math.max(0, Math.round((now - readAt) / 1000))}s ago` : ''}`}>
+                <span className={busy === 'preview' ? 'spin' : ''} aria-hidden="true">↻</span>
+              </button>
+            </dd>
+            <dt>Take profit</dt>
+            {/* Estimates from the ask. The real targets are set once filled,
+                from the order's total cost: its fills plus the fees. */}
+            <dd><b>+{pv.tp_pct}%</b><span className="dim"> · ≈ {cents(pv.tp_c)} · on the total cost, fees in</span></dd>
+            <dt>Stop loss</dt>
+            <dd><b>−{pv.sl_pct}%</b><span className="dim"> · ≈ {cents(pv.sl_c)} · on the total cost, fees in</span></dd>
+            <dt>Contracts</dt>
+            <dd>
+              <input className="bs-input" type="number" min="1" max={pv.max_contracts || 100}
+                value={qty} disabled={!!busy || !!(result && result.placed)}
+                onChange={(e) => setQty(e.target.value)} />
+              <span className="dim">
+                {maxCost != null ? ` · at most $${maxCost.toFixed(2)} (fills now at up to ${cents(pv.max_entry_c)}, or not at all)` : ''}
+              </span>
+            </dd>
+            {pv.shard_cash_usd != null ? (
+              <>
+                <dt>Shard cash</dt>
+                <dd className={shortCash ? 'warn' : ''}>
+                  ${Number(pv.shard_cash_usd).toFixed(2)} on Kalshi shard {pv.exchange_index}
+                  {shortCash
+                    ? ' — this market settles there and the API spends only that shard\'s cash, so Kalshi will likely refuse the order'
+                    : ''}
+                </dd>
+              </>
+            ) : null}
+          </dl>
+        ) : null}
+
+        {pv && !pv.ok && pv.detail ? <p className="bs-luck-err">⚠ {pv.detail}</p> : null}
+        {err ? <p className="bs-luck-err">⚠ {err}</p> : null}
+        {result && !result.placed ? <p className="bs-luck-err">⚠ {result.detail || 'not placed'}</p> : null}
+        {result && result.placed && result.trade ? (
+          result.trade.status === 'unwatched' ? (
+            <p className="bs-luck-ok bs-sig-risky-ok">
+              RISKY-BUY PLACED — {result.trade.filled} {result.trade.side.toUpperCase()} at {cents(result.trade.entry_c)} each, fees in
+              {' · '}no take-profit, no stop-loss — nothing watches it
+            </p>
+          ) : (
+            <p className="bs-luck-ok">
+              PLACED — {result.trade.filled} {result.trade.side.toUpperCase()} at {cents(result.trade.entry_c)} each, fees in
+              {' · '}take-profit {cents(result.trade.tp_c)} · stop-loss {cents(result.trade.sl_c)} · watching
+            </p>
+          )
+        ) : null}
+
+        <div className="bs-luck-actions">
+          {signal ? (
+            <button type="button" className="bs-btn live" onClick={place} disabled={!canPlace}>
+              {busy === 'place' ? 'PLACING…' : `PLACE MARKET ORDER — ${count} ${sideWord}`}
+            </button>
+          ) : null}
+          {signal ? (
+            <button type="button" className="bs-btn risky" onClick={placeRisky} disabled={!canRisky}
+              title="buy at market whatever the bid, with no take-profit or stop-loss watching it">
+              RISKY-BUY
+            </button>
+          ) : null}
+          <button type="button" className="bs-btn" onClick={onClose} disabled={busy === 'place'}>
+            {result && result.placed ? 'DONE' : 'CANCEL'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const TRADE_STATUS = {
+  watching: '● watching', tp: 'take-profit', sl: 'stop-loss',
+  expired: 'held to settle', closed: 'closed elsewhere', unfilled: 'not filled',
+  unwatched: 'risky · no monitor',
+};
+
+function SignalTrades({ refreshKey }) {
+  const [trades, setTrades] = useState([]);
+  const load = useCallback(async () => {
+    try { setTrades((await vidura.signalTrades()).trades || []); } catch { /* the strips still work */ }
+  }, []);
+  useEffect(() => { load(); }, [load, refreshKey]);
+  const watching = trades.some((t) => t.status === 'watching');
+  useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) load(); }, watching ? 4000 : 30000);
+    return () => clearInterval(t);
+  }, [load, watching]);
+  if (!trades.length) return null;
+  return (
+    <div className="bs-commodities bs-sigtrades">
+      <div className="bs-commodities-hd">
+        <span className="lbl">⚡ SIGNAL TRADES</span>
+        <span className="note">Kalshi 15m · TP +20% · SL −40% · watched every 2s</span>
+      </div>
+      <div className="bs-commodities-rows">
+        {trades.slice(0, 8).map((t) => (
+          <div key={t.id} className={`bs-commrow bs-sigrow ${t.status}`} title={t.note || ''}>
+            <span className="tkr">{String(t.asset).toUpperCase().replace(/15$/, '')}</span>
+            <span className="tf">{SIG_TEXT[t.signal] || t.signal} → {String(t.side).toUpperCase()}</span>
+            <span className="last">{t.filled ? `${t.filled}@${cents(t.entry_c)}` : '—'}</span>
+            <span className="tf">TP {cents(t.tp_c)} · SL {cents(t.sl_c)}</span>
+            <span className={`st ${t.status}`}>
+              {TRADE_STATUS[t.status] || t.status}{t.exit_c != null ? ` ${cents(t.exit_c)}` : ''}
+            </span>
+            <span className="tf">{deskTime(t.opened_at)} CST</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -3057,6 +3965,7 @@ export default function BotStationSite() {
               {pvTotal !== null ? usd(pvTotal) : '—'}</span></div>
           <div className="bs-cell"><span className="k">Cash / Positions</span>
             <span className="v">{pv ? `${usd(pv.cash_usd)} · ${usd(pv.positions_usd)}` : '—'}</span></div>
+          <MoveMoneyCell />
           <div className="bs-cell"><span className="k">3H P&L</span>
             <span className="v" style={{ color: plColor(pnlWin?.h3) }}>{pnlWin ? usd(pnlWin.h3) : '—'}</span></div>
           <div className="bs-cell"><span className="k">6H P&L</span>
@@ -3196,8 +4105,7 @@ export default function BotStationSite() {
               operator={user?.username} onPick={setConsole} onLogs={setLogsFor}
               onSunDblClick={() => setLaunchAll(true)} />
             <div className="bs-strips">
-              <CommoditiesStrip />
-              <CryptoStrip />
+              <SignalStrips />
             </div>
           </div>
 

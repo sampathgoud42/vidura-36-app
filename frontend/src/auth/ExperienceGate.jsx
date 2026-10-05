@@ -1,11 +1,11 @@
 import React, {
   useCallback, useLayoutEffect, useMemo, useState,
 } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { auth } from '../shared/viduraApi.js';
 import {
-  ExperienceContext, LITE, REGULAR, previousExperience, saveExperience,
-  savedExperience, setRunningExperience, useExperience,
+  BOT, BOT_HOME, ExperienceContext, LITE, REGULAR, previousExperience,
+  saveExperience, savedExperience, setRunningExperience, useExperience,
 } from '../shared/experience.js';
 import { ExperienceIcon } from '../shared/ExperienceControls.jsx';
 import './experienceGate.css';
@@ -41,10 +41,21 @@ const CHOICES = [
       'HOT scan, options flow, tickers', 'Bot Station'],
     go: 'Use regular',
   },
+  {
+    mode: BOT,
+    name: 'Bot Only Mode',
+    blurb: 'Just the Bot Station. Every other world stays shut, and nothing '
+      + 'of theirs is ever called.',
+    points: ['Bots: launch, stop, logs', 'Commodity & crypto signals',
+      'Signal trades on Kalshi 15m', 'Luck parley', 'No desk feeds, charts or scans'],
+    go: 'Use bot only',
+  },
 ];
 
 export default function ExperienceGate({ children }) {
   const [mode, setMode] = useState(savedExperience);
+  const { pathname } = useLocation();
+  const navigate = useNavigate();
 
   // A layout effect, so it lands before any effect below it: a board's first
   // requests go out from its effects, and the API client has to know what it
@@ -57,11 +68,22 @@ export default function ExperienceGate({ children }) {
   const choose = useCallback((next) => {
     saveExperience(next);
     setMode(next);
-  }, []);
+    // Bot only opens on the one world it has.
+    if (next === BOT) navigate(BOT_HOME);
+  }, [navigate]);
 
-  const value = useMemo(() => ({ mode, lite: mode === LITE, choose }), [mode, choose]);
+  const value = useMemo(() => ({
+    mode, lite: mode === LITE, bot: mode === BOT, choose,
+  }), [mode, choose]);
 
   if (!mode) return <ExperienceChooser onChoose={choose} />;
+
+  // Bot only: every other route leads to the Bot Station. Redirected rather
+  // than walled, and before anything below mounts, so another world's board
+  // never starts -- not one of its timers, sockets or requests.
+  if (mode === BOT && !pathname.startsWith(BOT_HOME)) {
+    return <Navigate to={BOT_HOME} replace />;
+  }
 
   return (
     <ExperienceContext.Provider value={value}>

@@ -437,3 +437,43 @@
   .ss-bp .sig { white-space: normal; min-width: 140px; max-width: 168px; line-height: 1.35; }
   .ss-bp-note { padding-bottom: calc(16px + env(safe-area-inset-bottom)); }
 }
+
+/* The Telegram feed: a button at the head's end, and a small sheet. */
+.ss-tgbtn {
+  margin-left: 8px; margin-right: 0 !important; min-width: 28px; height: 24px; padding: 0 6px;
+  border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.14); background: transparent;
+  color: var(--tr-dim, #9aa3d0); font-size: 12px; line-height: 1; cursor: pointer;
+}
+.ss-tgbtn:hover { color: var(--ss-accent, #5b6af0); border-color: var(--ss-accent, #5b6af0); }
+.ss-viewer.ss-tg { max-width: 520px; height: auto; }
+.ss-tg-body { padding: 12px 14px 14px; overflow: auto; font-size: 12px; }
+.ss-tg-state { margin: 0 0 8px; color: #9aa3d0; }
+.ss-tg-state.on { color: #34d399; }
+.ss-tg-steps { list-style: decimal; margin: 0 0 10px; padding-left: 18px; color: #9aa3d0; line-height: 1.5; }
+.ss-tg-f { display: flex; flex-direction: column; margin: 8px 0 0; }
+.ss-tg-f span {
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #5f679b; margin-bottom: 4px;
+}
+/* 16px so Safari does not zoom the page on focus. */
+.ss-tg-f input {
+  height: 36px; padding: 0 10px; border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.14);
+  background: #0b0c16; color: inherit; font-family: ui-monospace, Consolas, monospace; font-size: 16px;
+}
+.ss-tg-f input:focus { outline: none; border-color: var(--ss-accent, #5b6af0); }
+.ss-tg-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 10px; }
+.ss-tg-switch { display: flex; align-items: center; gap: 6px; margin-left: auto; cursor: pointer; }
+.ss-tg-switch input { width: 18px; height: 18px; margin: 0; accent-color: var(--ss-accent, #5b6af0); }
+.ss-tg-chats { list-style: none; margin: 8px 0 0; padding: 0; }
+.ss-tg-chats button {
+  display: block; width: 100%; margin-top: 4px; padding: 8px 10px; text-align: left; cursor: pointer;
+  border-radius: 8px; border: 1px solid rgba(255, 255, 255, 0.12); background: transparent; color: inherit;
+}
+.ss-tg-chats button.on { border-color: var(--ss-accent, #5b6af0); }
+.ss-tg-chats span { color: #5f679b; font-size: 11px; }
+.ss-tg-note { margin: 8px 0 0; color: #9aa3d0; }
+.ss-tg-ok { margin: 8px 0 0; color: #34d399; }
+.ss-tg-err { margin: 8px 0 0; color: #f87171; }
+@media (pointer: coarse) {
+  .ss-tgbtn { min-width: 44px; height: 44px; }
+  .ss-tg-switch { min-height: 44px; }
+}
