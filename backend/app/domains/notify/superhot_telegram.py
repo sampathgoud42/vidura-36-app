@@ -2,14 +2,16 @@
 
 SUPERHOT: a ticker that joins the desk's SUPERHOT list is posted at once,
 with its DMI direction (below). HOT: the whole HOT board is posted every half
-hour, 09:00 to 15:00 CT -- a snapshot, not a diff:
+hour, 09:00 to 15:00 CT, on 5-minute, 15-minute and 1-hour bars -- three
+messages a slot, each a snapshot, not a diff:
 
     🌶️ HOT · 5m bars · 10:30 CT · 12 names
     🟢 NVDA DMI UP · ADX 31.2 · +DI 30.1 / −DI 11.8 · 182.40
     🔻 TSLA DMI DOWN · ADX 28.4 · +DI 12.0 / −DI 27.9 · 241.10
 
-Each half-hour slot is recorded as a TelegramPost ("hot:<date>:<HH:MM>"), so a
-restart does not post the same slot twice; a slot missed while the server was
+Each slot and bar is recorded as a TelegramPost ("hot:<date>:<HH:MM>" for
+the 5-minute board, with ":15min" / ":1h" after it for the others), so a
+restart does not post the same one twice; a slot missed while the server was
 down is posted late, as long as its half hour has not passed.
 
 Same bot token, same chat, same on/off switch as the Super Signals feed
@@ -54,6 +56,8 @@ DIRECTION = {"call": ("🟢", "UP"), "put": ("🔻", "DOWN")}
 HEAD = "🔥 SUPERHOT"
 HOT_HEAD = "🌶️ HOT"
 HOT_FIRST, HOT_LAST = (9, 0), (15, 0)      # the half-hour snapshots, inclusive
+HOT_INTERVALS = ("5min", "15min", "1h")      # one HOT message each, per slot
+BAR_LABEL = {"5min": "5m", "15min": "15m", "30min": "30m", "1h": "1H"}
 
 
 def desk_open(now: datetime) -> bool:
@@ -99,7 +103,7 @@ def format_rows(rows: list[dict], interval: str) -> str:
 def format_hot(rows: list[dict], interval: str, slot: str) -> str:
     from app.platform import notify
 
-    lines = [f"{HOT_HEAD} · {interval.replace('min', 'm')} bars · {slot} CT · "
+    lines = [f"{HOT_HEAD} · {BAR_LABEL.get(interval, interval)} bars · {slot} CT · "
              f"{len(rows)} name{'s' if len(rows) != 1 else ''}"]
     if not rows:
         lines.append("Nothing clears the HOT gates right now.")
@@ -188,15 +192,20 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
                 cred, live = _credential(db, tenant_id, keyring)
             if cred is None:
                 continue
-            hot_id = f"hot:{day}:{slot}" if slot else None
+            # The 5-minute board keeps the id it was first posted under, so
+            # adding the other bars did not repost a slot already sent.
+            hot_ids = ({iv: f"hot:{day}:{slot}" + ("" if iv == "5min" else f":{iv}")
+                        for iv in HOT_INTERVALS} if slot else {})
             with session_scope() as db:
                 repo = TenantRepository(db, tenant_id)
-                hot_due = bool(hot_id) and db.scalar(repo.query(TelegramPost).where(
-                    TelegramPost.signal_id == hot_id)) is None
+                done = {p.signal_id for p in db.scalars(repo.query(TelegramPost).where(
+                    TelegramPost.signal_id.in_(list(hot_ids.values())))).all()} if hot_ids else set()
+            hot_due = [iv for iv, pid in hot_ids.items() if pid not in done]
             if not desk_open(now) and not hot_due:
                 continue
-            board = _board(tenant_id, cred, live, interval)
-            listed = superhot_rows(board) if desk_open(now) else []
+            boards = {iv: _board(tenant_id, cred, live, iv)
+                      for iv in dict.fromkeys(hot_due + ([interval] if desk_open(now) else []))}
+            listed = superhot_rows(boards[interval]) if desk_open(now) else []
             with session_scope() as db:
                 repo = TenantRepository(db, tenant_id)
                 feed = db.scalar(repo.query(TelegramFeed))
@@ -215,8 +224,8 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
                     if fresh:
                         messages.append((format_rows([r for _, r in fresh], interval),
                                          [pid for pid, _ in fresh]))
-                if hot_due:
-                    messages.append((format_hot(board, interval, slot), [hot_id]))
+                for iv in hot_due:
+                    messages.append((format_hot(boards[iv], iv, slot), [hot_ids[iv]]))
                 for text, record in messages:
                     try:
                         notify.send("telegram", text=text, token=token, chat_id=feed.chat_id)
