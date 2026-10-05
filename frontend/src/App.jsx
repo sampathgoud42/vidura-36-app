@@ -80,7 +80,9 @@ export default function App() {
               <WorldGate id="36-trade-desk"><Desk36 /></WorldGate>} />
             <Route path="/bot-station/*" element={
               <WorldGate id="bot-station">
-                <RegularOnly world="Bot Station"><BotStation /></RegularOnly>
+                {/* No RegularOnly: Lightweight opens it as the compact board (PV,
+                    crypto DMI, luck parley, rain, cores) and asks for nothing else. */}
+                <BotStation />
               </WorldGate>} />
             <Route path="/breakout-radar/*" element={
               <WorldGate id="breakout-radar">

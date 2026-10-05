@@ -117,6 +117,12 @@ const LITE_PATHS = [
   '/super-signals/best-pairs',  // the best pair, and the arm form's pairs
   '/super-signals/rank',        // the arm form's signal types
   '/super-signals/desk/',       // the signal desk's start/stop switch (admins)
+  // The Bot Station's compact board, which LITE opens it in: the cores and
+  // their consoles, the crypto DMI strip and its trades, the luck parley
+  // (all under /bots), the Kalshi account's value, and the rain board.
+  '/bots',
+  '/portfolio',
+  '/climate/',
 ];
 
 function liteRefuses(path) {
@@ -131,6 +137,7 @@ const BOT_PATHS = [
                                 // signal trades, the luck parley, reconcile
   '/portfolio',                 // the Kalshi account's value and its history
   '/trade-history',             // the account's settled record
+  '/climate/',                  // the Rain Today board and its trades
 ];
 
 function botRefuses(path) {

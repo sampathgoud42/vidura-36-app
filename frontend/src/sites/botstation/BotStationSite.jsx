@@ -6,6 +6,7 @@ import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
 import LiveModeNotice, { useLiveLock } from '../../shared/LiveModeNotice.jsx';
 import { deskTime } from '../../shared/cst.js';
+import { useExperience } from '../../shared/experience.js';
 import '../../shared/worldHeader.css';
 import './botstation.css';
 
@@ -3880,8 +3881,137 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
 }
 
 // ── the world ──────────────────────────────────────────────────────────────
+// ── compact station: phones, LITE mode, or by choice ────────────────────────
+// One column, in the order the operator asked for and nothing else:
+//   PV (cash · positions) → Crypto DMI → Luck Parley → Rain Today → Bot cores
+// Every section is the desktop's own component, whole, so a strip, a sheet or
+// a trade behaves exactly as it does on the big board; only the frame around
+// them changes. "Desktop version" switches to the full board and the choice
+// sticks per browser (VIEW_KEY), as does "compact view" from the desktop.
+const VIEW_KEY = 'vidura.botstation.view';     // 'compact' | 'desktop' | absent
+
+function readViewPref() {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    return v === 'compact' || v === 'desktop' ? v : null;
+  } catch { return null; }
+}
+
+function useNarrow(query = '(max-width: 760px)') {
+  const get = () => (typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia(query).matches : false);
+  const [narrow, setNarrow] = useState(get);
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mq = window.matchMedia(query);
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener ? mq.addEventListener('change', on) : mq.addListener(on);
+    return () => (mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener(on));
+  }, [query]);
+  return narrow;
+}
+
+function CompactCrypto() {
+  const [open, setOpen] = useState(null);           // { row, label, accent }
+  const [combo, setCombo] = useState(false);
+  const onSignal = useCallback((row, label, accent) => setOpen({ row, label, accent }), []);
+  const onCombo = useCallback(() => setCombo(true), []);
+  return (
+    <>
+      <CryptoStrip onSignal={onSignal} onCombo={onCombo} />
+      {open && <SignalTradeSheet {...open} onClose={() => setOpen(null)} onPlaced={() => {}} />}
+      {combo && <Combo15Sheet onClose={() => setCombo(false)} />}
+    </>
+  );
+}
+
+function CompactStation({ user, pv, pvTotal, botStates, clock, anyLive, runningCount,
+  onCore, onDesktop }) {
+  const status = anyLive ? 'LIVE' : runningCount ? 'PAPER OPS' : 'IDLE';
+  return (
+    <main className="bsc" aria-label="Bot Station, compact">
+      <section className="bsc-pv" aria-label="portfolio value">
+        <div className="bsc-pv-top">
+          <span className="bsc-eyebrow">Portfolio value</span>
+          <span className="bsc-clock">{clock.toLocaleTimeString('en-US', {
+            timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })} CST</span>
+          <span className={`bsc-status ${anyLive ? 'live' : runningCount ? 'paper' : 'idle'}`}>
+            <i aria-hidden="true" />{status}
+          </span>
+        </div>
+        <div className="bsc-pv-value">{pvTotal !== null ? usd(pvTotal) : '—'}</div>
+        <dl className="bsc-pv-split">
+          <div><dt>Cash</dt><dd>{pv ? usd(pv.cash_usd) : '—'}</dd></div>
+          <div><dt>Positions</dt><dd>{pv ? usd(pv.positions_usd) : '—'}</dd></div>
+        </dl>
+      </section>
+
+      <section className="bsc-sec" aria-label="crypto DMI">
+        <CompactCrypto />
+      </section>
+
+      <section className="bsc-sec" aria-label="luck parley">
+        <LuckPanel />
+      </section>
+
+      <section className="bsc-sec" aria-label="rain today">
+        <RainPanel />
+      </section>
+
+      <section className="bsc-sec bsc-cores" aria-label="bot cores">
+        <header className="bsc-sechd">
+          <h2>Helios · Bot cores</h2>
+          <span>{runningCount}/{botStates.length} running</span>
+        </header>
+        <ul>
+          {botStates.map((b) => (
+            <li key={b.key}>
+              <button type="button" className="bsc-core" onClick={() => onCore(b.key)}
+                disabled={!user} aria-label={`${b.label} ${b.status} — open its console`}>
+                <span className={`bsc-core-dot bs-dot-${b.status}`} aria-hidden="true" />
+                <span className="bsc-core-name">
+                  <b style={{ color: b.accent }}>{b.label}</b>
+                  <small>{b.sub}</small>
+                </span>
+                <span className="bsc-core-st">
+                  <span className={`bs-st-${b.status}`}>{b.status}</span>
+                  {b.pct !== null && b.pct !== undefined && (
+                    <small className={b.pct >= 0 ? 'up' : 'down'}>
+                      {b.pct >= 0 ? '+' : ''}{Number(b.pct).toFixed(2)}%
+                    </small>
+                  )}
+                  {(b.status === 'LIVE' || b.status === 'PAPER') && b.startedAt && (
+                    <small>⏱ {fmtElapsed(b.startedAt, clock.getTime())}</small>
+                  )}
+                </span>
+                <span className="bsc-chev" aria-hidden="true">›</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <button type="button" className="bsc-switch" onClick={onDesktop}>
+        Desktop version
+      </button>
+    </main>
+  );
+}
+
 export default function BotStationSite() {
   const [user, setUser] = useState(null);
+  // Compact on a phone or in LITE mode, unless "Desktop version" was chosen
+  // in this browser -- and on any screen once "compact view" was.
+  const { lite } = useExperience();
+  const narrow = useNarrow();
+  const [viewPref, setViewPref] = useState(readViewPref);
+  const compact = viewPref === 'compact' || (viewPref !== 'desktop' && (lite || narrow));
+  const chooseView = useCallback((v) => {
+    setViewPref(v);
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* this load only */ }
+    window.scrollTo(0, 0);
+  }, []);
   const [userErr, setUserErr] = useState(false);
   const [statuses, setStatuses] = useState({});   // key -> BotStatusOut
   const [pv, setPv] = useState(null);
@@ -4057,6 +4187,15 @@ export default function BotStationSite() {
     if (!user) return undefined;
     vidura.bots().then(setBots).catch(() => {});
     loadStatuses();
+    if (compact) {
+      // The compact board shows the cores and PV and nothing of the feeds:
+      // it asks for those two only (PV without its daily history).
+      const pvOnly = () => vidura.portfolio(user.user_id).then(setPv).catch(() => {});
+      pvOnly();
+      const c1 = setInterval(() => { if (!document.hidden) loadStatuses(); }, 10_000);
+      const c2 = setInterval(() => { if (!document.hidden) pvOnly(); }, 60_000);
+      return () => { clearInterval(c1); clearInterval(c2); };
+    }
     loadFeed();
     loadPv();
     loadHist();
@@ -4071,7 +4210,7 @@ export default function BotStationSite() {
     return () => {
       clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4);
     };
-  }, [user, loadStatuses, loadFeed, loadPv, loadHist]);
+  }, [user, compact, loadStatuses, loadFeed, loadPv, loadHist]);
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
@@ -4260,7 +4399,17 @@ export default function BotStationSite() {
             {user ? user.username.charAt(0).toUpperCase() + user.username.slice(1) : 'NO OPERATOR'}
           </span>
         )} />
-      <div className="bs-content">
+      <div className={`bs-content ${compact ? 'bs-content--compact' : ''}`}>
+        {compact ? (
+          <CompactStation user={user} pv={pv} pvTotal={pvTotal} botStates={botStates}
+            clock={clock} anyLive={anyLive} runningCount={runningCount}
+            onCore={setConsole} onDesktop={() => chooseView('desktop')} />
+        ) : (
+        <>
+        <button type="button" className="bs-viewswitch" onClick={() => chooseView('compact')}
+          title="one column: PV, Crypto DMI, Luck Parley, Rain Today and the bot cores">
+          Compact view
+        </button>
 
         {/* status strip */}
         <div className="bs-bar">
@@ -4543,6 +4692,8 @@ export default function BotStationSite() {
             ))}
           </div>
         </div>
+        </>
+        )}
 
         {logsFor && user && (
           <BotLogsOverlay botKey={logsFor} user={user} onClose={() => setLogsFor(null)} />
