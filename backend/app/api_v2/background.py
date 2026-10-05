@@ -15,6 +15,8 @@ Three of them, and the first one is the reason this module exists at all:
   luck schedule  the scheduled Luck parley: at 9:00 and 18:00 Chicago time,
                  a ticket built and placed for every operator who has the
                  schedule switched on. Checked every minute.
+  super telegram new Super Signals, posted to each operator's Telegram chat
+                 when their feed is on. Every thirty seconds.
 
 ``monitor.sweep_all_tenants`` existed and was called by NOTHING. The risk
 heartbeat table had zero rows in it, which is exactly what a monitor that has
@@ -128,12 +130,19 @@ def _run_luck_schedule() -> None:
     luck_schedule.sweep_all_tenants()
 
 
+def _post_super_signals() -> None:
+    from app.domains.notify import super_telegram
+
+    super_telegram.sweep_all_tenants()
+
+
 _LOOPS: dict[str, _Loop] = {}
 
 
 def start_all() -> None:
     """Start every loop. Idempotent, so a reload does not double them up."""
     from app.domains.botstation import luck_schedule, signal_trade
+    from app.domains.notify import super_telegram
 
     if not _LOOPS:
         _LOOPS["risk-monitor"] = _Loop("risk-monitor", MONITOR_INTERVAL_S,
@@ -144,6 +153,8 @@ def start_all() -> None:
                                         _sweep_signal_trades)
         _LOOPS["luck-schedule"] = _Loop("luck-schedule", luck_schedule.POLL_S,
                                         _run_luck_schedule)
+        _LOOPS["super-telegram"] = _Loop("super-telegram", super_telegram.POLL_S,
+                                         _post_super_signals)
     for loop in _LOOPS.values():
         loop.start()
 

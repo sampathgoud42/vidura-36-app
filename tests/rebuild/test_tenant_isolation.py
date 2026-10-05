@@ -286,6 +286,29 @@ def test_a_luck_schedule_belongs_to_the_operator_who_set_it(client, alice, bob):
     assert [r["detail"] for r in mine["runs"]] == ["alice's ticket"]
 
 
+def test_a_telegram_feed_belongs_to_the_operator_who_set_it(client, alice, bob):
+    """A Telegram feed holds a bot token and posts to a chat. Alice saving hers
+    leaves Bob with none; Bob switching his off does not touch hers; and no
+    answer, to either of them, carries the token."""
+    token = "123456789:" + "A" * 35
+    saved = client.put("/api/v1/super-signals/telegram",
+                       json={"token": token, "chat_id": "-1001234567890",
+                             "enabled": True}, headers=alice.headers)
+    assert saved.status_code == 200, saved.text
+    assert token not in saved.text
+
+    theirs = client.get("/api/v1/super-signals/telegram", headers=bob.headers).json()
+    assert theirs["token_saved"] is False and theirs["chat_id"] is None
+    assert theirs["enabled"] is False
+
+    off = client.put("/api/v1/super-signals/telegram", json={"enabled": False},
+                     headers=bob.headers)
+    assert off.status_code == 200, off.text
+    mine = client.get("/api/v1/super-signals/telegram", headers=alice.headers)
+    assert mine.json()["enabled"] is True and mine.json()["chat_id"] == "-1001234567890"
+    assert mine.json()["token_saved"] is True and token not in mine.text
+
+
 def test_a_luck_job_and_preview_belong_to_the_operator_who_made_them(client, alice, bob):
     """A luck job's result can hold a ticket's legs, stake and fills, and a
     preview token buys the legs it was shown. Both belong to the operator who
@@ -534,6 +557,12 @@ COVERED_BY_NAMED_TESTS = {
         "test_a_luck_job_and_preview_belong_to_the_operator_who_made_them",
     "/api/v1/bots/luck/schedule":
         "test_a_luck_schedule_belongs_to_the_operator_who_set_it",
+    "/api/v1/super-signals/telegram":
+        "test_a_telegram_feed_belongs_to_the_operator_who_set_it",
+    # The caller's own bot (a token in the request, or the caller's saved one)
+    # and the caller's own saved chat; nothing names another operator.
+    "/api/v1/super-signals/telegram/chats": "no tenant-addressable identifier",
+    "/api/v1/super-signals/telegram/test": "no tenant-addressable identifier",
     "/api/v1/bots/signal-trade/place":
         "test_a_signal_trade_belongs_to_the_operator_who_placed_it",
     "/api/v1/bots/signal-trades":

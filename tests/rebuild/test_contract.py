@@ -105,6 +105,12 @@ CONTRACT: list[tuple[str, str]] = [
     # The scheduled Luck parley: on/off, its ticket, its runs.
     ("GET", f"{V1}/bots/luck/schedule"),
     ("PUT", f"{V1}/bots/luck/schedule"),
+    # New Super Signals to the operator's Telegram chat: the feed, finding the
+    # chat id, a test message.
+    ("GET", f"{V1}/super-signals/telegram"),
+    ("PUT", f"{V1}/super-signals/telegram"),
+    ("POST", f"{V1}/super-signals/telegram/chats"),
+    ("POST", f"{V1}/super-signals/telegram/test"),
     # A DMI strip's CALL/PUT bought by hand on the asset's Kalshi 15-minute
     # market, then watched for its take-profit and stop-loss. Added after the
     # freeze.
