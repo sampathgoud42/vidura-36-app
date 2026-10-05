@@ -106,7 +106,8 @@ def commodity_signals(interval: str = Query(default="5min"),
 @deps.tenant_scoped
 def crypto_signals(force: bool = Query(default=False),
                    tenant: Tenant = Depends(deps.current_tenant)) -> dict:
-    """BTC, ETH, SOL, DOGE and XRP on 1m/2m/5m DMI, from Coinbase.
+    """The crypto board on 2m/5m/10m/15m/30m DMI, from Coinbase. The signal is
+    2m, 5m and 15m agreeing; 30m agreeing too is the confirmation (✓).
 
     No credential: Coinbase's candle feed is public, so this spends nothing
     and needs nothing from the operator. It still requires a session, because

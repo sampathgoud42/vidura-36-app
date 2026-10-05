@@ -1420,3 +1420,10 @@
 .bsc .bs-rain-table th:nth-child(5), .bsc .bs-rain-table td:nth-child(5),
 .bsc .bs-rain-table th:nth-child(6), .bsc .bs-rain-table td:nth-child(6) { display: none; }
 .bsc .bs-rain-table td:first-child { white-space: normal; }
+/* Five timeframes now (2m 5m 10m 15m 30m): the phone's second line is five
+   columns, the first line spans them -- ticker, price, the trade link. */
+.bsc .bs-commrow { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.bsc .bs-commrow .last { grid-column: 2 / span 3; }
+.bsc .bs-commrow .sig-btn { grid-column: 5; }
+.bsc .bs-commrow .tf { font-size: 11.5px; }
+.bsc .bs-commrow.err .note { grid-column: 2 / span 4; }

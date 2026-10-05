@@ -699,7 +699,9 @@ function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
   return <div ref={hostRef} className="bs-stage" data-testid="bs-stage" />;
 }
 
-// ── DMI strip: one row per instrument, 1m/2m/5m/10m DI-dominance readout ──
+// ── DMI strip: one row per instrument, 2m/5m/10m/15m/30m DI-dominance ──
+// The signal is 2m, 5m and 15m agreeing; 30m agreeing too is the ✓. 10m is
+// context. 1m is still in the row (the V7/V8 bots read it) but not shown.
 // Shared by the commodities and crypto panels. They ask the same question of
 // different feeds and render the identical row, so this is written once —
 // two copies of a signal readout drift the first time either is touched, and
@@ -767,7 +769,7 @@ function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2, onSignal,
     <div className="bs-commodities">
       <div className="bs-commodities-hd">
         <span className="lbl">{icon} {title}</span>
-        <span className="note">1m/2m/5m/10m DMI{snap?.meta?.source ? ` · ${snap.meta.source}` : ''}{err && ' · ⚠'}</span>
+        <span className="note">2m/5m/10m/15m/30m DMI{snap?.meta?.source ? ` · ${snap.meta.source}` : ''}{err && ' · ⚠'}</span>
         {snap?.age_s != null && (
           <span className="note" title={`took ${snap.meta?.took_s ?? '—'}s · source ${snap.meta?.source ?? '—'}`}>
             {ago(snap.age_s)}
@@ -804,24 +806,23 @@ function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2, onSignal,
             <div key={r.bot} className="bs-commrow">
               <span className="tkr" style={{ color: accent }}>{label}</span>
               <span className="last">{price(r.last)}</span>
-              {tf(r, 'm1', '1m')}
               {tf(r, 'm2', '2m')}
               {tf(r, 'm5', '5m')}
               {tf(r, 'm10', '10m')}
-              {/* The signal is 1m+2m agreement. 5m is shown beside it and
-                  marked when it agrees, rather than folded into the rule —
-                  widening what fires a trade is a trading change, not a
-                  display one. */}
+              {tf(r, 'm15', '15m')}
+              {tf(r, 'm30', '30m')}
+              {/* The signal is 2m, 5m and 15m agreeing; 30m agreeing too is
+                  the ✓ beside it. 10m is shown and decides nothing. */}
               {/* A link to trade it: CALL buys YES and PUT buys NO on the
                   asset's Kalshi 15-minute market, after a confirmation.
                   "mixed" opens the same form, to say why there is nothing. */}
               <button type="button" className="sig sig-btn" style={{ color: sideColor(r.signal) }}
                 onClick={() => onSignal?.(r, label, accent)}
                 title={`${r.signal
-                  ? `1m and 2m agree${r.m5_confirms ? '; 5m confirms' : '; 5m does not confirm'}`
-                  : '1m and 2m disagree — no clear signal'} — click to trade it on Kalshi`}>
+                  ? `2m, 5m and 15m agree${(r.confirms ?? r.m5_confirms) ? '; 30m confirms' : '; 30m does not confirm'}`
+                  : '2m, 5m and 15m do not all agree — no clear signal'} — click to trade it on Kalshi`}>
                 {r.signal ? sideLabel(r.signal) : 'mixed'}
-                {r.signal && r.m5_confirms && <span className="slope" title="5m confirms">✓</span>}
+                {r.signal && (r.confirms ?? r.m5_confirms) && <span className="slope" title="30m confirms">✓</span>}
               </button>
             </div>
           );
@@ -2484,7 +2485,7 @@ function SignalTradeSheet({ row, label, accent, onClose, onPlaced }) {
 
         {!signal ? (
           <p className="bs-luck-err bs-sig-invalid">
-            NOT a valid signal — 1m and 2m disagree (mixed), so there is no direction to trade.
+            NOT a valid signal — 2m, 5m and 15m do not all agree (mixed), so there is no direction to trade.
           </p>
         ) : null}
 

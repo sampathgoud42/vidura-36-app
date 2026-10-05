@@ -1,4 +1,4 @@
-"""Commodity DMI for the bot station: gold, silver and oil, 1m/2m/5m/10m.
+"""Commodity DMI for the bot station: gold, silver and oil, 2m/5m/10m/15m/30m.
 
 The commodity bots trade Kalshi contracts on gold, silver and oil, but Kalshi
 does not publish a price series to compute an indicator from. So the reading
@@ -89,9 +89,12 @@ def proxies_from_registry() -> list[Proxy]:
 
 def _bars_from_tradier(cred, symbol: str, *, sandbox: bool) -> list[dict]:
     """1-minute bars for the tracking ETF. The in-session source."""
+    # Six days, not the indicator default of two: the 30m column needs about
+    # 14.5 hours of bars, over two full sessions, and two calendar days back
+    # from a Monday morning is mostly weekend.
     return venue_mod.timesales(
         symbol, interval="1min", cred=cred, sandbox=sandbox,
-        start=indicators.start_date("1min")) or []
+        start=indicators.start_date("5min", None)) or []
 
 
 def _bars_from_api_ninjas(symbol: str, *, poll: bool = False) -> list[dict]:
