@@ -1066,7 +1066,7 @@ function LuckPanel() {
   const [busy, setBusy] = useState('');
   const [elapsed, setElapsed] = useState(0);
   const [form, setForm] = useState({
-    min_legs: '5', max_legs: '24', min_leg_c: '60', max_leg_c: '98',
+    min_legs: '5', max_legs: '24', min_leg_c: '67', max_leg_c: '97',
     min_volume_usd: '5000', min_usd: '5', max_usd: '7.5',
     // The engine's own gates, now the operator's. Seeded with what the
     // long shot used to inherit silently: 3c wide, closing within 72h.
@@ -1131,7 +1131,7 @@ function LuckPanel() {
   const ticketNow = () => ({
     min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
     min_usd: n(form.min_usd, 5), max_usd: n(form.max_usd, 7.5),
-    min_leg_c: n(form.min_leg_c, 60), max_leg_c: n(form.max_leg_c, 98),
+    min_leg_c: n(form.min_leg_c, 67), max_leg_c: n(form.max_leg_c, 97),
     min_volume_usd: n(form.min_volume_usd, 0), max_spread_c: n(form.max_spread_c, 3),
     max_hours: n(form.max_hours, 72), no_side_only: !!form.no_side,
     sports: sportsOff.size ? [...sportsOn].sort() : [],
@@ -1193,8 +1193,8 @@ function LuckPanel() {
     try {
       const job = await vidura.luckPreview({
         min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
-        min_leg_c: n(form.min_leg_c, 60),
-        max_leg_c: n(form.max_leg_c, 98),
+        min_leg_c: n(form.min_leg_c, 67),
+        max_leg_c: n(form.max_leg_c, 97),
         min_volume_usd: n(form.min_volume_usd, 0),
         max_spread_c: n(form.max_spread_c, 3),
         max_hours: n(form.max_hours, 72),

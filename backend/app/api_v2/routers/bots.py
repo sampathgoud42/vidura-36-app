@@ -815,8 +815,8 @@ def reconcile(apply: bool = Query(default=True),
 class LuckPreviewRequest(BaseModel):
     min_legs: int = Field(default=5, ge=2, le=MAX_COMBO_LEGS)
     max_legs: int = Field(default=24, ge=2, le=MAX_COMBO_LEGS)
-    min_leg_c: int = Field(default=60, ge=5, le=98)
-    max_leg_c: int = Field(default=98, ge=6, le=99)
+    min_leg_c: int = Field(default=67, ge=5, le=98)
+    max_leg_c: int = Field(default=97, ge=6, le=99)
     min_volume_usd: float = Field(default=0, ge=0)
     # The two gates the long shot used to inherit from the regular parlay
     # engine. Omitted means the engine's own numbers -- 3c and 72h -- so the
