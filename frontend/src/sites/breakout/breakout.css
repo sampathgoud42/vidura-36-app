@@ -344,3 +344,9 @@
   .br-fieldrow input[type='range'] { height: 44px; }
   .br-rules { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* links to the other worlds' screens, under the scan bar */
+.br-links { display: flex; flex-wrap: wrap; align-items: center; margin: -4px 0 10px; }
+.br-links .bb-link { color: var(--br-em-hi); }
+.br-links .bb-link .d { color: var(--br-dim); }
+@media (pointer: coarse) { .br-links .bb-link { min-height: 44px; } }

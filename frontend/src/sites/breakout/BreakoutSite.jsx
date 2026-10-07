@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import BestBetsLink from '../../shared/BestBets.jsx';
 import { createPortal } from 'react-dom';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import SiteFooter from '../../shared/SiteFooter.jsx';
@@ -599,6 +600,13 @@ export default function BreakoutSite() {
             {alertCfg.enabled ? '🔔 Alerts on' : '🔕 Alerts'}
           </button>
         </nav>
+
+        {/* The trading worlds' long-term screen, one tap from here too. Its
+            tickers are US names: picking one opens its chart on the US market. */}
+        <div className="br-links">
+          <BestBetsLink accent="#10b981"
+            onPick={(sym) => { setMarket('US'); setChartOf(sym); }} />
+        </div>
 
         {running && (
           <div className="br-progress" role="progressbar" aria-valuemin={0} aria-valuemax={100}
