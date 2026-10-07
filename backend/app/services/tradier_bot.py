@@ -546,11 +546,14 @@ def exit_prices(entry: float, tp_pct: float, sl_pct: float) -> tuple[float, floa
     protective on both sides: the TP never sells under its target, the SL
     never stops later than its floor.
     """
+    from app.domains.trading.risk.validation import round_exit
+
     def _ceil_penny(x: float) -> float:
         return math.ceil(x * 100 - 1e-6) / 100.0
 
-    return (_ceil_penny(entry * (1 + tp_pct / 100.0)),
-            _ceil_penny(entry * (1 - sl_pct / 100.0)))
+    # then onto the operator's price steps, as the v2 desk's exits are
+    return (round_exit(_ceil_penny(entry * (1 + tp_pct / 100.0)), entry=entry, side="tp"),
+            round_exit(_ceil_penny(entry * (1 - sl_pct / 100.0)), entry=entry, side="sl"))
 
 
 def _target_override(pos: TradierPosition) -> float | None:

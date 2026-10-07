@@ -548,18 +548,22 @@ def set_target(position_id: int, payload: TargetRequest,
             detail=f"a target of {payload.target_price:.2f} is at or below the "
                    f"entry of {pos.entry_price:.2f}")
 
+    # on the same price steps as every computed target (validation.round_exit)
+    from app.domains.trading.risk.validation import round_exit
+
+    target = round_exit(payload.target_price, entry=pos.entry_price or None, side="tp")
     cred = _credential(db, tenant, kr, live=not pos.venue_sandbox)
     if pos.tp_order_id:
         venue_mod.cancel_order(pos.tp_order_id, cred=cred,
                                sandbox=pos.venue_sandbox)
         placed = venue_mod.place_sell(
             cred=cred, underlying=pos.underlying, occ_symbol=pos.occ_symbol,
-            quantity=pos.contracts, price=payload.target_price,
+            quantity=pos.contracts, price=target,
             sandbox=pos.venue_sandbox)
         pos.tp_order_id = placed.order_id
-    pos.tp_price = payload.target_price
+    pos.tp_price = target
     if pos.entry_price:
-        pos.tp_pct = round((payload.target_price / pos.entry_price - 1) * 100, 2)
+        pos.tp_pct = round((target / pos.entry_price - 1) * 100, 2)
     db.commit()
     return _serialise(pos)
 

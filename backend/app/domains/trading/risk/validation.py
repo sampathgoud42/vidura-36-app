@@ -95,17 +95,55 @@ def validate_entry(*, side: str, buy_pct: float, tp_pct: float, sl_pct: float,
                 f"cannot be opened")
 
 
+# The price steps a target or stop is rounded to, by its size: (above this
+# price, this step). At or under 1.00 it stays to the penny.
+EXIT_TICKS = ((15.0, "0.50"), (5.0, "0.10"), (1.0, "0.05"))
+
+
+def exit_tick(price: float):
+    """The step a target or stop of this size rounds to; None to the penny."""
+    from decimal import Decimal
+
+    for above, step in EXIT_TICKS:
+        if price > above:
+            return Decimal(step)
+    return None
+
+
+def round_exit(price: float, *, entry: float | None = None, side: str = "tp") -> float:
+    """A target or stop on the operator's steps: over 1.00 to the nearest
+    0.05, over 5.00 to the nearest 0.10, over 15.00 to the nearest 0.50 --
+    halves up (8.15 is 8.20). A target rounded to or under the entry steps up
+    one tick, and a stop rounded to or over it one tick down: rounding must
+    never turn a target into a loss or a stop into a profit."""
+    from decimal import ROUND_HALF_UP, Decimal
+
+    step = exit_tick(price)
+    if step is None:
+        return round(price, 2)
+    px = (Decimal(str(round(price, 2))) / step).quantize(Decimal("1"), ROUND_HALF_UP) * step
+    if entry is not None:
+        if side == "tp" and px <= Decimal(str(entry)):
+            px = (Decimal(str(entry)) / step).to_integral_value(rounding="ROUND_FLOOR") * step + step
+        elif side == "sl" and px >= Decimal(str(entry)):
+            px = (Decimal(str(entry)) / step).to_integral_value(rounding="ROUND_CEILING") * step - step
+    return float(px)
+
+
 def exit_prices(entry: float, tp_pct: float, sl_pct: float) -> tuple[float, float]:
     """Target and stop, from the entry actually filled.
 
-    Rounded AWAY from the operator in both directions: the target up, the stop
-    down. A rounding that moved the stop closer to entry would tighten a risk
-    limit nobody asked to tighten.
+    To the penny first -- the target up, the stop down, so neither is tighter
+    than asked -- then onto the operator's price steps (round_exit): over
+    1.00 the nearest 0.05, over 5.00 the nearest 0.10, over 15.00 the nearest
+    0.50.
     """
     import math
 
     tp = math.ceil(entry * (1 + tp_pct / 100.0) * 100) / 100
     sl = math.floor(entry * (1 - sl_pct / 100.0) * 100) / 100
+    tp = round_exit(tp, entry=entry, side="tp")
+    sl = round_exit(sl, entry=entry, side="sl")
     if sl <= 0:
         raise RiskRefused(
             f"a {sl_pct:g}% stop on an entry of {entry:.2f} prices the exit at "
