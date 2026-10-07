@@ -36,8 +36,9 @@ live, fresh, still open, one entry per ticker per hour, the shared
 idempotency key -- is the other signal strategies' own.
 
 ``star_signals`` -- "star signals": any ticker, any signal type, as long as
-the signal carries at least one star (super_telegram.Marks -- the same stars
-the panel and the Telegram feeds show). It opens on best_picks' window and
+the signal carries one of the picked star counts (``stars``: any of 1, 2, 3;
+2 and 3 unless told otherwise) -- super_telegram.Marks, the same stars the
+panel and the Telegram feeds show. It opens on best_picks' window and
 picks its strike by open interest unless told otherwise; every other rule is
 the other signal strategies' own.
 
@@ -111,6 +112,8 @@ STRATEGIES = ("10min_intraday_move", "super_signals", "best_pairs", "best_picks"
 SIGNAL_STRATEGIES = ("super_signals", "best_pairs", "best_picks", "star_signals")
 # the signal strategies that pick by the channel's marks, on any ticker
 MARK_STRATEGIES = ("best_picks", "star_signals")
+STAR_LEVELS = (1, 2, 3)
+STAR_DEFAULT = (2, 3)                  # star_signals' star counts when none are given
 
 # super_signals. The desk publishes each 5m bar about half a minute after it
 # closes, so a 15s poll sees a signal within a minute of its candle.
@@ -183,6 +186,8 @@ class Watcher:
     # best_picks: the channel's marks for the session being read, refreshed
     # each pass (super_telegram.Marks -- stars and thumbs).
     marks: object = None
+    # star_signals: the star counts it trades (STAR_LEVELS)
+    stars: tuple = STAR_DEFAULT
 
     def fail(self, ticker: str, message: str) -> None:
         """An entry that did not happen: counted, logged, and kept as the
@@ -215,7 +220,7 @@ class Watcher:
 
             return self.marks is not None and super_telegram.wanted("vidura", row, self.marks)
         if self.strategy == "star_signals":
-            return self.marks is not None and self.marks.stars(row) >= 1
+            return self.marks is not None and self.marks.stars(row) in self.stars
         return type_key(row) in self.signals and row.get("ticker") in self.tickers
 
     def public(self) -> dict:
@@ -235,7 +240,9 @@ class Watcher:
         if self.strategy == "best_picks":
             out["rule"] = "any ticker's live signal with ⭐⭐⭐ and 👍 -- what @vidura38 posts"
         if self.strategy == "star_signals":
-            out["rule"] = "any ticker's live signal with ⭐, ⭐⭐ or ⭐⭐⭐"
+            out["stars"] = list(self.stars)
+            out["rule"] = ("any ticker's live signal with "
+                           + " or ".join("⭐" * n for n in self.stars))
         return out
 
     def _public_common(self) -> dict:
@@ -699,7 +706,8 @@ def _release_desk(watcher: Watcher) -> None:
 def _run_super(watcher: Watcher) -> None:
     what = (f"{len(watcher.pairs)} best pair(s) on" if watcher.strategy == "best_pairs"
             else "⭐⭐⭐👍 signals on" if watcher.strategy == "best_picks"
-            else "starred (⭐+) signals on" if watcher.strategy == "star_signals"
+            else (" / ".join("⭐" * n for n in watcher.stars) + " signals on")
+            if watcher.strategy == "star_signals"
             else f"{len(watcher.signals)} signal type(s) for")
     watcher.log(f"armed on {what} {', '.join(watcher.tickers) or 'any ticker'} · "
                 f"{watcher.window_open}-{watcher.window_close} CST"
@@ -844,7 +852,7 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
           window_open: str | None = None, window_close: str | None = None,
           zero_dte: bool = False, order_type: str = "smart",
           discount_pct: float = 0.0, pick: str | None = None,
-          near_expiry: bool = True) -> dict:
+          near_expiry: bool = True, stars: list[int] | None = None) -> dict:
     """Arm the watcher for one operator. One per operator, never two."""
     from app.core.config import get_settings
     from app.domains.trading.execution import selection
@@ -879,6 +887,7 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             "delta_max": delta_max, "min_contracts": min_contracts}
     picked: list[str] = []
     chosen: set[tuple[str, str]] = set()
+    levels = STAR_DEFAULT
     if strategy == "best_pairs":
         # A pair names its own ticker, so the form's ticker field plays no part.
         chosen = _check_pairs(pairs, w_open, w_close, **risk)
@@ -886,6 +895,10 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
     elif strategy in MARK_STRATEGIES:
         # Any ticker: the marks pick them, signal by signal.
         wanted = []
+        if strategy == "star_signals":
+            levels = tuple(sorted({int(n) for n in (STAR_DEFAULT if stars is None else stars)}))
+            if not levels or any(n not in STAR_LEVELS for n in levels):
+                raise AutoTradeRefused("pick at least one star count -- 1, 2 or 3")
         _check_window_and_risk(w_open, w_close, **risk)
     else:
         wanted = [t.strip().upper() for t in tickers.split(",") if t.strip()]
@@ -927,7 +940,7 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             signals=picked, pairs=chosen, window_open=w_open, window_close=w_close,
             zero_dte=bool(zero_dte), desk_holder=holder, order_type=order_type,
             discount_pct=float(discount_pct) if order_type == "limit" else 0.0,
-            pick=pick, near_expiry=bool(near_expiry) or bool(zero_dte))
+            pick=pick, near_expiry=bool(near_expiry) or bool(zero_dte), stars=levels)
         # The cooldown carries over: a ticker the bot -- or an earlier arm --
         # entered twenty minutes ago is still inside its hour. The signal
         # strategies of one operator share one cooldown map, so a ticker one

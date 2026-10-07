@@ -2857,6 +2857,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
   const isStars = f.strategy === 'star_signals';
   // both pick by the channel's marks, on any ticker, with the same knobs
   const isPicks = isBestPicks || isStars;
+  const starPick = f.stars || [2, 3];             // star signals: 2 and 3 unless changed
   const onDesk = isSuper || isPairs || isPicks;   // trades the signal desk's live signals
   // the signal strategies buy at the desk's smart limit -- all but the two
   // mark strategies, which offer every order type the BUY ticket has
@@ -2959,6 +2960,28 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           {isPairs && (
             <PairPicker value={f.pairs} onChange={(v) => setF((p) => ({ ...p, pairs: v }))} />
           )}
+          {isStars && (
+            <div><span className="tr-label">Stars</span>
+              <div className="tr-pick-toggle" role="group" aria-label="star counts to trade">
+                {[1, 2, 3].map((n) => {
+                  const on = starPick.includes(n);
+                  return (
+                    <button key={n} type="button" aria-pressed={on}
+                      className={`tr-chip ${on ? 'on' : ''}`}
+                      title={`${on ? 'stop trading' : 'trade'} ${n}-star signals`}
+                      onClick={() => setF((p) => {
+                        const was = p.stars || [2, 3];
+                        const next = was.includes(n) ? was.filter((x) => x !== n) : [...was, n].sort();
+                        return { ...p, stars: next };
+                      })}>{'⭐'.repeat(n)}</button>
+                  );
+                })}
+              </div>
+              <span className="tr-note tr-pick-note">
+                {starPick.length ? `trades ${starPick.map((n) => '⭐'.repeat(n)).join(' / ')} signals`
+                  : 'pick at least one'}
+              </span></div>
+          )}
           <div><span className="tr-label">Strike pick</span>
             <div className="tr-pick-toggle" role="group" aria-label="strike pick">
               {STRIKE_PICKS.map(([id, text]) => (
@@ -3055,15 +3078,16 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               {isStars ? (
                 <>
                   Star signals: watches the signal desk live, and any ticker&rsquo;s new signal
-                  carrying a star &mdash; ⭐, ⭐⭐ or ⭐⭐⭐, the same stars the Super Signals panel and
-                  the Telegram feeds show &mdash; buys a CALL for a LONG and a PUT for a SHORT. Only signals
+                  carrying {starPick.map((n) => '⭐'.repeat(n)).join(' or ') || 'a picked star count'}
+                  {' '}&mdash; the same stars the Super Signals panel and the Telegram feeds show &mdash;
+                  buys a CALL for a LONG and a PUT for a SHORT. Only signals{' '}
                 </>
               ) : (
                 <>
                   Best picks today: watches the signal desk live, and any ticker&rsquo;s new signal
                   marked both ⭐⭐⭐ (its pair won over 66% across the last 7 sessions and its signal
                   type&rsquo;s 30-session edge is above 59) and 👍 (one of the report&rsquo;s best pairs) &mdash;
-                  exactly what the @vidura38 channel posts &mdash; buys a CALL for a LONG and a PUT for a SHORT. Only signals
+                  exactly what the @vidura38 channel posts &mdash; buys a CALL for a LONG and a PUT for a SHORT. Only signals{' '}
                 </>
               )}
               fired live inside {f.window_open}–{f.window_close} CST, at most{' '}
@@ -3142,10 +3166,12 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           <button type="button" className="tr-btn sm auto"
             disabled={busy || deskTaken || armed.includes(f.strategy)
               || (isSuper && f.signals.length === 0)
-              || (isPairs && f.pairs.length === 0)}
+              || (isPairs && f.pairs.length === 0)
+              || (isStars && starPick.length === 0)}
             title={deskTaken ? deskOwnerNote(deskOwner)
               : isSuper && f.signals.length === 0 ? 'pick at least one signal type to trade'
-              : isPairs && f.pairs.length === 0 ? 'pick at least one best pair to trade' : undefined}
+              : isPairs && f.pairs.length === 0 ? 'pick at least one best pair to trade'
+              : isStars && starPick.length === 0 ? 'pick at least one star count to trade' : undefined}
             onClick={() => {
               // delta_min/max ride along so a board that forwards the form as it
               // stands (36 Trades) arms with the band on screen, not the default
@@ -3156,7 +3182,8 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               onArm({ ...f, order_type: smartOnly ? 'smart' : otype,
                 discount_pct: !smartOnly && otype === 'limit' ? discount : 0,
                 zero_dte: zeroDte, near_expiry: zeroDte || nearExpiry,
-                delta_min: dMin, delta_max: dMax, pick });
+                delta_min: dMin, delta_max: dMax, pick,
+                ...(isStars ? { stars: starPick } : {}) });
             }}>{busy ? '…' : '🤖 Arm auto-trade'}</button>
           <button type="button" className="tr-btn sm" onClick={onClose}>Cancel</button>
         </div>
@@ -3840,6 +3867,7 @@ export default function TradierSite() {
         order_type: f.order_type || 'smart',
         discount_pct: parseFloat(f.discount_pct) || 0,
         pick: f.pick || 'delta',
+        ...(f.strategy === 'star_signals' ? { stars: f.stars || [2, 3] } : {}),
         near_expiry: f.near_expiry !== false,
         top_n: parseInt(f.top_n, 10) || 3,
         zero_dte: f.zero_dte !== false,

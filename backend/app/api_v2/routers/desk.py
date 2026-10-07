@@ -1006,6 +1006,8 @@ class AutoTradeStart(BaseModel):
     # How strikes are chosen: the delta band or open interest. Left out,
     # best_picks and star_signals pick by open interest, every other strategy by delta.
     pick: Literal["delta", "open_interest"] | None = None
+    # star_signals: the star counts to trade, any of 1, 2, 3. Left out, 2 and 3.
+    stars: list[int] | None = Field(default=None, max_length=3)
 
 
 @market_router.get("/autotrade/status", operation_id="getTradierAutoTradeStatus")
@@ -1043,7 +1045,7 @@ def autotrade_start(payload: AutoTradeStart,
             window_open=payload.window_open, window_close=payload.window_close,
             zero_dte=payload.zero_dte, near_expiry=payload.near_expiry,
             order_type=payload.order_type or ("limit" if payload.discount_pct > 0 else "smart"),
-            discount_pct=payload.discount_pct, pick=payload.pick)
+            discount_pct=payload.discount_pct, pick=payload.pick, stars=payload.stars)
     except autotrade.AutoTradeRefused as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
 
