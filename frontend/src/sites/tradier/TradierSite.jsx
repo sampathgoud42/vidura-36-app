@@ -2530,6 +2530,7 @@ function TargetCell({ pos, busy, onSave }) {
 const AUTO_DISCOUNT_OPTIONS = [10, 20, 40];
 const STRATEGY_LABELS = {
   super_signals: 'super signals', best_pairs: 'best pairs', best_picks: 'best picks today',
+  star_signals: 'star signals',
 };
 // How a strike is chosen, everywhere a contract is picked: the delta band, or
 // the nearest expiry's most-held out-of-the-money strike (the next most-held
@@ -2851,10 +2852,14 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
   const isSuper = f.strategy === 'super_signals';
   const isPairs = f.strategy === 'best_pairs';
   // best picks today: any ticker's live signal with ⭐⭐⭐ and 👍 -- what the vidura channel posts
-  const isPicks = f.strategy === 'best_picks';
+  const isBestPicks = f.strategy === 'best_picks';
+  // star signals: any ticker's live signal with any star (⭐, ⭐⭐ or ⭐⭐⭐)
+  const isStars = f.strategy === 'star_signals';
+  // both pick by the channel's marks, on any ticker, with the same knobs
+  const isPicks = isBestPicks || isStars;
   const onDesk = isSuper || isPairs || isPicks;   // trades the signal desk's live signals
-  // the signal strategies buy at the desk's smart limit -- all but best picks,
-  // which offers every order type the BUY ticket has
+  // the signal strategies buy at the desk's smart limit -- all but the two
+  // mark strategies, which offer every order type the BUY ticket has
   const smartOnly = onDesk && !isPicks;
   // the server refuses a second trader on the signal desk; say so before it has to
   const deskTaken = onDesk && !!deskOwner;
@@ -2872,7 +2877,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
     // Each strategy opens on its own window: the level cross is an opening-
     // range play, the desk's signals fire all session.
     if (isPicks) {
-      // best picks: its own window, the strike by open interest, and same-day
+      // best picks and star signals: their own window, the strike by open interest, and same-day
       // contracts off -- each changeable before arming.
       setF((p) => ({ ...p,
         window_open: defaults?.picks_window_open || '09:15',
@@ -2906,7 +2911,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
         </span>
         {deskOwner && (
           <p className="tr-deskowner" role="status">
-            🤖 {deskOwnerNote(deskOwner)}. While it runs, super signals and best pairs cannot
+            🤖 {deskOwnerNote(deskOwner)}. While it runs, the signal-desk strategies (super signals, best pairs, best picks, star signals) cannot
             be armed here &mdash; one trader per signal desk, so no signal is bought twice. The
             level-cross strategy is unaffected. Stop the bot (Ctrl-C in its window) to arm here.
           </p>
@@ -2924,7 +2929,8 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
             <input className="tr-input"
               value={isHot ? '(auto from HOT scan)' : isSuperHot ? '(auto from SUPERHOT scan)'
                 : isPairs ? '(each pair’s own ticker)'
-                : isPicks ? '(any ticker with ⭐⭐⭐ and 👍)' : f.tickers}
+                : isBestPicks ? '(any ticker with ⭐⭐⭐ and 👍)'
+                : isStars ? '(any ticker with ⭐, ⭐⭐ or ⭐⭐⭐)' : f.tickers}
               onChange={set('tickers')} placeholder="SPY,QQQ,SPX"
               disabled={isAutoScan || isPairs || isPicks}
               style={isAutoScan || isPairs || isPicks ? { opacity: 0.45 } : undefined}
@@ -3046,10 +3052,20 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
         <p className="tr-note mt-3">
           {isPicks ? (
             <>
-              Best picks today: watches the signal desk live, and any ticker&rsquo;s new signal
-              marked both ⭐⭐⭐ (its pair won over 66% across the last 7 sessions and its signal
-              type&rsquo;s 30-session edge is above 59) and 👍 (one of the report&rsquo;s best pairs) &mdash;
-              exactly what the @vidura38 channel posts &mdash; buys a CALL for a LONG and a PUT for a SHORT. Only signals
+              {isStars ? (
+                <>
+                  Star signals: watches the signal desk live, and any ticker&rsquo;s new signal
+                  carrying a star &mdash; ⭐, ⭐⭐ or ⭐⭐⭐, the same stars the Super Signals panel and
+                  the Telegram feeds show &mdash; buys a CALL for a LONG and a PUT for a SHORT. Only signals
+                </>
+              ) : (
+                <>
+                  Best picks today: watches the signal desk live, and any ticker&rsquo;s new signal
+                  marked both ⭐⭐⭐ (its pair won over 66% across the last 7 sessions and its signal
+                  type&rsquo;s 30-session edge is above 59) and 👍 (one of the report&rsquo;s best pairs) &mdash;
+                  exactly what the @vidura38 channel posts &mdash; buys a CALL for a LONG and a PUT for a SHORT. Only signals
+                </>
+              )}
               fired live inside {f.window_open}–{f.window_close} CST, at most{' '}
               {defaults?.super_max_age_min ?? 6} min old and still open, and at most one entry per
               ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}

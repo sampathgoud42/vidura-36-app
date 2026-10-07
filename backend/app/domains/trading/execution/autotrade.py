@@ -35,6 +35,12 @@ picks its strike by open interest unless told otherwise. Every other rule --
 live, fresh, still open, one entry per ticker per hour, the shared
 idempotency key -- is the other signal strategies' own.
 
+``star_signals`` -- "star signals": any ticker, any signal type, as long as
+the signal carries at least one star (super_telegram.Marks -- the same stars
+the panel and the Telegram feeds show). It opens on best_picks' window and
+picks its strike by open interest unless told otherwise; every other rule is
+the other signal strategies' own.
+
 Every strategy picks its strike one of two ways (``pick``, entry.PICKS):
 "delta", the band on the form, or "open_interest" -- the nearest expiry's
 most-held out-of-the-money strike (above the price for a CALL, below it for
@@ -99,9 +105,12 @@ _SIDE_FOR_CROSS = {
 
 # The strategies this watcher runs -- the arm form lists exactly these, so a
 # strategy name can no longer label one behaviour while running another.
-STRATEGIES = ("10min_intraday_move", "super_signals", "best_pairs", "best_picks")
+STRATEGIES = ("10min_intraday_move", "super_signals", "best_pairs", "best_picks",
+              "star_signals")
 # the strategies that trade the signal desk's live signals (_run_super)
-SIGNAL_STRATEGIES = ("super_signals", "best_pairs", "best_picks")
+SIGNAL_STRATEGIES = ("super_signals", "best_pairs", "best_picks", "star_signals")
+# the signal strategies that pick by the channel's marks, on any ticker
+MARK_STRATEGIES = ("best_picks", "star_signals")
 
 # super_signals. The desk publishes each 5m bar about half a minute after it
 # closes, so a 15s poll sees a signal within a minute of its candle.
@@ -205,6 +214,8 @@ class Watcher:
             from app.domains.notify import super_telegram
 
             return self.marks is not None and super_telegram.wanted("vidura", row, self.marks)
+        if self.strategy == "star_signals":
+            return self.marks is not None and self.marks.stars(row) >= 1
         return type_key(row) in self.signals and row.get("ticker") in self.tickers
 
     def public(self) -> dict:
@@ -223,6 +234,8 @@ class Watcher:
             out["pairs"] = [{"type_key": k, "ticker": t} for k, t in sorted(self.pairs)]
         if self.strategy == "best_picks":
             out["rule"] = "any ticker's live signal with ⭐⭐⭐ and 👍 -- what @vidura38 posts"
+        if self.strategy == "star_signals":
+            out["rule"] = "any ticker's live signal with ⭐, ⭐⭐ or ⭐⭐⭐"
         return out
 
     def _public_common(self) -> dict:
@@ -581,7 +594,7 @@ def _super_tick(watcher: Watcher, now: datetime, baseline_day: str | None) -> st
         return baseline_day
     _feed(watcher, "ok")
     rows = payload.get("signals") or []
-    if watcher.strategy == "best_picks":
+    if watcher.strategy in MARK_STRATEGIES:
         from app.domains.notify import super_telegram
 
         # The vidura channel's own marks and rule, so a signal it posts
@@ -686,6 +699,7 @@ def _release_desk(watcher: Watcher) -> None:
 def _run_super(watcher: Watcher) -> None:
     what = (f"{len(watcher.pairs)} best pair(s) on" if watcher.strategy == "best_pairs"
             else "⭐⭐⭐👍 signals on" if watcher.strategy == "best_picks"
+            else "starred (⭐+) signals on" if watcher.strategy == "star_signals"
             else f"{len(watcher.signals)} signal type(s) for")
     watcher.log(f"armed on {what} {', '.join(watcher.tickers) or 'any ticker'} · "
                 f"{watcher.window_open}-{watcher.window_close} CST"
@@ -705,7 +719,7 @@ def _run_super(watcher: Watcher) -> None:
                 # differently -- so the watcher ends with the session it traded.
                 watcher.log("session closed -- disarming; "
                             + ("the best pairs are re-ranked by today's report"
-                               if watcher.strategy in ("best_pairs", "best_picks")
+                               if watcher.strategy in ("best_pairs", *MARK_STRATEGIES)
                                else "the signal list was picked for today"))
                 break
         except Exception as exc:                        # noqa: BLE001
@@ -841,8 +855,9 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
                                f"{', '.join(selection.ORDER_TYPES)}")
     from app.domains.trading.execution import entry as entry_mod
 
-    # best_picks picks by open interest unless told otherwise; the rest by delta.
-    pick = pick or ("open_interest" if strategy == "best_picks" else "delta")
+    # best_picks and star_signals pick by open interest unless told otherwise;
+    # the rest by delta.
+    pick = pick or ("open_interest" if strategy in MARK_STRATEGIES else "delta")
     if pick not in entry_mod.PICKS:
         raise AutoTradeRefused(f"unknown strike pick '{pick}' -- one of "
                                f"{', '.join(entry_mod.PICKS)}")
@@ -857,7 +872,7 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
         raise AutoTradeRefused(f"unknown strategy '{strategy}' -- this server runs "
                                f"{', '.join(STRATEGIES)}")
 
-    window = PICKS_WINDOW if strategy == "best_picks" else SUPER_WINDOW
+    window = PICKS_WINDOW if strategy in MARK_STRATEGIES else SUPER_WINDOW
     w_open = (window_open or window[0]).strip()
     w_close = (window_close or window[1]).strip()
     risk = {"buy_pct": buy_pct, "tp_pct": tp_pct, "sl_pct": sl_pct, "delta_min": delta_min,
@@ -868,7 +883,7 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
         # A pair names its own ticker, so the form's ticker field plays no part.
         chosen = _check_pairs(pairs, w_open, w_close, **risk)
         wanted = sorted({t for _, t in chosen})
-    elif strategy == "best_picks":
+    elif strategy in MARK_STRATEGIES:
         # Any ticker: the marks pick them, signal by signal.
         wanted = []
         _check_window_and_risk(w_open, w_close, **risk)

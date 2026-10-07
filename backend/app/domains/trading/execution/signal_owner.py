@@ -45,7 +45,7 @@ TTL_S = 120
 # What the signal-desk traders label their positions, and so what the shared
 # cooldown counts. Manual buys and the level-cross watcher are not in it: they
 # are not "the same signal idea arriving again".
-SIGNAL_LABELS = ("Auto/super_signals", "Auto/best_pairs", "Auto/best_picks",
+SIGNAL_LABELS = ("Auto/super_signals", "Auto/best_pairs", "Auto/best_picks", "Auto/star_signals",
                  "Auto/bot_best_pair")
 
 

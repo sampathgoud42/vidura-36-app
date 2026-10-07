@@ -1004,7 +1004,7 @@ class AutoTradeStart(BaseModel):
     order_type: Literal["smart", "market", "limit"] | None = None
     discount_pct: float = Field(default=0, ge=0, le=50)
     # How strikes are chosen: the delta band or open interest. Left out,
-    # best_picks picks by open interest and every other strategy by delta.
+    # best_picks and star_signals pick by open interest, every other strategy by delta.
     pick: Literal["delta", "open_interest"] | None = None
 
 
