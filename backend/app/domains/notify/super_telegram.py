@@ -71,7 +71,8 @@ CHANNEL_WHAT = {"vidura": "only the ⭐⭐⭐👍 signals", "super": "every Supe
 LEGEND = ("🟢 long (call) · 🔻 short (put)\n"
           "👍 one of the best ticker + signal pairs\n"
           "⭐ the pair won more than 66% of its trades last session, "
-          "⭐⭐ over the last 3 sessions (or 7), "
+          "⭐⭐ over the last 3 sessions (or 7) -- ⭐ and ⭐⭐ only when the signal "
+          "type, across all tickers, also won more than 66% over the same sessions; "
           "⭐⭐⭐ over the last 7 when its signal type's 30-session edge is above 59")
 
 
@@ -145,7 +146,9 @@ def pair_key(signal: dict) -> str:
 
 def records_of(sessions: list[list[dict]]) -> dict[int, dict[str, tuple[int, int]]]:
     """Each pair's (wins, losses) over the last 1, 3 and 7 of `sessions`, the
-    newest first. A target is a win and a stop a loss; nothing else counts."""
+    newest first -- and each signal type's across all tickers, keyed by its
+    type_key (which, unlike a pair key, has no "::"). A target is a win and a
+    stop a loss; nothing else counts."""
     out: dict[int, dict[str, tuple[int, int]]] = {}
     for back, _ in STAR_WINDOWS:
         tally: dict[str, tuple[int, int]] = {}
@@ -154,10 +157,15 @@ def records_of(sessions: list[list[dict]]) -> dict[int, dict[str, tuple[int, int
                 outcome = s.get("outcome")
                 if outcome not in ("target", "stop"):
                     continue
-                wins, losses = tally.get(pair_key(s), (0, 0))
-                tally[pair_key(s)] = (wins + 1, losses) if outcome == "target" else (wins, losses + 1)
+                for key in (pair_key(s), type_key(s)):
+                    wins, losses = tally.get(key, (0, 0))
+                    tally[key] = (wins + 1, losses) if outcome == "target" else (wins, losses + 1)
         out[back] = tally
     return out
+
+
+def _won(wins: int, losses: int) -> bool:
+    return bool(wins + losses) and 100 * wins / (wins + losses) > STAR_WIN_PCT
 
 
 class Marks:
@@ -182,15 +190,24 @@ class Marks:
     def star_record(self, signal: dict) -> tuple[int, int, int, int]:
         """(stars, wins, losses, sessions back) for the window that earned
         them -- or (0, 0, 0, 0). The panel shows the record as the reason.
-        Three stars only on a 30-session edge above STAR3_EDGE; else two."""
+        Three stars only on a 30-session edge above STAR3_EDGE; else two. One
+        or two only when the signal type, across all tickers, also won more
+        than STAR_WIN_PCT over the same sessions; else the next window down."""
         key = pair_key(signal)
         for back, count in STAR_WINDOWS:
             wins, losses = self.records.get(back, {}).get(key, (0, 0))
-            if wins + losses and 100 * wins / (wins + losses) > STAR_WIN_PCT:
-                if count == 3 and not (self.edge(signal) or 0) > STAR3_EDGE:
-                    count = 2
-                return count, wins, losses, back
+            if not _won(wins, losses):
+                continue
+            if count == 3 and not (self.edge(signal) or 0) > STAR3_EDGE:
+                count = 2
+            if count < 3 and not _won(*self.type_record(signal, back)):
+                continue
+            return count, wins, losses, back
         return 0, 0, 0, 0
+
+    def type_record(self, signal: dict, back: int) -> tuple[int, int]:
+        """The signal type's (wins, losses) across all tickers, `back` sessions."""
+        return self.records.get(back, {}).get(type_key(signal), (0, 0))
 
 
 def mark_session(session: dict) -> dict:
@@ -205,7 +222,9 @@ def mark_session(session: dict) -> dict:
     for s in signals:
         count, wins, losses, back = marks.star_record(s)
         s["stars"] = count
+        type_wins, type_losses = marks.type_record(s, back) if count else (0, 0)
         s["star_record"] = ({"wins": wins, "losses": losses, "sessions": back,
+                             "type_wins": type_wins, "type_losses": type_losses,
                              "edge": marks.edge(s)} if count else None)
     return session
 

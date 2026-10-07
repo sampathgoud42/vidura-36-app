@@ -45,6 +45,7 @@ const THUMBS = '\u{1F44D}\u{1F44D}';
 // The channel's stars (super_telegram.py): the pair won more than 66% of its
 // decided trades over the last 7 sessions (3 stars -- only when the pair's
 // signal type's 30-session edge is above 59, else 2), else 3 (2), else the last one (1) --
+// 1 and 2 only when the signal type, across all tickers, also won over 66% then --
 // counted before the session on screen, so old signals carry the marks they
 // would have been posted with.
 const STAR = '⭐';
@@ -53,7 +54,10 @@ function starText(rec) {
   const span = rec.sessions === 1 ? 'last session' : `last ${rec.sessions} sessions`;
   const pct = Math.round((100 * rec.wins) / Math.max(1, rec.wins + rec.losses));
   const edge = rec.edge == null ? '' : ` · signal type's 30-session edge ${rec.edge.toFixed(1)}`;
-  return `pair won ${rec.wins}–${rec.losses} (${pct}%) over the ${span}${edge}`;
+  const tw = rec.type_wins, tl = rec.type_losses;
+  const type = tw == null || !(tw + tl) ? ''
+    : ` · signal type, all tickers, ${tw}–${tl} (${Math.round((100 * tw) / (tw + tl))}%)`;
+  return `pair won ${rec.wins}–${rec.losses} (${pct}%) over the ${span}${type}${edge}`;
 }
 
 // A signal is "part of a best pair" when its signal type AND its ticker are a
