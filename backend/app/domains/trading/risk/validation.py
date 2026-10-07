@@ -30,7 +30,7 @@ class Bounds:
     sl_pct_max: float = 99.0
     buy_pct_min: float = 0.01
     buy_pct_max: float = 100.0
-    max_contracts_per_order: int = 500
+    max_contracts_per_order: int = 200      # sizing caps at this too (selection.MAX_CONTRACTS)
 
 
 DEFAULT_BOUNDS = Bounds()

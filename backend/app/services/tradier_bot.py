@@ -191,6 +191,27 @@ def size_contracts(
     tolerance_pct: float = DEFAULT_TOLERANCE_PCT,
     min_contracts: int = 1,
 ) -> tuple[int, dict]:
+    """The band's count (_size_in_band), never more than MAX_CONTRACTS: Buy %
+    that works out to more is placed at the cap."""
+    from app.domains.trading.execution.selection import MAX_CONTRACTS
+
+    count, sizing = _size_in_band(balance_usd, buy_pct, limit_price,
+                                  tolerance_pct=tolerance_pct, min_contracts=min_contracts)
+    if count > MAX_CONTRACTS:
+        cost = sizing.get("cost_per_contract_usd") or 0.0
+        return MAX_CONTRACTS, dict(sizing, total_usd=round(MAX_CONTRACTS * cost, 2),
+                                   capped_at=MAX_CONTRACTS)
+    return count, sizing
+
+
+def _size_in_band(
+    balance_usd: float,
+    buy_pct: float,
+    limit_price: float,
+    *,
+    tolerance_pct: float = DEFAULT_TOLERANCE_PCT,
+    min_contracts: int = 1,
+) -> tuple[int, dict]:
     """How many contracts to buy, and the arithmetic that says why.
 
     The budget is balance x buy_pct — a target, not a hard cap. Contracts are

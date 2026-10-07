@@ -226,11 +226,19 @@ class Sizing:
     band_high_usd: float
     per_contract_usd: float
     total_usd: float
+    # Buy % asked for more than MAX_CONTRACTS: ordered at the cap instead.
+    capped: bool = False
 
     def explain(self) -> str:
         return (f"{self.contracts} contract(s) at ${self.per_contract_usd:.2f} "
                 f"= ${self.total_usd:.2f}, against a ${self.budget_usd:.2f} "
-                f"budget (band ${self.band_low_usd:.2f}-${self.band_high_usd:.2f})")
+                f"budget (band ${self.band_low_usd:.2f}-${self.band_high_usd:.2f})"
+                + (f" -- capped at {MAX_CONTRACTS} contracts" if self.capped else ""))
+
+
+# The most contracts one order buys, whatever Buy % works out to: a cheap
+# contract on a large balance is placed at the cap, never refused for it.
+MAX_CONTRACTS = 200
 
 
 def size_contracts(buying_power: float, buy_pct: float, price: float, *,
@@ -269,6 +277,11 @@ def size_contracts(buying_power: float, buy_pct: float, price: float, *,
     if inside == 0 and min_contracts and min_contracts * per_contract <= band_high:
         inside, total = min_contracts, min_contracts * per_contract
 
+    capped = inside > MAX_CONTRACTS
+    if capped:
+        inside, total = MAX_CONTRACTS, MAX_CONTRACTS * per_contract
+
     return Sizing(contracts=int(inside), budget_usd=round(budget, 2),
                   band_low_usd=round(band_low, 2), band_high_usd=round(band_high, 2),
-                  per_contract_usd=round(per_contract, 2), total_usd=round(total, 2))
+                  per_contract_usd=round(per_contract, 2), total_usd=round(total, 2),
+                  capped=capped)
