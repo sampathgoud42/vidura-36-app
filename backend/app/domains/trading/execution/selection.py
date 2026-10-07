@@ -84,6 +84,20 @@ class BuyPrice:
     discount_pct: float | None    # limit orders only
 
 
+# The widest bid-ask spread a buy is placed into, as a percent of the mark:
+# (ask - bid) / mid. Wider, and the order is skipped -- the fill would start
+# that far under water, and the exit pays the same spread again.
+MAX_SPREAD_PCT = 25.0
+
+
+def spread_pct(bid: float, ask: float) -> float | None:
+    """The quote's spread as a percent of its mark; None without two sides."""
+    mark = mark_price(bid, ask)
+    if mark is None or mark <= 0:
+        return None
+    return float((Decimal(str(ask)) - Decimal(str(bid))) / mark * 100)
+
+
 def buy_price(order_type: str, bid: float, ask: float,
               discount_pct: float = 0.0) -> BuyPrice:
     """How to bid on this quote. ValueError when the quote cannot carry the
@@ -95,6 +109,14 @@ def buy_price(order_type: str, bid: float, ask: float,
         raise ValueError(f"unknown order type {order_type!r}")
     if not ask or ask <= 0:
         raise ValueError("there is no offer to buy from")
+    # Every buy, every order type: a spread wider than MAX_SPREAD_PCT -- or no
+    # bid at all, which no exit can be sold into -- skips the order.
+    spread = spread_pct(bid, ask)
+    if spread is None:
+        raise ValueError(f"no bid under the {ask} ask -- skipped, nothing to sell back into")
+    if spread > MAX_SPREAD_PCT:
+        raise ValueError(f"bid {bid} / ask {ask} is a {spread:.0f}% spread, over the "
+                         f"{MAX_SPREAD_PCT:g}% limit -- skipped")
     mark = mark_price(bid, ask)
     if order_type == "market":
         return BuyPrice("market", None, round(float(ask), 2),
