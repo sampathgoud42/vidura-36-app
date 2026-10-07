@@ -4243,8 +4243,8 @@ export default function TradierSite() {
                     );
                   })()}
                 </div>
-                {/* a minute-by-minute gamma feed: not on the Lightweight board */}
-                {!lite && <GexInline />}
+                {/* the SPY gamma reading: on both boards, Lightweight included */}
+                <GexInline />
                 <div className="tr-stat">
                   <div className="tr-venuectl">
                     <button type="button"

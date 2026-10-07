@@ -11,7 +11,7 @@ import { useExperience } from '../../shared/experience.js';
 import { ExperienceSwitch } from '../../shared/ExperienceControls.jsx';
 import { READING_GUIDE_URL } from '../../config.js';
 import {
-  AutoStatus, AutoTradeForm, CommoditiesPanel, deskOwnerNote, fmtMark, HotScan, LiteChart,
+  AutoStatus, AutoTradeForm, CommoditiesPanel, deskOwnerNote, fmtMark, GexInline, HotScan, LiteChart,
   MiniChart, NearExpiryChip, OptionsFlow, ORDER_TYPES, orderNote, orderPrice, STRIKE_PICKS,
   useMovers,
 } from '../tradier/TradierSite.jsx';
@@ -1496,6 +1496,14 @@ export default function Desk36Site() {
               )}
             </b>
           </span>
+
+          {/* SPY 0DTE GEX on the Lightweight board: the Tradier world's own
+              reading (GexInline), so the two boards never disagree. */}
+          {lite && (
+            <span className="d36-stat d36-litegex">
+              <GexInline />
+            </span>
+          )}
 
           {/* Lightweight keeps itself current like the full board; this asks
               every panel again right now, without waiting for its timer. */}

@@ -967,6 +967,42 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
   content: ''; position: absolute; left: -4px; right: -4px; top: -8px; bottom: -8px;
 }
 .d36-literefresh:active { transform: scale(0.96); }
+/* SPY 0DTE GEX beside the two numbers: the Tradier world's GexInline in
+   this board's type and colours. Its two marks get 44pt of reach. */
+.d36-litegex {
+  --tr-green: var(--d36-green); --tr-red: var(--d36-red);
+  --tr-faint: var(--d36-faint); --tr-dim: var(--d36-dim);
+  --tr-accent: var(--d36-green); --tr-line: var(--d36-line);
+  min-width: 0;
+}
+.d36-litegex .tr-stat .k {
+  display: flex; align-items: center;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--d36-faint); white-space: nowrap;
+}
+.d36-litegex .tr-stat .v {
+  font-size: 18px; font-weight: 800; line-height: 1.1;
+  font-family: ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums;
+}
+.d36-litegex .tr-gex-age { color: var(--d36-faint); }
+.d36-litegex .tr-gex-toggle {
+  position: relative; background: none; border: 0; padding: 0 4px;
+  color: var(--d36-faint); font-size: 11px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.d36-litegex .tr-gex-toggle::after {
+  content: ''; position: absolute; left: -6px; right: -6px; top: -14px; bottom: -14px;
+}
+.d36-litegex .tr-gex-toggle:disabled { opacity: 0.4; cursor: default; }
+.d36-litegex .tr-gex-hist {
+  margin-top: 4px; max-width: 70vw; max-height: 96px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; font-size: 10px;
+}
+.d36-litegex .tr-gex-list, .d36-litegex .tr-gex-mins { display: flex; flex-wrap: wrap; row-gap: 2px; }
+.d36-litegex .tr-gex-list .sep, .d36-litegex .tr-gex-mins .sep { color: var(--d36-faint); margin: 0 2px; }
+.d36-litegex .val.pos { color: var(--d36-green); font-weight: 700; }
+.d36-litegex .val.neg { color: var(--d36-red); font-weight: 700; }
+.d36-litegex .tr-note { font-size: 10px; }
 .d36-litelive {
   display: inline-flex; align-items: center; margin-left: 8px;
   font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase;
