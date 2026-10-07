@@ -89,6 +89,18 @@ const rStr = (r) => (r == null ? '' : `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math
 const label = (s) => String(s || '').replace(/_/g, ' ').replace(/\+/g, ' + ');
 const md = (iso) => (iso ? iso.slice(5) : '');
 
+// The star filter: any of 1, 2, 3 stars, several at once; none picked is
+// every signal. Remembered per browser, like the scope.
+const STARS_KEY = 'superSignals.stars';
+const STAR_LEVELS = [1, 2, 3];
+function loadStars() {
+  try {
+    const v = JSON.parse(localStorage.getItem(STARS_KEY));
+    if (Array.isArray(v)) return new Set(v.filter((n) => STAR_LEVELS.includes(n)));
+  } catch { /* private mode, or nothing saved */ }
+  return new Set();
+}
+
 function loadScope() {
   try {
     const v = localStorage.getItem(SCOPE_KEY);
@@ -187,6 +199,17 @@ export default function SuperSignals({
   const [reports, setReports] = useState(null);
   const [scope, setScopeState] = useState(loadScope);
   const [agent, setAgent] = useState('');
+  const [stars, setStars] = useState(loadStars);
+  const toggleStar = (n) => {
+    setStars((was) => {
+      const next = new Set(was);
+      if (next.has(n)) next.delete(n); else next.add(n);
+      try { localStorage.setItem(STARS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+    setShown(PAGE);
+  };
+  const starOk = useCallback((s) => !stars.size || stars.has(s.stars || 0), [stars]);
   const [openKey, setOpenKey] = useState(null);
   const [shown, setShown] = useState(PAGE);
   const [viewer, setViewer] = useState(null);     // report date on screen
@@ -329,22 +352,24 @@ export default function SuperSignals({
   const rows = useMemo(() => {
     if (!data) return [];
     if (scope === 'watch') return data.watchlist.map((w) => ({ ...w, key: w.id, rows: [w] }));
-    let list = data.signals;
+    let list = data.signals.filter(starOk);
     if (agent) list = list.filter((s) => s.agent === agent);
     if (scope === 'open') list = list.filter((s) => s.outcome === 'open');
     if (scope === 'pairs') list = list.filter((s) => pairOf(s));
     return groupSignals(list);
-  }, [data, scope, agent, pairOf]);
+  }, [data, scope, agent, pairOf, starOk]);
 
   const tally = useMemo(() => {
     if (!data) return null;
     if (scope === 'watch') return tallyOf(data.watchlist);
     if (scope === 'pairs') {
-      return tallyOf(data.signals.filter((s) => (!agent || s.agent === agent) && pairOf(s)));
+      return tallyOf(data.signals.filter((s) => (!agent || s.agent === agent) && pairOf(s)
+        && starOk(s)));
     }
+    if (stars.size) return tallyOf(data.signals.filter((s) => (!agent || s.agent === agent) && starOk(s)));
     if (agent) return (data.agents || []).find((a) => a.id === agent) || tallyOf([]);
     return data.totals;
-  }, [data, scope, agent, pairOf]);
+  }, [data, scope, agent, pairOf, stars, starOk]);
 
   const status = deskStatus(data);
   const titles = useMemo(
@@ -433,6 +458,24 @@ export default function SuperSignals({
                   {a.id}<b>{a.signals}</b>
                 </button>
               ))}
+            </div>
+          )}
+
+          {scope !== 'watch' && (
+            <div className="ss-agents ss-starsel" role="group" aria-label="filter by stars">
+              {STAR_LEVELS.map((n) => {
+                const count = data.signals.filter((s) => (s.stars || 0) === n).length;
+                return (
+                  <button key={n} type="button"
+                    className={`ss-chip${stars.has(n) ? ' on' : ''}${count ? '' : ' zero'}`}
+                    aria-pressed={stars.has(n)} aria-label={`${n} star${n > 1 ? 's' : ''}`}
+                    title={`${stars.has(n) ? 'stop showing' : 'show'} ${n}-star signals`
+                      + (stars.size ? '' : ' (none picked shows every signal)')}
+                    onClick={() => toggleStar(n)}>
+                    <span className="ss-stars">{STAR.repeat(n)}</span><b>{count}</b>
+                  </button>
+                );
+              })}
             </div>
           )}
 
