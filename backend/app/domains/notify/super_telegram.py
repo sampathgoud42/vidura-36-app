@@ -595,7 +595,8 @@ def sweep_all_tenants(now: datetime | None = None, sleep=time.sleep) -> int:
 #   🟢 GOOGL LONG · levels · 12:15 · 345.86 → 347.24 / 344.48 · 🟡 OPEN
 #
 # One TelegramPost per channel and slot (post_key of "tracker:<date>:<HH:MM>"),
-# as the HOT posts. A long list goes as up to TRACK_PAGES messages.
+# as the HOT posts. A long list goes as up to TRACK_PAGES messages. A channel
+# with nothing of its own today yet gets no tracker at all -- not an empty one.
 TRACK_STATUS = {"open": "🟡 OPEN", "target": "✅ TP-hit", "stop": "❌ SL-hit",
                 "timeout": "⏱️ TIMEOUT"}
 TRACK_HEAD = f"{STAR * 3}{THUMBS} TRACKER"
@@ -693,11 +694,16 @@ def sweep_tracker(now: datetime | None = None) -> int:
     if not session or not session.get("is_today"):
         return 0
     marks = marks_for(session)
-    texts = {channel: tracker_pages(tracked(session, marks, channel), slot, channel)
-             for channel in {c for _, c in due}}
+    texts = {}
+    for channel in {c for _, c in due}:
+        signals = tracked(session, marks, channel)
+        if signals:
+            texts[channel] = tracker_pages(signals, slot, channel)
     keyring = deps.keyring()
     sent = 0
     for tenant_id, channel in due:
+        if channel not in texts:
+            continue
         try:
             with session_scope() as db:
                 repo = TenantRepository(db, tenant_id)
@@ -732,7 +738,8 @@ def sweep_tracker(now: datetime | None = None) -> int:
 #   👍 BEST PAIRS TODAY · 11:00 CT · 6 signals · 2 TP · 1 SL · 0 TIMEOUT · 3 OPEN · +1.00R
 #   🟢 TSLA LONG · flow · 10:40 · 241.10 → 243.00 / 240.20 · 🟡 OPEN ⭐⭐
 #
-# One TelegramPost per hour ("bestpairs:<date>:<HH:00>").
+# One TelegramPost per hour ("bestpairs:<date>:<HH:00>"); none while no best
+# pair has fired today.
 BEST_HEAD = f"{THUMBS} BEST PAIRS TODAY"
 
 
@@ -799,7 +806,10 @@ def sweep_best_pairs(now: datetime | None = None) -> int:
     if not session or not session.get("is_today"):
         return 0
     marks = marks_for(session)
-    texts = best_pages(best_today(session, marks), slot, marks)
+    picked = best_today(session, marks)
+    if not picked:
+        return 0
+    texts = best_pages(picked, slot, marks)
     keyring = deps.keyring()
     sent = 0
     for tenant_id in due:
