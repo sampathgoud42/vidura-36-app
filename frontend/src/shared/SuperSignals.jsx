@@ -43,15 +43,17 @@ const SCOPES = [['all', 'all'], ['open', 'open'], ['watch', '★ watchlist'],
   ['pairs', '\u{1F44D}\u{1F44D} best pairs', '\u{1F44D}\u{1F44D} pairs']];
 const THUMBS = '\u{1F44D}\u{1F44D}';
 // The channel's stars (super_telegram.py): the pair won more than 66% of its
-// decided trades over the last 7 sessions (3 stars), else 3 (2), else the
-// last one (1) -- counted before the session on screen, so old signals carry
-// the marks they would have been posted with.
+// decided trades over the last 7 sessions (3 stars -- only when the pair's
+// signal type's 30-session edge is above 59, else 2), else 3 (2), else the last one (1) --
+// counted before the session on screen, so old signals carry the marks they
+// would have been posted with.
 const STAR = '⭐';
 function starText(rec) {
   if (!rec) return '';
   const span = rec.sessions === 1 ? 'last session' : `last ${rec.sessions} sessions`;
   const pct = Math.round((100 * rec.wins) / Math.max(1, rec.wins + rec.losses));
-  return `pair won ${rec.wins}–${rec.losses} (${pct}%) over the ${span}`;
+  const edge = rec.edge == null ? '' : ` · signal type's 30-session edge ${rec.edge.toFixed(1)}`;
+  return `pair won ${rec.wins}–${rec.losses} (${pct}%) over the ${span}${edge}`;
 }
 
 // A signal is "part of a best pair" when its signal type AND its ticker are a
@@ -626,7 +628,16 @@ export default function SuperSignals({
 // private channel's invite link is not something a bot can post to, so the
 // sheet finds the channel's id from the bot's own updates once the bot is an
 // admin there. The token is typed once and never shown again.
+//
+// Two channels, one bot: "vidura" gets only the three-star best pairs (and,
+// each hour, every best pair fired today), "super" every signal. Each has its
+// own chat, switches and half-hourly tracker.
+const TG_CHANNELS = [
+  ['vidura', 'vidura', '⭐⭐⭐👍 signals only, a tracker of them every half hour, and every 👍 best pair fired today, each hour'],
+  ['super', 'super signals', 'every super signal, and a tracker of today\'s signals every half hour'],
+];
 function TelegramViewer({ accent, onClose }) {
+  const [channel, setChannel] = useState('vidura');
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState('load');
   const [err, setErr] = useState('');
@@ -658,10 +669,15 @@ function TelegramViewer({ accent, onClose }) {
     }
   };
   useEffect(() => {
-    run('load', async () => { const d = await vidura.superSignalsTelegram(); if (alive.current) adopt(d); });
-  }, []);                                              // eslint-disable-line react-hooks/exhaustive-deps
+    setSt(null); setChats(null);
+    run('load', async () => {
+      const d = await vidura.superSignalsTelegram(channel);
+      if (alive.current && d.channel === channel) adopt(d);
+    });
+  }, [channel]);                                       // eslint-disable-line react-hooks/exhaustive-deps
 
   const typed = () => ({
+    channel,
     ...(token.trim() ? { token: token.trim() } : {}),
     chat_id: chat.trim(), chat_title: title.trim(),
   });
@@ -675,7 +691,7 @@ function TelegramViewer({ accent, onClose }) {
     if (alive.current) setChats((d && d.chats) || []);
   });
   const test = () => run('test', async () => {
-    await vidura.testSuperSignalsTelegram();
+    await vidura.testSuperSignalsTelegram(channel);
     if (alive.current) setNote('sent — look in the chat');
   });
   const toggle = (on) => run('toggle', async () => {
@@ -712,6 +728,14 @@ function TelegramViewer({ accent, onClose }) {
             aria-label="close the Telegram feed" title="close">×</button>
         </div>
         <div className="ss-tg-body">
+          <div className="ss-tg-row ss-tg-channels" role="tablist" aria-label="channel">
+            {TG_CHANNELS.map(([id, label, why]) => (
+              <button key={id} type="button" role="tab" aria-selected={channel === id}
+                className={`ss-vbtn wide ${channel === id ? 'on' : ''}`} title={why}
+                disabled={!!busy} onClick={() => setChannel(id)}>{label}</button>
+            ))}
+          </div>
+          <p className="ss-tg-note">{(TG_CHANNELS.find(([id]) => id === channel) || [])[2]}</p>
           {st && (
             <p className={`ss-tg-state ${st.enabled ? 'on' : ''}`}>
               {st.enabled

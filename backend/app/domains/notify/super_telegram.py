@@ -1,8 +1,15 @@
-"""New Super Signals, posted to an operator's Telegram chat.
+"""New Super Signals, posted to an operator's Telegram channels.
+
+Two channels on the same bot, each a feed of its own (CHANNELS): "vidura"
+posts only the signals that are both ⭐⭐⭐ and 👍, "super" posts every one.
+Each has its own chat, its own half-hourly tracker of today's signals it
+posts, and its own HOT / SUPERHOT switches (superhot_telegram.py). The vidura
+channel also gets, on the hour, every 👍 best-pair signal fired today --
+whatever its stars -- and how each has done (sweep_best_pairs).
 
 The signal desk serves today's session -- every signal its agents have
 raised, each with a stable id. Every POLL_S this reads it once and, for each
-operator whose feed is on, posts the signals it has not posted before:
+feed that is on, posts the signals it has not posted before:
 
   * only signals timed AFTER the feed was switched on -- turning it on must
     not empty a session's backlog into the channel;
@@ -16,12 +23,14 @@ Each signal's first line says its side and how its pair has done, at a glance:
   * 👍 when its ticker + signal pair is one of the daily report's best pairs --
     the panel's own mark, keyed the same way (type_key::ticker);
   * ⭐⭐⭐ when that same pair won more than 66% of its decided trades over the
-    previous 7 sessions, else ⭐⭐ over the previous 3, else ⭐ over the
+    previous 7 sessions AND its signal type's edge over the 30 sessions
+    before is above 59 (else two), else ⭐⭐ over the previous 3, else ⭐ over the
     previous one. A win is the target before the stop; timeouts sit outside
     the rate, as they do on the panel.
 
-The marks never hold a signal back: when the desk's lists cannot be read, the
-signal goes without them.
+On the super channel the marks never hold a signal back: when the desk's
+lists cannot be read, the signal goes without them. The vidura channel posts
+only what the marks pick, so it waits for them.
 
 A signal is recorded as posted once Telegram has taken the message that
 carried it, and never posted again. A message Telegram refuses leaves its
@@ -55,11 +64,15 @@ THUMBS = "👍"
 STAR = "⭐"
 STAR_WIN_PCT = 66                          # a pair's win rate must be ABOVE this
 STAR_WINDOWS = ((7, 3), (3, 2), (1, 1))    # (sessions back, stars): the longest that clears it
+STAR3_EDGE = 59.0                          # three stars also need the signal type's 30-session edge ABOVE this
 PAIRS_TTL_S = 600                          # the best pairs change once a day, with the report
+CHANNELS = ("vidura", "super")
+CHANNEL_WHAT = {"vidura": "only the ⭐⭐⭐👍 signals", "super": "every Super Signal"}
 LEGEND = ("🟢 long (call) · 🔻 short (put)\n"
           "👍 one of the best ticker + signal pairs\n"
           "⭐ the pair won more than 66% of its trades last session, "
-          "⭐⭐ over the last 3 sessions, ⭐⭐⭐ over the last 7")
+          "⭐⭐ over the last 3 sessions (or 7), "
+          "⭐⭐⭐ over the last 7 when its signal type's 30-session edge is above 59")
 
 
 def _now() -> datetime:
@@ -118,11 +131,16 @@ def format_batch(signals: list[dict], marks: Marks | None = None) -> str:
 
 
 # ---- the marks: 👍 and ⭐ ----------------------------------------------------
+def type_key(signal: dict) -> str:
+    """A signal type as the desk keys it: agent|setup|grade|direction."""
+    return (f'{signal.get("agent") or ""}|{signal.get("setup") or ""}|{signal.get("grade") or ""}'
+            f'|{signal.get("direction") or ""}')
+
+
 def pair_key(signal: dict) -> str:
     """A ticker + signal pair as the desk's best pairs key it: type_key::ticker,
     where type_key is agent|setup|grade|direction."""
-    return (f'{signal.get("agent") or ""}|{signal.get("setup") or ""}|{signal.get("grade") or ""}'
-            f'|{signal.get("direction") or ""}::{signal.get("ticker") or ""}')
+    return f'{type_key(signal)}::{signal.get("ticker") or ""}'
 
 
 def records_of(sessions: list[list[dict]]) -> dict[int, dict[str, tuple[int, int]]]:
@@ -143,25 +161,34 @@ def records_of(sessions: list[list[dict]]) -> dict[int, dict[str, tuple[int, int
 
 
 class Marks:
-    """The best pairs, and each pair's (wins, losses) per STAR_WINDOWS."""
+    """The best pairs, each pair's (wins, losses) per STAR_WINDOWS, and each
+    signal type's edge over the 30 sessions before."""
 
-    def __init__(self, pairs=(), records: dict[int, dict[str, tuple[int, int]]] | None = None):
+    def __init__(self, pairs=(), records: dict[int, dict[str, tuple[int, int]]] | None = None,
+                 edges: dict[str, float] | None = None):
         self.pairs = frozenset(pairs)
         self.records = records or {}
+        self.edges = edges or {}
 
     def best(self, signal: dict) -> bool:
         return pair_key(signal) in self.pairs
+
+    def edge(self, signal: dict) -> float | None:
+        return self.edges.get(type_key(signal))
 
     def stars(self, signal: dict) -> int:
         return self.star_record(signal)[0]
 
     def star_record(self, signal: dict) -> tuple[int, int, int, int]:
         """(stars, wins, losses, sessions back) for the window that earned
-        them -- or (0, 0, 0, 0). The panel shows the record as the reason."""
+        them -- or (0, 0, 0, 0). The panel shows the record as the reason.
+        Three stars only on a 30-session edge above STAR3_EDGE; else two."""
         key = pair_key(signal)
         for back, count in STAR_WINDOWS:
             wins, losses = self.records.get(back, {}).get(key, (0, 0))
             if wins + losses and 100 * wins / (wins + losses) > STAR_WIN_PCT:
+                if count == 3 and not (self.edge(signal) or 0) > STAR3_EDGE:
+                    count = 2
                 return count, wins, losses, back
         return 0, 0, 0, 0
 
@@ -178,8 +205,8 @@ def mark_session(session: dict) -> dict:
     for s in signals:
         count, wins, losses, back = marks.star_record(s)
         s["stars"] = count
-        s["star_record"] = ({"wins": wins, "losses": losses, "sessions": back}
-                            if count else None)
+        s["star_record"] = ({"wins": wins, "losses": losses, "sessions": back,
+                             "edge": marks.edge(s)} if count else None)
     return session
 
 
@@ -202,21 +229,52 @@ def _token(db, tenant_id: str, keyring) -> str | None:
         return None
 
 
-def _feed(db, tenant_id: str):
+def _channel(channel: str | None) -> str:
+    channel = (channel or "vidura").strip().lower()
+    if channel not in CHANNELS:
+        raise ValueError(f"no such channel: {channel} (one of {', '.join(CHANNELS)})")
+    return channel
+
+
+def _feed(db, tenant_id: str, channel: str = "vidura"):
     from app.domains.notify.models import TelegramFeed
     from app.platform.db.repository import TenantRepository
 
-    return db.scalar(TenantRepository(db, tenant_id).query(TelegramFeed))
+    return db.scalar(TenantRepository(db, tenant_id).query(TelegramFeed).where(
+        TelegramFeed.channel == channel))
+
+
+def _feeds(db, tenant_id: str) -> list:
+    """Every channel's feed this operator has, vidura first."""
+    from app.domains.notify.models import TelegramFeed
+    from app.platform.db.repository import TenantRepository
+
+    rows = db.scalars(TenantRepository(db, tenant_id).query(TelegramFeed)).all()
+    return sorted(rows, key=lambda f: CHANNELS.index(f.channel) if f.channel in CHANNELS else 99)
+
+
+def post_key(channel: str, post: str) -> str:
+    """What a channel records a post under. The vidura channel keeps the bare
+    ids it has always used, so nothing it already posted goes out again."""
+    return (post if channel == "vidura" else f"{channel}:{post}")[:255]
+
+
+def wanted(channel: str, signal: dict, marks: Marks) -> bool:
+    """Whether a channel posts this signal: super every one, vidura only the
+    three-star best pairs."""
+    return channel != "vidura" or (marks.stars(signal) == 3 and marks.best(signal))
 
 
 def _stamp(moment):
     return moment.replace(tzinfo=timezone.utc).isoformat() if moment else None
 
 
-def get_state(db, tenant_id: str, keyring) -> dict:
+def get_state(db, tenant_id: str, keyring, channel: str = "vidura") -> dict:
     """The feed as the panel shows it. Whether a token is saved, never what."""
-    feed = _feed(db, tenant_id)
-    return {"token_saved": _token(db, tenant_id, keyring) is not None,
+    channel = _channel(channel)
+    feed = _feed(db, tenant_id, channel)
+    return {"channel": channel, "channels": list(CHANNELS), "what": CHANNEL_WHAT[channel],
+            "token_saved": _token(db, tenant_id, keyring) is not None,
             "enabled": bool(feed and feed.enabled),
             "post_hot": bool(feed and feed.post_hot),
             "post_superhot": bool(feed and feed.post_superhot),
@@ -231,9 +289,10 @@ def get_state(db, tenant_id: str, keyring) -> dict:
 def set_state(db, tenant, keyring, *, token: str | None = None,
               chat_id: str | None = None, chat_title: str | None = None,
               enabled: bool | None = None, post_hot: bool | None = None,
-              post_superhot: bool | None = None, actor: str = "") -> dict:
-    """Save the token (sealed), the chat, and the switch -- whichever given.
-    Switching on needs both a token and a chat."""
+              post_superhot: bool | None = None, actor: str = "",
+              channel: str = "vidura") -> dict:
+    """Save the token (sealed, one for every channel), the channel's chat, and
+    its switches -- whichever given. Switching on needs a token and a chat."""
     from app.domains.notify.models import TelegramFeed
     from app.platform import notify
     from app.platform.db.repository import TenantRepository
@@ -256,9 +315,10 @@ def set_state(db, tenant, keyring, *, token: str | None = None,
     if chat_id is not None and chat_id.strip() and not notify.TELEGRAM_CHAT.match(chat_id.strip()):
         raise ValueError("that is not a Telegram chat id (a number like -100..., or @channel)")
 
-    feed = _feed(db, tenant.id)
+    channel = _channel(channel)
+    feed = _feed(db, tenant.id, channel)
     if feed is None:
-        feed = TelegramFeed(enabled=False, posted=0)
+        feed = TelegramFeed(channel=channel, enabled=False, posted=0)
         TenantRepository(db, tenant.id).add(feed)
     if chat_id is not None:
         if (chat_id.strip() or None) != feed.chat_id:
@@ -280,7 +340,7 @@ def set_state(db, tenant, keyring, *, token: str | None = None,
             raise ValueError("posting needs a saved bot token and a chat")
         setattr(feed, name, bool(value))
     db.commit()
-    return get_state(db, tenant.id, keyring)
+    return get_state(db, tenant.id, keyring, channel)
 
 
 # ---- Telegram ---------------------------------------------------------------
@@ -342,16 +402,18 @@ def chats(token: str) -> list[dict]:
     return sorted(found.values(), key=lambda c: (c["type"] != "channel", c["title"].lower()))
 
 
-def send_test(db, tenant_id: str, keyring) -> dict:
+def send_test(db, tenant_id: str, keyring, channel: str = "vidura") -> dict:
     from app.platform import notify
 
-    feed = _feed(db, tenant_id)
+    channel = _channel(channel)
+    feed = _feed(db, tenant_id, channel)
     token = _token(db, tenant_id, keyring)
     if not token or not (feed and feed.chat_id):
         raise notify.NotifyError("save a bot token and a chat first")
     return notify.send("telegram", token=token, chat_id=feed.chat_id,
-                       text="✅ Vidura Super Signals: this chat will get new signals as "
-                            "the desk raises them.\n\n" + LEGEND)
+                       text=f"✅ Vidura Super Signals: this chat will get {CHANNEL_WHAT[channel]} "
+                            "as the desk raises them, and a tracker of them every half hour."
+                            "\n\n" + LEGEND)
 
 
 # ---- the feed ---------------------------------------------------------------
@@ -372,6 +434,7 @@ def _session() -> dict | None:
 
 
 _pairs_cache: list = [0.0, None]           # [monotonic time read, frozenset of pair keys]
+_edges_cache: dict = {}                    # session date -> {type key: 30-session edge}
 _records_cache: dict = {}                  # session date -> records_of(the sessions before it)
 RECORDS_KEEP = 10
 
@@ -417,10 +480,28 @@ def _records(session: dict) -> dict[int, dict[str, tuple[int, int]]]:
     return _records_cache[day]
 
 
+def _type_edges(session: dict) -> dict[str, float]:
+    """Each signal type's edge over the 30 sessions before `session`, read
+    once a day: those sessions are settled. Unreadable: none, and so no
+    three stars, and another try on the next pass."""
+    day = str(session.get("date") or "")
+    if day in _edges_cache:
+        return _edges_cache[day]
+    try:
+        edges = _desk("/api/type-edges", {"date": day} if day else None).get("edges") or {}
+    except Exception as exc:                            # noqa: BLE001
+        logger.info("super telegram: the type edges did not answer (%s)", type(exc).__name__)
+        return {}
+    while len(_edges_cache) >= RECORDS_KEEP:
+        _edges_cache.pop(next(iter(_edges_cache)))
+    _edges_cache[day] = {k: float(v) for k, v in edges.items() if v is not None}
+    return _edges_cache[day]
+
+
 def marks_for(session: dict) -> Marks:
     """Never holds a signal back: anything amiss, and it goes without marks."""
     try:
-        return Marks(_best_pairs(), _records(session))
+        return Marks(_best_pairs(), _records(session), _type_edges(session))
     except Exception as exc:                            # noqa: BLE001
         logger.warning("super telegram: no marks this pass (%s)", type(exc).__name__)
         return Marks()
@@ -437,9 +518,9 @@ def sweep_all_tenants(now: datetime | None = None, sleep=time.sleep) -> int:
 
     now = now or _now()
     with session_scope() as db:
-        tenant_ids = [tid for tid in db.scalars(select(Tenant.id)).all()
-                      if (f := _feed(db, tid)) is not None and f.enabled]
-    if not tenant_ids:
+        targets = [(tid, f.channel) for tid in db.scalars(select(Tenant.id)).all()
+                   for f in _feeds(db, tid) if f.enabled]
+    if not targets:
         return 0
     session = _session()
     if not session or not session.get("is_today"):
@@ -452,19 +533,23 @@ def sweep_all_tenants(now: datetime | None = None, sleep=time.sleep) -> int:
     keyring = deps.keyring()
     sent = 0
     marks = None                               # read once a pass, and only with something to post
-    for tenant_id in tenant_ids:
+    for tenant_id, channel in targets:
         try:
             with session_scope() as db:
                 repo = TenantRepository(db, tenant_id)
-                feed = db.scalar(repo.query(TelegramFeed))
+                feed = _feed(db, tenant_id, channel)
                 if feed is None or not feed.enabled or not feed.chat_id:
                     continue
                 since = feed.enabled_at or _naive_utc(now)
-                ids = [s["id"] for s in live]
+                ids = [post_key(channel, s["id"]) for s in live]
                 posted = {row.signal_id for row in db.scalars(
                     repo.query(TelegramPost).where(TelegramPost.signal_id.in_(ids))).all()}
-                fresh = [s for s in live if s["id"] not in posted
+                fresh = [s for s in live if post_key(channel, s["id"]) not in posted
                          and (_signal_at(date, s) or since) >= since]
+                if fresh and channel == "vidura":
+                    if marks is None:
+                        marks = marks_for(session)
+                    fresh = [s for s in fresh if wanted(channel, s, marks)]
                 if not fresh:
                     continue
                 token = _token(db, tenant_id, keyring)
@@ -483,7 +568,7 @@ def sweep_all_tenants(now: datetime | None = None, sleep=time.sleep) -> int:
                         feed.last_error = str(exc)[:255]
                         break
                     for signal in batch:
-                        repo.add(TelegramPost(signal_id=signal["id"][:255]))
+                        repo.add(TelegramPost(signal_id=post_key(channel, signal["id"])))
                     feed.posted = (feed.posted or 0) + len(batch)
                     feed.last_post_at = _naive_utc(_now())
                     feed.last_error = None
@@ -496,67 +581,92 @@ def sweep_all_tenants(now: datetime | None = None, sleep=time.sleep) -> int:
                         TelegramPost.created_at < cutoff)).all():
                     db.delete(old)
         except Exception as exc:                        # noqa: BLE001
-            logger.warning("super telegram for one operator: %s", type(exc).__name__)
+            logger.warning("super telegram for one operator's %s channel: %s",
+                           channel, type(exc).__name__)
     return sent
 
 
-# ---- the tracker: today's ⭐⭐⭐ 👍 signals, every half hour --------------------
-# The signals that are BOTH a best pair and three-star -- the strongest the
-# channel marks -- re-posted each half hour (the HOT slots, 09:00-15:00 CT)
-# with where each one stands now, newest first:
+# ---- the tracker: today's signals, every half hour -------------------------
+# Each channel re-posts the signals it posts each half hour (the HOT slots,
+# 09:00-15:00 CT) with where each one stands now, newest first -- the vidura
+# channel its ⭐⭐⭐👍 signals, the super channel every one of today's:
 #
 #   ⭐⭐⭐👍 TRACKER · 12:30 CT · 4 signals · 1 TP · 1 SL · 0 TIMEOUT · 2 OPEN
 #   🟢 GOOGL LONG · levels · 12:15 · 345.86 → 347.24 / 344.48 · 🟡 OPEN
 #
-# One TelegramPost per slot ("tracker:<date>:<HH:MM>"), as the HOT posts.
+# One TelegramPost per channel and slot (post_key of "tracker:<date>:<HH:MM>"),
+# as the HOT posts. A long list goes as up to TRACK_PAGES messages.
 TRACK_STATUS = {"open": "🟡 OPEN", "target": "✅ TP-hit", "stop": "❌ SL-hit",
                 "timeout": "⏱️ TIMEOUT"}
 TRACK_HEAD = f"{STAR * 3}{THUMBS} TRACKER"
+TRACK_HEADS = {"vidura": TRACK_HEAD, "super": "📋 SUPER SIGNALS TRACKER"}
+TRACK_EMPTY = {"vidura": "No signal today is both three-star and a best pair yet.",
+               "super": "No signal yet today."}
+TRACK_PAGES = 4
 
 
-def tracked(session: dict, marks: Marks) -> list[dict]:
-    """Today's live signals that are three-star AND a best pair, newest first."""
+def tracked(session: dict, marks: Marks, channel: str = "vidura") -> list[dict]:
+    """Today's live signals the channel posts, newest first."""
     out = [s for s in session.get("signals") or []
-           if str(s.get("source") or "live") == "live"
-           and marks.stars(s) == 3 and marks.best(s)]
+           if str(s.get("source") or "live") == "live" and wanted(channel, s, marks)]
     out.sort(key=lambda s: (s.get("time") or "", s.get("id") or ""), reverse=True)
     return out
 
 
-def format_tracker(signals: list[dict], slot: str) -> str:
+def _track_line(s: dict) -> str:
+    direction = str(s.get("direction") or "").upper()
+    status = TRACK_STATUS.get(s.get("outcome"), str(s.get("outcome") or "?").upper())
+    if s.get("outcome") != "open" and s.get("exit_time"):
+        status += f" {s['exit_time']}"
+    if s.get("r") is not None:
+        status += f" ({float(s['r']):+.2f}R)"
+    # The setup too: several setups often fire on one bar, and without it
+    # their lines read as the same signal posted twice.
+    return (f"{SIDE.get(direction, '•')} {s.get('ticker', '?')} {direction} · "
+            f"{s.get('agent', '')} {setup_text(s)} · {s.get('time', '')} · {_num(s.get('price'))} → "
+            f"{_num(s.get('target'))} / {_num(s.get('stop'))} · {status}")
+
+
+def tracker_pages(signals: list[dict], slot: str, channel: str = "vidura",
+                  pages: int = TRACK_PAGES) -> list[str]:
+    """The tracker as messages: the head on the first, as many lines as fit
+    on each, at most `pages` of them, the last saying how many did not fit."""
     from app.platform import notify
 
     count = {k: sum(1 for s in signals if s.get("outcome") == k) for k in TRACK_STATUS}
-    head = (f"{TRACK_HEAD} · {slot} CT · {len(signals)} signal{'s' if len(signals) != 1 else ''}"
+    head = (f"{TRACK_HEADS.get(channel, TRACK_HEAD)} · {slot} CT · "
+            f"{len(signals)} signal{'s' if len(signals) != 1 else ''}"
             f" · {count['target']} TP · {count['stop']} SL · {count['timeout']} TIMEOUT"
             f" · {count['open']} OPEN")
     if not signals:
-        return head + "\nNo signal today is both three-star and a best pair yet."
-    lines = []
-    for s in signals:
-        direction = str(s.get("direction") or "").upper()
-        status = TRACK_STATUS.get(s.get("outcome"), str(s.get("outcome") or "?").upper())
-        if s.get("outcome") != "open" and s.get("exit_time"):
-            status += f" {s['exit_time']}"
-        if s.get("r") is not None:
-            status += f" ({float(s['r']):+.2f}R)"
-        lines.append(f"{SIDE.get(direction, '•')} {s.get('ticker', '?')} {direction} · "
-                     f"{s.get('agent', '')} · {s.get('time', '')} · {_num(s.get('price'))} → "
-                     f"{_num(s.get('target'))} / {_num(s.get('stop'))} · {status}")
-    text = head
+        return [head + "\n" + TRACK_EMPTY.get(channel, TRACK_EMPTY["super"])]
+    lines = [_track_line(s) for s in signals]
+    out, text = [], head
     for i, line in enumerate(lines):
-        more = f"\n… and {len(lines) - i} more" if i < len(lines) else ""
-        if len(text) + 1 + len(line) + len(more) > notify.MAX_TEXT:
-            return text + more
+        more = f"\n… and {len(lines) - i} more"
+        last = len(out) == pages - 1
+        if len(text) + 1 + len(line) + (len(more) if last else 0) > notify.MAX_TEXT:
+            if last:
+                out.append(text + more)
+                return out
+            out.append(text)
+            text = line
+            continue
         text += "\n" + line
-    return text
+    out.append(text)
+    return out
+
+
+def format_tracker(signals: list[dict], slot: str) -> str:
+    """The vidura channel's tracker, in one message."""
+    return tracker_pages(signals, slot, "vidura", pages=1)[0]
 
 
 def sweep_tracker(now: datetime | None = None) -> int:
-    """Post the tracker for the half-hour slot due now, once per operator."""
+    """Post the tracker for the half-hour slot due now, once per channel."""
     from app.api_v2 import deps
     from app.domains.notify import superhot_telegram as sh
-    from app.domains.notify.models import TelegramFeed, TelegramPost
+    from app.domains.notify.models import TelegramPost
     from app.platform import notify
     from app.platform.db.repository import TenantRepository
     from app.platform.db.session import session_scope
@@ -571,30 +681,140 @@ def sweep_tracker(now: datetime | None = None) -> int:
     with session_scope() as db:
         due = []
         for tid in db.scalars(select(Tenant.id)).all():
-            f = _feed(db, tid)
-            if f is None or not f.enabled or not f.chat_id:
-                continue
-            if db.scalar(TenantRepository(db, tid).query(TelegramPost).where(
-                    TelegramPost.signal_id == post)) is None:
-                due.append(tid)
+            for f in _feeds(db, tid):
+                if not f.enabled or not f.chat_id:
+                    continue
+                if db.scalar(TenantRepository(db, tid).query(TelegramPost).where(
+                        TelegramPost.signal_id == post_key(f.channel, post))) is None:
+                    due.append((tid, f.channel))
     if not due:
         return 0
     session = _session()
     if not session or not session.get("is_today"):
         return 0
-    text = format_tracker(tracked(session, marks_for(session)), slot)
+    marks = marks_for(session)
+    texts = {channel: tracker_pages(tracked(session, marks, channel), slot, channel)
+             for channel in {c for _, c in due}}
+    keyring = deps.keyring()
+    sent = 0
+    for tenant_id, channel in due:
+        try:
+            with session_scope() as db:
+                repo = TenantRepository(db, tenant_id)
+                feed = _feed(db, tenant_id, channel)
+                token = _token(db, tenant_id, keyring)
+                if feed is None or not token:
+                    continue
+                try:
+                    for i, text in enumerate(texts[channel]):
+                        if i:
+                            time.sleep(SEND_GAP_S)
+                        notify.send("telegram", text=text, token=token, chat_id=feed.chat_id)
+                except notify.NotifyError as exc:
+                    feed.last_error = str(exc)[:255]
+                    continue
+                repo.add(TelegramPost(signal_id=post_key(channel, post)))
+                feed.posted = (feed.posted or 0) + 1
+                feed.last_post_at = _naive_utc(_now())
+                feed.last_error = None
+                sent += 1
+        except Exception as exc:                        # noqa: BLE001
+            logger.warning("super telegram tracker for one operator's %s channel: %s",
+                           channel, type(exc).__name__)
+    return sent
+
+
+# ---- the best pairs, on the hour: vidura's other report ---------------------
+# Every best-pair (👍) signal fired today, whatever its stars, and where each
+# stands -- posted to the vidura channel at the top of each hour, 09:00-15:00
+# CT, with the day's tally and net R:
+#
+#   👍 BEST PAIRS TODAY · 11:00 CT · 6 signals · 2 TP · 1 SL · 0 TIMEOUT · 3 OPEN · +1.00R
+#   🟢 TSLA LONG · flow · 10:40 · 241.10 → 243.00 / 240.20 · 🟡 OPEN ⭐⭐
+#
+# One TelegramPost per hour ("bestpairs:<date>:<HH:00>").
+BEST_HEAD = f"{THUMBS} BEST PAIRS TODAY"
+
+
+def best_today(session: dict, marks: Marks) -> list[dict]:
+    """Today's live signals on a best pair, newest first."""
+    out = [s for s in session.get("signals") or []
+           if str(s.get("source") or "live") == "live" and marks.best(s)]
+    out.sort(key=lambda s: (s.get("time") or "", s.get("id") or ""), reverse=True)
+    return out
+
+
+def best_pages(signals: list[dict], slot: str, marks: Marks) -> list[str]:
+    from app.platform import notify
+
+    count = {k: sum(1 for s in signals if s.get("outcome") == k) for k in TRACK_STATUS}
+    net = sum(float(s["r"]) for s in signals
+              if s.get("r") is not None and s.get("outcome") in ("target", "stop", "timeout"))
+    head = (f"{BEST_HEAD} · {slot} CT · {len(signals)} signal{'s' if len(signals) != 1 else ''}"
+            f" · {count['target']} TP · {count['stop']} SL · {count['timeout']} TIMEOUT"
+            f" · {count['open']} OPEN · {net:+.2f}R")
+    if not signals:
+        return [head + "\nNo best-pair signal has fired today yet."]
+    lines = [_track_line(s) + (f" {STAR * n}" if (n := marks.stars(s)) else "") for s in signals]
+    out, text = [], head
+    for i, line in enumerate(lines):
+        last = len(out) == TRACK_PAGES - 1
+        more = f"\n… and {len(lines) - i} more"
+        if len(text) + 1 + len(line) + (len(more) if last else 0) > notify.MAX_TEXT:
+            if last:
+                out.append(text + more)
+                return out
+            out.append(text)
+            text = line
+            continue
+        text += "\n" + line
+    out.append(text)
+    return out
+
+
+def sweep_best_pairs(now: datetime | None = None) -> int:
+    """Post the hour's best-pairs report to each vidura channel that is on."""
+    from app.api_v2 import deps
+    from app.domains.notify import superhot_telegram as sh
+    from app.domains.notify.models import TelegramPost
+    from app.platform import notify
+    from app.platform.db.repository import TenantRepository
+    from app.platform.db.session import session_scope
+    from app.tenancy.models import Tenant
+
+    now = now or _now()
+    slot = sh.hot_slot(now)
+    if slot is None or not slot.endswith(":00"):
+        return 0
+    day = now.astimezone(CT).date().isoformat()
+    post = post_key("vidura", f"bestpairs:{day}:{slot}")
+    with session_scope() as db:
+        due = [tid for tid in db.scalars(select(Tenant.id)).all()
+               if (f := _feed(db, tid, "vidura")) is not None and f.enabled and f.chat_id
+               and db.scalar(TenantRepository(db, tid).query(TelegramPost).where(
+                   TelegramPost.signal_id == post)) is None]
+    if not due:
+        return 0
+    session = _session()
+    if not session or not session.get("is_today"):
+        return 0
+    marks = marks_for(session)
+    texts = best_pages(best_today(session, marks), slot, marks)
     keyring = deps.keyring()
     sent = 0
     for tenant_id in due:
         try:
             with session_scope() as db:
                 repo = TenantRepository(db, tenant_id)
-                feed = db.scalar(repo.query(TelegramFeed))
+                feed = _feed(db, tenant_id, "vidura")
                 token = _token(db, tenant_id, keyring)
                 if feed is None or not token:
                     continue
                 try:
-                    notify.send("telegram", text=text, token=token, chat_id=feed.chat_id)
+                    for i, text in enumerate(texts):
+                        if i:
+                            time.sleep(SEND_GAP_S)
+                        notify.send("telegram", text=text, token=token, chat_id=feed.chat_id)
                 except notify.NotifyError as exc:
                     feed.last_error = str(exc)[:255]
                     continue
@@ -604,5 +824,5 @@ def sweep_tracker(now: datetime | None = None) -> int:
                 feed.last_error = None
                 sent += 1
         except Exception as exc:                        # noqa: BLE001
-            logger.warning("super telegram tracker for one operator: %s", type(exc).__name__)
+            logger.warning("super telegram best pairs for one operator: %s", type(exc).__name__)
     return sent

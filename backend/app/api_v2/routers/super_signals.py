@@ -131,6 +131,9 @@ def report(report_date: str = PathParam(pattern=DATE),
 # like every other key and never comes back out -- an answer says only whether
 # one is saved.
 class TelegramFeedRequest(BaseModel):
+    # Which channel's feed: "vidura" (only the three-star best pairs) or
+    # "super" (every signal). The token is one, shared by both.
+    channel: str = Field(default="vidura", max_length=16)
     token: str | None = Field(default=None, max_length=128)
     chat_id: str | None = Field(default=None, max_length=64)
     chat_title: str | None = Field(default=None, max_length=128)
@@ -158,14 +161,15 @@ def _telegram(fn, *args, **kwargs):
 
 @router.get("/telegram", operation_id="getSuperSignalsTelegram")
 @deps.tenant_scoped
-def telegram_get(tenant: Tenant = Depends(deps.current_tenant),
+def telegram_get(channel: str = Query(default="vidura", max_length=16),
+                 tenant: Tenant = Depends(deps.current_tenant),
                  db: DbSession = Depends(deps.get_db),
                  kr=Depends(deps.keyring)) -> dict:
-    """Where this operator's new signals go: the chat, the switch, the last
-    post and the last error, and whether a bot token is saved."""
+    """Where this operator's new signals go on one channel: the chat, the
+    switches, the last post and the last error, and whether a bot token is saved."""
     from app.domains.notify import super_telegram
 
-    return super_telegram.get_state(db, tenant.id, kr)
+    return _telegram(super_telegram.get_state, db, tenant.id, kr, channel)
 
 
 @router.put("/telegram", operation_id="setSuperSignalsTelegram")
@@ -182,7 +186,7 @@ def telegram_set(payload: TelegramFeedRequest,
                      token=payload.token, chat_id=payload.chat_id,
                      chat_title=payload.chat_title, enabled=payload.enabled,
                      post_hot=payload.post_hot, post_superhot=payload.post_superhot,
-                     actor=tenant.slug)
+                     actor=tenant.slug, channel=payload.channel)
 
 
 @router.post("/telegram/chats", operation_id="listSuperSignalsTelegramChats")
@@ -203,10 +207,11 @@ def telegram_chats(payload: TelegramChatsRequest,
 
 @router.post("/telegram/test", operation_id="testSuperSignalsTelegram")
 @deps.tenant_scoped
-def telegram_test(tenant: Tenant = Depends(deps.current_tenant),
+def telegram_test(channel: str = Query(default="vidura", max_length=16),
+                  tenant: Tenant = Depends(deps.current_tenant),
                   db: DbSession = Depends(deps.get_db),
                   kr=Depends(deps.keyring)) -> dict:
-    """One test message to the saved chat."""
+    """One test message to the channel's saved chat."""
     from app.domains.notify import super_telegram
 
-    return _telegram(super_telegram.send_test, db, tenant.id, kr)
+    return _telegram(super_telegram.send_test, db, tenant.id, kr, channel)

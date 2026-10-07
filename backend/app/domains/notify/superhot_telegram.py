@@ -14,8 +14,10 @@ the 5-minute board, with ":15min" / ":1h" after it for the others), so a
 restart does not post the same one twice; a slot missed while the server was
 down is posted late, as long as its half hour has not passed.
 
-Same bot token, same chat, same on/off switch as the Super Signals feed
-(super_telegram.py) -- an operator who turned that on gets these too.
+Same bot token as the Super Signals feeds (super_telegram.py), and each
+channel's own chat and switches: the vidura and super channels each take
+HOT and SUPERHOT only while their own boxes are ticked, recorded apart
+(super_telegram.post_key), so ticking one does not silence the other.
 
     🔥 SUPERHOT · 5m bars
     🟢 NVDA DMI UP · ADX 42.1 · +DI 35.2 / −DI 12.0 · 182.40
@@ -167,7 +169,7 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
     from app.api_v2 import deps
     from app.core.config import get_settings
     from app.domains.notify import super_telegram as st
-    from app.domains.notify.models import TelegramFeed, TelegramPost
+    from app.domains.notify.models import TelegramPost
     from app.platform import notify
     from app.platform.db.repository import TenantRepository
     from app.platform.db.session import session_scope
@@ -178,18 +180,18 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
     if not desk_open(now) and slot is None:
         return 0
     with session_scope() as db:
-        # Each post has its own switch: (tenant, HOT on, SUPERHOT on).
-        tenants = [(tid, f.post_hot, f.post_superhot)
+        # Each channel's posts have their own switches: (tenant, channel, HOT on, SUPERHOT on).
+        tenants = [(tid, f.channel, f.post_hot, f.post_superhot)
                    for tid in db.scalars(select(Tenant.id)).all()
-                   if (f := st._feed(db, tid)) is not None and f.chat_id
-                   and (f.post_hot or f.post_superhot)]
+                   for f in st._feeds(db, tid)
+                   if f.chat_id and (f.post_hot or f.post_superhot)]
     if not tenants:
         return 0
     keyring = deps.keyring()
     interval = get_settings().tradier_hot_interval
     day = now.astimezone(CT).date().isoformat()
     sent = 0
-    for tenant_id, want_hot, want_superhot in tenants:
+    for tenant_id, channel, want_hot, want_superhot in tenants:
         superhot_now = want_superhot and desk_open(now)
         try:
             with session_scope() as db:
@@ -198,7 +200,8 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
                 continue
             # The 5-minute board keeps the id it was first posted under, so
             # adding the other bars did not repost a slot already sent.
-            hot_ids = ({iv: f"hot:{day}:{slot}" + ("" if iv == "5min" else f":{iv}")
+            hot_ids = ({iv: st.post_key(channel, f"hot:{day}:{slot}"
+                                        + ("" if iv == "5min" else f":{iv}"))
                         for iv in HOT_INTERVALS} if slot and want_hot else {})
             with session_scope() as db:
                 repo = TenantRepository(db, tenant_id)
@@ -212,7 +215,7 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
             listed = superhot_rows(boards[interval]) if superhot_now else []
             with session_scope() as db:
                 repo = TenantRepository(db, tenant_id)
-                feed = db.scalar(repo.query(TelegramFeed))
+                feed = st._feed(db, tenant_id, channel)
                 if feed is None or not feed.chat_id:
                     continue
                 token = st._token(db, tenant_id, keyring)
@@ -220,7 +223,7 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
                     feed.last_error = "no bot token saved"
                     continue
                 messages: list[tuple[str, list[str]]] = []
-                ids = {post_id(day, r): r for r in listed}
+                ids = {st.post_key(channel, post_id(day, r)): r for r in listed}
                 if ids:
                     posted = {p.signal_id for p in db.scalars(repo.query(TelegramPost).where(
                         TelegramPost.signal_id.in_(list(ids)))).all()}
@@ -245,6 +248,6 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
                     db.commit()
                     time.sleep(st.SEND_GAP_S)
         except Exception as exc:                        # noqa: BLE001
-            logger.warning("superhot telegram for one operator: %s: %s",
-                           type(exc).__name__, exc)
+            logger.warning("superhot telegram for one operator's %s channel: %s: %s",
+                           channel, type(exc).__name__, exc)
     return sent

@@ -294,6 +294,8 @@
 }
 .ss-vbtn.wide { font-size: 12px; }
 .ss-vbtn:disabled { opacity: 0.35; cursor: default; }
+/* The Telegram sheet's channel tabs: the chosen one in the accent. */
+.ss-tg-channels .ss-vbtn.on { border-color: var(--ss-accent, #5b6af0); color: var(--ss-accent, #5b6af0); }
 .ss-vsel {
   height: 34px; max-width: 46vw; padding: 0 8px; border-radius: 8px;
   border: 1px solid rgba(255, 255, 255, 0.14); background: #0b0c16; color: inherit;

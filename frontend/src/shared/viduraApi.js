@@ -607,12 +607,16 @@ export const vidura = {
   // The signal desk's switch, admins only: start it as its 08:15 task does
   // (a missed morning, or after a stop), or end its day early -- the agents
   // finish their cycle and the day's report is written.
-  // New signals to the operator's Telegram chat. The token goes in, once, and
-  // never comes back: the feed says only whether one is saved.
-  superSignalsTelegram: () => api.get('/super-signals/telegram'),
+  // New signals to the operator's Telegram channels -- 'vidura' (only the
+  // three-star best pairs) or 'super' (every signal), one feed each. The
+  // token goes in, once, and never comes back: the feed says only whether
+  // one is saved.
+  superSignalsTelegram: (channel = 'vidura') =>
+    api.get('/super-signals/telegram', { params: { channel } }),
   setSuperSignalsTelegram: (body) => api.put('/super-signals/telegram', body),
   superSignalsTelegramChats: (body) => api.post('/super-signals/telegram/chats', body || {}),
-  testSuperSignalsTelegram: () => api.post('/super-signals/telegram/test', {}),
+  testSuperSignalsTelegram: (channel = 'vidura') =>
+    api.post('/super-signals/telegram/test', {}, { params: { channel } }),
   superSignalsDeskStart: () => api.post('/super-signals/desk/start', {}),
   superSignalsDeskStop: () => api.post('/super-signals/desk/stop', {}),
   superSignalsReports: () => api.get('/super-signals/reports'),

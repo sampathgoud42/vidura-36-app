@@ -140,9 +140,10 @@ def _post_superhot() -> None:
     from app.domains.notify import super_telegram, superhot_telegram
 
     superhot_telegram.sweep_all_tenants()
-    # The half-hourly tracker of today's three-star best pairs rides the same
-    # five-minute pass: it shares the slots, not the scan.
+    # Each channel's half-hourly tracker, and the vidura channel's hourly best
+    # pairs, ride the same five-minute pass: they share the slots, not the scan.
     super_telegram.sweep_tracker()
+    super_telegram.sweep_best_pairs()
 
 
 def _read_spy_gex() -> None:
