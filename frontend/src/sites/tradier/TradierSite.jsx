@@ -2850,7 +2850,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
   const isAutoScan = isHot || isSuperHot;
   const isSuper = f.strategy === 'super_signals';
   const isPairs = f.strategy === 'best_pairs';
-  // best picks today: any ticker's live signal with ⭐⭐⭐ or 👍
+  // best picks today: any ticker's live signal with ⭐⭐⭐ and 👍 -- what the vidura channel posts
   const isPicks = f.strategy === 'best_picks';
   const onDesk = isSuper || isPairs || isPicks;   // trades the signal desk's live signals
   // the signal strategies buy at the desk's smart limit -- all but best picks,
@@ -2924,7 +2924,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
             <input className="tr-input"
               value={isHot ? '(auto from HOT scan)' : isSuperHot ? '(auto from SUPERHOT scan)'
                 : isPairs ? '(each pair’s own ticker)'
-                : isPicks ? '(any ticker with ⭐⭐⭐ or 👍)' : f.tickers}
+                : isPicks ? '(any ticker with ⭐⭐⭐ and 👍)' : f.tickers}
               onChange={set('tickers')} placeholder="SPY,QQQ,SPX"
               disabled={isAutoScan || isPairs || isPicks}
               style={isAutoScan || isPairs || isPicks ? { opacity: 0.45 } : undefined}
@@ -3047,8 +3047,9 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           {isPicks ? (
             <>
               Best picks today: watches the signal desk live, and any ticker&rsquo;s new signal
-              marked ⭐⭐⭐ (its pair won over 66% across the last 7 sessions) or 👍 (one of the
-              report&rsquo;s best pairs) buys a CALL for a LONG and a PUT for a SHORT. Only signals
+              marked both ⭐⭐⭐ (its pair won over 66% across the last 7 sessions and its signal
+              type&rsquo;s 30-session edge is above 59) and 👍 (one of the report&rsquo;s best pairs) &mdash;
+              exactly what the @vidura38 channel posts &mdash; buys a CALL for a LONG and a PUT for a SHORT. Only signals
               fired live inside {f.window_open}–{f.window_close} CST, at most{' '}
               {defaults?.super_max_age_min ?? 6} min old and still open, and at most one entry per
               ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}

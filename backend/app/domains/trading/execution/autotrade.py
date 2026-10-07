@@ -27,9 +27,10 @@ idempotency key included, so a signal either strategy has acted on is never
 bought again by the other.
 
 ``best_picks`` -- "best picks today": any ticker, any signal type, as long
-as the signal carries the channel's strongest marks -- three stars (its
-ticker + signal pair won more than 66% over the last 7 sessions) OR a thumbs
-up (one of the report's best pairs). It opens on a 09:15-13:15 CST window and
+as it is a signal the vidura Telegram channel posts (super_telegram.wanted):
+three stars (its ticker + signal pair won more than 66% over the last 7
+sessions AND its signal type's 30-session edge is above 59) AND a thumbs up
+(one of the report's best pairs). It opens on a 09:15-13:15 CST window and
 picks its strike by open interest unless told otherwise. Every other rule --
 live, fresh, still open, one entry per ticker per hour, the shared
 idempotency key -- is the other signal strategies' own.
@@ -201,8 +202,9 @@ class Watcher:
         if self.strategy == "best_pairs":
             return (type_key(row), row.get("ticker")) in self.pairs
         if self.strategy == "best_picks":
-            return self.marks is not None and (self.marks.stars(row) == 3
-                                               or self.marks.best(row))
+            from app.domains.notify import super_telegram
+
+            return self.marks is not None and super_telegram.wanted("vidura", row, self.marks)
         return type_key(row) in self.signals and row.get("ticker") in self.tickers
 
     def public(self) -> dict:
@@ -220,7 +222,7 @@ class Watcher:
         if self.strategy == "best_pairs":
             out["pairs"] = [{"type_key": k, "ticker": t} for k, t in sorted(self.pairs)]
         if self.strategy == "best_picks":
-            out["rule"] = "any ticker's live signal with ⭐⭐⭐ or 👍"
+            out["rule"] = "any ticker's live signal with ⭐⭐⭐ and 👍 -- what @vidura38 posts"
         return out
 
     def _public_common(self) -> dict:
@@ -582,8 +584,8 @@ def _super_tick(watcher: Watcher, now: datetime, baseline_day: str | None) -> st
     if watcher.strategy == "best_picks":
         from app.domains.notify import super_telegram
 
-        # The channel's own marks, so a signal posted with ⭐⭐⭐ or 👍 is the
-        # one bought. Cached by the feed: the pairs every 10 min, the past
+        # The vidura channel's own marks and rule, so a signal it posts
+        # (⭐⭐⭐ and 👍) is the one bought. Cached by the feed: the pairs every 10 min, the past
         # sessions once a day.
         watcher.marks = super_telegram.marks_for(payload)
     if baseline_day != today:
@@ -683,7 +685,7 @@ def _release_desk(watcher: Watcher) -> None:
 
 def _run_super(watcher: Watcher) -> None:
     what = (f"{len(watcher.pairs)} best pair(s) on" if watcher.strategy == "best_pairs"
-            else "⭐⭐⭐ or 👍 signals on" if watcher.strategy == "best_picks"
+            else "⭐⭐⭐👍 signals on" if watcher.strategy == "best_picks"
             else f"{len(watcher.signals)} signal type(s) for")
     watcher.log(f"armed on {what} {', '.join(watcher.tickers) or 'any ticker'} · "
                 f"{watcher.window_open}-{watcher.window_close} CST"
