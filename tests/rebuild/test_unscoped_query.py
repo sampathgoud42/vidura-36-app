@@ -77,6 +77,7 @@ def test_every_tenant_owned_model_is_reachable_only_through_the_scoped_repositor
 #   ScanRun             when a stored Best Bets / BreakoutRadar scan ran.
 #   BestBetsRow         the 4-hour EMA screen of one configured universe.
 #   BreakoutRow         the eight-rule judgement of the same Yahoo candles.
+#   BreakoutHistory     the same judgement's passes over the last 30 days.
 #                       Both are the same rows for every operator on a venue;
 #                       the credential a sweep reads through is a pipe, not
 #                       an owner.
@@ -84,7 +85,8 @@ def test_every_tenant_owned_model_is_reachable_only_through_the_scoped_repositor
 # A gamma wall is the same number for every operator. Copying it per tenant
 # would mean N identical rows and N identical vendor calls for one fact.
 _MARKET_DATA = {"Signal", "ResearchSignal", "DailySnapshot", "Gex0dteHour",
-                "PusherHeartbeat", "ScanRun", "BestBetsRow", "BreakoutRow"}
+                "PusherHeartbeat", "ScanRun", "BestBetsRow", "BreakoutRow",
+                "BreakoutHistory"}
 
 
 def test_market_data_is_the_only_documented_exception():

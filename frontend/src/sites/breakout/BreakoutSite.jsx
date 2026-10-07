@@ -111,6 +111,30 @@ const COLUMNS = [
   ['market_cap', 'Market Cap', 'desc'],
 ];
 
+// The table is the last 30 days, not just this scan: every breakout the
+// server remembers (scan.history, the latest to pop up first), with this
+// scan's live row standing in for any ticker still passing. A ticker whose
+// breakout candle changed broke out again: it is back on top, starred.
+function withHistory(rows, history, at) {
+  const live = new Map((rows || []).map((r) => [r.ticker, r]));
+  const out = [];
+  const listed = new Set();
+  (history || []).forEach((h) => {
+    const cur = live.get(h.ticker);
+    out.push(cur
+      ? { ...cur, popped_at: h.popped_at, last_seen: h.last_seen, hits: h.hits, again: h.again, current: true }
+      : { ...h, current: false });
+    listed.add(h.ticker);
+  });
+  // passing only under this page's own thresholds: new to the history
+  (rows || []).forEach((r) => {
+    if (!listed.has(r.ticker)) out.push({ ...r, popped_at: at, hits: 1, again: false, current: true });
+  });
+  return out.sort((a, b) => (b.popped_at || 0) - (a.popped_at || 0)
+    || (b.current ? 1 : 0) - (a.current ? 1 : 0)
+    || (a.breakout_age ?? 0) - (b.breakout_age ?? 0));
+}
+
 function sortRows(rows, key, dir) {
   if (!key) return rows;
   const sign = dir === 'asc' ? 1 : -1;
@@ -151,10 +175,18 @@ function ResultsTable({ rows, market, onChart, near = false }) {
         </thead>
         <tbody>
           {sorted.map((r) => (
-            <tr key={r.ticker}>
+            <tr key={r.ticker} className={r.current === false ? 'old' : undefined}>
               <td className="tk">
                 <b>{r.ticker}</b>
-                {r.breakout_age > 0 && (
+                {r.again && (
+                  <span className="br-again" title={`broke out again -- ${r.hits} breakouts in the last 30 days`}>*</span>
+                )}
+                {r.current === false && (
+                  <span className="age past" title={`no longer passing; it last did ${ago(r.last_seen)}, and its numbers are from then`}>
+                    {ago(r.last_seen)}
+                  </span>
+                )}
+                {r.current !== false && r.breakout_age > 0 && (
                   <span className="age" title={`the breakout candle was ${r.breakout_age} candle${r.breakout_age === 1 ? '' : 's'} ago, and it is holding`}>
                     {r.breakout_age} ago
                   </span>
@@ -523,6 +555,8 @@ export default function BreakoutSite() {
   const running = !!scan?.refreshing;
   const progress = scan?.progress;
   const pctDone = progress?.total ? Math.round((100 * progress.done) / progress.total) : null;
+  const listed = useMemo(() => (scan?.at ? withHistory(scan.rows, scan.history, scan.at) : []),
+    [scan]);
   const failures = Object.entries(scan?.failures || {}).filter(([, n]) => n > 0).sort((a, b) => b[1] - a[1]);
   const universe = scan?.universe;
   const listNote = universe ? Object.entries(universe.lists || {})
@@ -592,6 +626,11 @@ export default function BreakoutSite() {
             <>
               <p className="br-count">
                 <b className="n">{scan.rows.length}</b> breakout{scan.rows.length === 1 ? '' : 's'}
+                {listed.length > scan.rows.length && (
+                  <span title="every ticker that passed on this market and timeframe in the last 30 days stays listed, the latest to pop up first; * broke out again">
+                    {' '}now · <b>{listed.length}</b> in the last 30 days
+                  </span>
+                )}
                 <span> · {scan.scanned} scanned{scan.unavailable ? ` (${scan.unavailable} without data)` : ''}</span>
                 <span> · {universe?.name}{listNote && ` (${listNote})`}</span>
                 <span title={scan.stored ? `stored ${scan.scanned_at || ''}` : 'held in memory: thresholds re-judge at once'}>
@@ -618,8 +657,8 @@ export default function BreakoutSite() {
           {alertNote && <p className="br-hint">{alertNote}</p>}
         </section>
 
-        {scan?.at && scan.rows.length > 0 && (
-          <ResultsTable rows={scan.rows} market={market} onChart={setChartOf} />
+        {scan?.at && listed.length > 0 && (
+          <ResultsTable rows={listed} market={market} onChart={setChartOf} />
         )}
         {scan?.at && scan.rows.length === 0 && (
           <p className="br-empty">

@@ -15,17 +15,18 @@ one they would have to guess about.
 from __future__ import annotations
 
 import math
-from datetime import timezone
+from datetime import timedelta, timezone
 
 from sqlalchemy import delete, select
 
-from app.domains.trading.market.models import BestBetsRow, BreakoutRow, ScanRun
+from app.domains.trading.market.models import BestBetsRow, BreakoutHistory, BreakoutRow, ScanRun
 from app.domains.trading.risk import clock
 from app.platform.db.base import utcnow
 from app.platform.db.session import session_scope
 
 BEST_BETS = "best_bets"
 BREAKOUT = "breakout"
+HISTORY_DAYS = 30           # how long a breakout stays listed after it last passed
 
 
 def breakout_combo(market: str, timeframe: str) -> str:
@@ -122,7 +123,58 @@ def replace_breakout(market: str, timeframe: str, *, rows: list[dict],
                         scanned_at=now)
             for section, part in (("pass", rows), ("near", near_misses))
             for rank, row in enumerate(part)])
+        _remember(db, market, timeframe, rows, now)
     return _epoch(now)
+
+
+def _remember(db, market: str, timeframe: str, rows: list[dict], now) -> None:
+    """Upsert the history with a sweep's breakouts, and drop the expired.
+
+    A ticker's breakout candle decides whether it "popped up again": the same
+    breakout still passing on the next rescan only refreshes its row; a new
+    breakout candle counts a hit and brings it back to the top (popped_at)."""
+    known = {h.ticker: h for h in db.scalars(select(BreakoutHistory).where(
+        BreakoutHistory.market == market, BreakoutHistory.timeframe == timeframe)).all()}
+    for row in rows:
+        ticker = str(row.get("ticker") or "")[:24]
+        if not ticker:
+            continue
+        at = row.get("breakout_candle_timestamp")
+        at = None if at is None else str(_plain(at))[:40]
+        h = known.get(ticker)
+        if h is None:
+            h = BreakoutHistory(market=market, timeframe=timeframe, ticker=ticker,
+                                first_seen=now, popped_at=now, last_seen=now,
+                                breakout_at=at, hits=1, data=_plain(row))
+            db.add(h)
+            known[ticker] = h
+            continue
+        if at != h.breakout_at:
+            h.hits = (h.hits or 1) + 1
+            h.popped_at = now
+            h.breakout_at = at
+        h.last_seen = now
+        h.data = _plain(row)
+    db.execute(delete(BreakoutHistory).where(
+        BreakoutHistory.market == market, BreakoutHistory.timeframe == timeframe,
+        BreakoutHistory.last_seen < now - timedelta(days=HISTORY_DAYS)))
+
+
+def breakout_history(market: str, timeframe: str) -> list[dict]:
+    """Every breakout of the last HISTORY_DAYS, the latest to pop up first:
+    each its latest row, with ``popped_at``, ``first_seen`` and ``last_seen``
+    (epoch seconds), ``hits`` and ``again`` (it broke out more than once)."""
+    cutoff = utcnow() - timedelta(days=HISTORY_DAYS)
+    with session_scope() as db:
+        found = db.scalars(select(BreakoutHistory).where(
+            BreakoutHistory.market == market, BreakoutHistory.timeframe == timeframe,
+            BreakoutHistory.last_seen >= cutoff)
+            .order_by(BreakoutHistory.popped_at.desc())).all()
+        return [{**dict(h.data or {}), "ticker": h.ticker,
+                 "popped_at": round(_epoch(h.popped_at), 3),
+                 "first_seen": round(_epoch(h.first_seen), 3),
+                 "last_seen": round(_epoch(h.last_seen), 3),
+                 "hits": h.hits, "again": (h.hits or 1) > 1} for h in found]
 
 
 def breakout(market: str, timeframe: str) -> dict | None:

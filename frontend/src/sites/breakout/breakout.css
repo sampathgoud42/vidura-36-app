@@ -163,6 +163,13 @@
   margin-left: 6px; padding: 0 5px; border-radius: 5px; font-size: 10px;
   color: var(--br-amber); border: 1px solid rgba(251, 191, 36, 0.35);
 }
+/* the last 30 days: a ticker that broke out again is starred, and one no
+   longer passing is dimmed, with when it last did */
+.br-table td.tk .br-again { margin-left: 2px; font-size: 15px; font-weight: 800; color: var(--br-amber); cursor: help; }
+.br-table td.tk .age.past { color: var(--br-faint); border-color: var(--br-line); cursor: help; }
+.br-table tr.old td { opacity: 0.62; }
+.br-table tr.old td.tk, .br-table tr.old td.act { opacity: 1; }
+.br-table tr.old td.tk b { color: var(--br-dim); }
 .br-table td.tk .nm {
   display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
   font-size: 10px; color: var(--br-faint);

@@ -368,6 +368,18 @@ def _stored(base: dict, market: str, timeframe: str, resolved: dict,
             "last_error": error}
 
 
+def _history(market: str, timeframe: str) -> list[dict]:
+    """The last 30 days' breakouts; none, rather than a failed read, on error."""
+    from app.domains.trading.market import scan_store
+
+    try:
+        return scan_store.breakout_history(market, timeframe)
+    except Exception as exc:                            # noqa: BLE001
+        logger.warning("breakout history %s %s unreadable: %s", market, timeframe,
+                       type(exc).__name__)
+        return []
+
+
 def scan(market: str, timeframe: str, params: breakout.Params, *, refresh: bool = False) -> dict:
     key = (market, timeframe)
     if refresh:
@@ -381,7 +393,9 @@ def scan(market: str, timeframe: str, params: breakout.Params, *, refresh: bool 
 
     resolved = params.resolved(timeframe, market)
     base = {"market": market, "timeframe": timeframe, "refreshing": job is not None,
-            "progress": job, "params": resolved}
+            "progress": job, "params": resolved,
+            # every breakout of the last 30 days, the latest to pop up first
+            "history": _history(market, timeframe)}
     if data is None:
         return _stored(base, market, timeframe, resolved, error)
 
