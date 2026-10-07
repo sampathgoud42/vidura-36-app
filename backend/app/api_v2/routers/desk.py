@@ -821,6 +821,8 @@ def hot(live: bool = Query(default=False), interval: str = Query(default="5min")
 @market_router.get("/best-bets", operation_id="getTradierBestBets")
 @deps.tenant_scoped
 def best_bets(live: bool = Query(default=False), refresh: bool = Query(default=False),
+              bar: int | None = Query(default=None, ge=1, le=4),
+              ema: int | None = Query(default=None, ge=5, le=100),
               tenant: Tenant = Depends(deps.current_tenant),
               db: DbSession = Depends(deps.get_db),
               kr: Keyring = Depends(deps.keyring)) -> dict:
@@ -834,12 +836,17 @@ def best_bets(live: bool = Query(default=False), refresh: bool = Query(default=F
     (`at`, `scanned_at`, and what started it in `trigger`); `refresh` starts a
     sweep now and the answer says `refreshing` until it lands. The operator's
     own credential is still required: it is what a sweep reads through.
+    `bar` (1, 2 or 4 hours) and `ema` (its period) re-judge a refresh with
+    that bar and EMA; the day's own sweep then keeps them.
     """
     from app.domains.trading.market import best_bets as screen
 
+    if bar is not None and bar not in (1, 2, 4):
+        raise HTTPException(status_code=422, detail="bar must be 1, 2 or 4 hours")
     cred = _credential(db, tenant, kr, live=live)
     return {"kind": "best_bets",
-            **screen.snapshot(cred, sandbox=not live, force=refresh)}
+            **screen.snapshot(cred, sandbox=not live, force=refresh,
+                              bar_hours=bar, span=ema)}
 
 
 @market_router.get("/flow", operation_id="getTradierOptionsFlow")

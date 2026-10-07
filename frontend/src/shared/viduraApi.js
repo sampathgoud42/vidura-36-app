@@ -460,8 +460,11 @@ export const vidura = {
   // Best Bets: a 21 EMA on 4-hour bars across a watchlist -- A, deep
   // retracements turning back up; B, fresh crosses. A snapshot like HOT: it
   // answers at once and says `refreshing` while a sweep runs behind it.
-  tradierBestBets: (live, refresh) => api.get('/tradier/best-bets', {
-    params: { live, refresh: refresh || undefined },
+  // `pick` {bar, ema}: the rescan's bar (1, 2 or 4 hours) and EMA period;
+  // left out, the stored sheet's own
+  tradierBestBets: (live, refresh, pick) => api.get('/tradier/best-bets', {
+    params: { live, refresh: refresh || undefined,
+      bar: (refresh && pick?.bar) || undefined, ema: (refresh && pick?.ema) || undefined },
   }),
   // tradier options executor
   // `live` is never persisted anywhere: every call states its venue, so a

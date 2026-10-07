@@ -142,22 +142,40 @@ export default function BestBetsLink({ touch = false, accent = '#5b6af0', live =
   );
 }
 
+// The bar the EMA is read on, and the EMA period's bounds -- the rescan's
+// choice; the sheet opens on the stored scan's own.
+const BAR_CHOICES = [[1, '1H'], [2, '2H'], [4, '4H']];
+const EMA_MIN = 5;
+const EMA_MAX = 100;
+
 function BestBetsSheet({ accent, live, onPick, onClose }) {
   const [res, setRes] = useState(null);
+  const [bar, setBar] = useState(null);           // null until the stored scan says
+  const [ema, setEma] = useState('');
   const [err, setErr] = useState(null);
   const [view, setView] = useState('setups');
   const [filters, setFilters] = useState(NO_FILTERS);
   const [sort, setSort] = useState({ key: null, dir: 'asc' });
   const closeRef = useRef(null);
   const polling = useRef(null);
+  const pickRef = useRef(null);
+  const emaN = Number(ema);
+  const emaOk = Number.isInteger(emaN) && emaN >= EMA_MIN && emaN <= EMA_MAX;
+  const rescan = () => {
+    pickRef.current = { bar: bar || 4, ema: emaOk ? emaN : undefined };
+    load(true);
+  };
 
   const load = useCallback(async (refresh = false) => {
     clearTimeout(polling.current);
     const started = Date.now();
     const tick = async (first) => {
       try {
-        const d = await vidura.tradierBestBets(live, first && refresh);
+        const d = await vidura.tradierBestBets(live, first && refresh, pickRef.current);
         setRes(d);
+        // the first answer seeds the controls with what the sheet was judged with
+        setBar((b) => b ?? (d.meta?.rules?.bar_hours || 4));
+        setEma((e) => (e === '' ? String(d.meta?.rules?.span || 21) : e));
         setErr(null);
         if (d.refreshing && Date.now() - started < POLL_LIMIT_MS) {
           polling.current = setTimeout(() => tick(false), POLL_MS);
@@ -221,12 +239,25 @@ function BestBetsSheet({ accent, live, onPick, onClose }) {
     <div className="ss-scrim" style={{ '--ss-accent': accent }}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="ss-viewer bp bb" role="dialog" aria-modal="true"
-        aria-label="best bets: 4-hour 21 EMA screen">
+        aria-label={`best bets: ${(tf.bar || '4h').replace('h', '-hour')} ${rules.span || 21} EMA screen`}>
         <div className="ss-vhead">
-          <span className="ss-vtitle">best bets · 4h · {rules.span || 21} ema</span>
-          <button type="button" className="ss-vbtn wide" disabled={!!res?.refreshing}
-            onClick={() => load(true)}
-            title="scan the watchlist again now — otherwise the sheet keeps the day's first scan">
+          <span className="ss-vtitle">best bets · {tf.bar || '4h'} · {rules.span || 21} ema</span>
+          <span className="bb-tune" role="group" aria-label="bar and EMA for the rescan">
+            <select className="bb-tunesel" value={bar || 4} aria-label="bar size"
+              onChange={(e) => setBar(Number(e.target.value))}
+              title="the bar the EMA is read on, for the next rescan">
+              {BAR_CHOICES.map(([h, text]) => <option key={h} value={h}>{text}</option>)}
+            </select>
+            <input className={`bb-tuneema${emaOk ? '' : ' bad'}`} value={ema} inputMode="numeric"
+              aria-label="EMA period" maxLength={3}
+              onChange={(e) => setEma(e.target.value.replace(/[^0-9]/g, ''))}
+              title={`the EMA period, ${EMA_MIN} to ${EMA_MAX} bars, for the next rescan`} />
+            <span className="bb-tunek">ema</span>
+          </span>
+          <button type="button" className="ss-vbtn wide" disabled={!!res?.refreshing || !emaOk}
+            onClick={rescan}
+            title={emaOk ? `scan the watchlist again now on ${bar || 4}-hour bars with a ${emaN} EMA — otherwise the sheet keeps the day's first scan`
+              : `the EMA period must be ${EMA_MIN} to ${EMA_MAX}`}>
             {res?.refreshing ? 'scanning…' : '↻ rescan'}
           </button>
           <button type="button" className="ss-vbtn" ref={closeRef} onClick={onClose}
