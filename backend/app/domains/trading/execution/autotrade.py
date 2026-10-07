@@ -42,6 +42,14 @@ panel and the Telegram feeds show. It opens on best_picks' window and
 picks its strike by open interest unless told otherwise; every other rule is
 the other signal strategies' own.
 
+``superhot_dmi`` -- "super hot DMI": not the signal desk but the HOT board's
+SUPERHOT list (superhot_telegram -- the panel's list, on the desk's default
+bars): a ticker that joins it buys a CALL for DMI UP and a PUT for DMI DOWN.
+Each ticker once per side per day, as the SUPERHOT Telegram alert posts it;
+the names already on the list when it arms are history, not triggers. Its
+own one-entry-per-ticker-per-hour cooldown, window and every knob the
+signal strategies have.
+
 Every strategy picks its strike one of two ways (``pick``, entry.PICKS):
 "delta", the band on the form, or "open_interest" -- the nearest expiry's
 most-held out-of-the-money strike (above the price for a CALL, below it for
@@ -107,13 +115,17 @@ _SIDE_FOR_CROSS = {
 # The strategies this watcher runs -- the arm form lists exactly these, so a
 # strategy name can no longer label one behaviour while running another.
 STRATEGIES = ("10min_intraday_move", "super_signals", "best_pairs", "best_picks",
-              "star_signals")
+              "star_signals", "superhot_dmi")
 # the strategies that trade the signal desk's live signals (_run_super)
 SIGNAL_STRATEGIES = ("super_signals", "best_pairs", "best_picks", "star_signals")
 # the signal strategies that pick by the channel's marks, on any ticker
 MARK_STRATEGIES = ("best_picks", "star_signals")
 STAR_LEVELS = (1, 2, 3)
 STAR_DEFAULT = (2, 3)                  # star_signals' star counts when none are given
+# superhot_dmi: how often it reads the SUPERHOT list. The list itself is the
+# HOT board's snapshot, rescanned at most every five minutes (desk.HOT_TTL_S).
+SUPERHOT_POLL_SECONDS = 60
+SUPERHOT_SIDE = {"call": "LONG", "put": "SHORT"}
 
 # super_signals. The desk publishes each 5m bar about half a minute after it
 # closes, so a 15s poll sees a signal within a minute of its candle.
@@ -239,6 +251,14 @@ class Watcher:
             out["pairs"] = [{"type_key": k, "ticker": t} for k, t in sorted(self.pairs)]
         if self.strategy == "best_picks":
             out["rule"] = "any ticker's live signal with ⭐⭐⭐ and 👍 -- what @vidura38 posts"
+        if self.strategy == "superhot_dmi":
+            out.update({
+                "window": f"{self.window_open}-{self.window_close}",
+                "zero_dte": self.zero_dte, "feed": self.feed,
+                "trades": self.trades[-20:], "seen": len(self.seen_ids),
+                "cooldown_min": SUPER_COOLDOWN_S // 60,
+                "rule": "a ticker joining the SUPERHOT list -- CALL for DMI UP, PUT for DOWN",
+            })
         if self.strategy == "star_signals":
             out["stars"] = list(self.stars)
             out["rule"] = ("any ticker's live signal with "
@@ -515,7 +535,8 @@ def _feed(watcher: Watcher, state: str) -> None:
     that is down for an hour is one line, not two hundred and forty."""
     if state != watcher.feed:
         watcher.feed = state
-        watcher.log(f"signal desk: {state}")
+        source = "SUPERHOT list" if watcher.strategy == "superhot_dmi" else "signal desk"
+        watcher.log(f"{source}: {state}")
 
 
 def _enter(watcher: Watcher, row: dict, side: str):
@@ -743,6 +764,91 @@ def _run_super(watcher: Watcher) -> None:
     watcher.log("disarmed")
 
 
+def _superhot_tick(watcher: Watcher, now: datetime, baseline_day: str | None) -> str | None:
+    """One look at the SUPERHOT list. Returns the day whose list is baselined."""
+    from app.core.config import get_settings
+    from app.domains.notify import superhot_telegram as sh
+    from app.domains.trading.execution.leases import LeaseUnavailable
+    from app.domains.trading.execution.orders import ExecutionRefused
+    from app.domains.trading.risk.validation import RiskRefused
+    from app.platform.db.session import session_scope
+    from app.api_v2 import deps
+
+    today = now.date().isoformat()
+    interval = get_settings().tradier_hot_interval
+    with session_scope() as db:
+        cred, live = sh._credential(db, watcher.tenant_id, deps.keyring())
+    if cred is None:
+        _feed(watcher, "unavailable -- no Tradier credential to scan with")
+        return baseline_day
+    listed = sh.superhot_rows(sh._board(watcher.tenant_id, cred, live, interval))
+    _feed(watcher, "ok")
+    keys = {f"superhot:{today}:{r['symbol']}:{r['sh_side']}": r for r in listed}
+    if baseline_day != today:
+        # On the list when the watcher arms -- or when a new day begins -- is
+        # history: arming must never fire a burst of entries on names that
+        # were not watched join.
+        watcher.seen_ids = set(keys)
+        watcher.log(f"{len(keys)} name(s) already SUPERHOT -- history, not triggers")
+        return today
+
+    hhmm = now.strftime("%H:%M")
+    for key, r in keys.items():
+        if key in watcher.seen_ids:
+            continue
+        watcher.seen_ids.add(key)            # judged once, whatever happens next
+        ticker, side = r["symbol"], r["sh_side"]
+        row = {"id": key, "ticker": ticker, "agent": "superhot", "setup": f"dmi_{interval}",
+               "grade": "", "direction": SUPERHOT_SIDE.get(side, ""), "time": hhmm,
+               "source": "live", "outcome": "open"}
+        what = (f"{ticker} SUPERHOT DMI {'UP' if side == 'call' else 'DOWN'}"
+                f" (ADX {r.get('sh_adx') or 0:.1f})")
+        why_not = refusal(row, now=now, window_open=watcher.window_open,
+                          window_close=watcher.window_close,
+                          last_entry=watcher.last_entry.get(ticker))
+        if why_not:
+            watcher.log(f"{what} @ {hhmm}: not traded -- {why_not}")
+            continue
+        before = watcher.last_entry.get(ticker)
+        watcher.last_entry[ticker] = now
+        try:
+            if _enter(watcher, row, side) is None:
+                _restore(watcher, ticker, before)
+        except (ExecutionRefused, RiskRefused, LeaseUnavailable) as exc:
+            _restore(watcher, ticker, before)
+            watcher.fail(ticker, f"{what}: refused -- {exc}")
+        except Exception as exc:                        # noqa: BLE001
+            watcher.fail(ticker, f"{what}: failed -- {type(exc).__name__}: {exc}")
+    return baseline_day
+
+
+def _run_superhot(watcher: Watcher) -> None:
+    watcher.log(f"armed on new SUPERHOT names, any ticker · "
+                f"{watcher.window_open}-{watcher.window_close} CST"
+                f" ({'LIVE' if watcher.live else 'paper'})")
+    baseline_day: str | None = None
+    saw_session = False
+    while not watcher.stop_flag.is_set():
+        try:
+            now = clock.now()
+            if clock.is_regular_session(now):
+                saw_session = True
+                baseline_day = _superhot_tick(watcher, now, baseline_day)
+            elif saw_session and now.timetz().replace(tzinfo=None) >= clock.SESSION_CLOSE:
+                watcher.log("session closed -- disarming")
+                break
+        except Exception as exc:                        # noqa: BLE001
+            watcher.errors += 1
+            watcher.log(f"watch loop error: {type(exc).__name__}: {exc}")
+        watcher.stop_flag.wait(SUPERHOT_POLL_SECONDS)
+    watcher.stop_flag.set()
+    with _LOCK:
+        mine = _WATCHERS.get(watcher.tenant_id) or {}
+        if mine.get(watcher.strategy) is watcher:
+            mine.pop(watcher.strategy, None)
+    watcher.log("disarmed")
+
+
 # ---- the API --------------------------------------------------------------
 
 def _check_super(wanted: list[str], signals: list[str], window_open: str,
@@ -900,6 +1006,10 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             if not levels or any(n not in STAR_LEVELS for n in levels):
                 raise AutoTradeRefused("pick at least one star count -- 1, 2 or 3")
         _check_window_and_risk(w_open, w_close, **risk)
+    elif strategy == "superhot_dmi":
+        # Any ticker: the SUPERHOT list names them as they join it.
+        wanted = []
+        _check_window_and_risk(w_open, w_close, **risk)
     else:
         wanted = [t.strip().upper() for t in tickers.split(",") if t.strip()]
         if not wanted:
@@ -961,7 +1071,8 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
     from app.domains.trading.execution import entry, idempotency  # noqa: F401
     from app.services import super_signals as _desk  # noqa: F401
 
-    loop = _run_super if strategy in SIGNAL_STRATEGIES else _run
+    loop = (_run_super if strategy in SIGNAL_STRATEGIES
+            else _run_superhot if strategy == "superhot_dmi" else _run)
     thread = threading.Thread(target=_thread_main, args=(loop, watcher),
                               name=f"autotrade-{tenant_id[:8]}", daemon=True)
     watcher.thread = thread

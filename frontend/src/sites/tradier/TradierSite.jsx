@@ -2530,7 +2530,7 @@ function TargetCell({ pos, busy, onSave }) {
 const AUTO_DISCOUNT_OPTIONS = [10, 20, 40];
 const STRATEGY_LABELS = {
   super_signals: 'super signals', best_pairs: 'best pairs', best_picks: 'best picks today',
-  star_signals: 'star signals',
+  star_signals: 'star signals', superhot_dmi: 'super hot DMI',
 };
 // How a strike is chosen, everywhere a contract is picked: the delta band, or
 // the nearest expiry's most-held out-of-the-money strike (the next most-held
@@ -2857,11 +2857,15 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
   const isStars = f.strategy === 'star_signals';
   // both pick by the channel's marks, on any ticker, with the same knobs
   const isPicks = isBestPicks || isStars;
+  // super hot DMI: any ticker that joins the SUPERHOT list, CALL for UP / PUT for DOWN
+  const isShDmi = f.strategy === 'superhot_dmi';
   const starPick = f.stars || [2, 3];             // star signals: 2 and 3 unless changed
   const onDesk = isSuper || isPairs || isPicks;   // trades the signal desk's live signals
   // the signal strategies buy at the desk's smart limit -- all but the two
   // mark strategies, which offer every order type the BUY ticket has
   const smartOnly = onDesk && !isPicks;
+  // the strategies that take any ticker: what picks them is not the form
+  const anyTicker = isPicks || isShDmi;
   // the server refuses a second trader on the signal desk; say so before it has to
   const deskTaken = onDesk && !!deskOwner;
   const confirmS = defaults?.confirm_s ?? 300;
@@ -2885,6 +2889,10 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
         window_close: defaults?.picks_window_close || '13:15' }));
       setPick('open_interest');
       setZeroDte(false);
+    } else if (isShDmi) {
+      setF((p) => ({ ...p,
+        window_open: defaults?.super_window_open || '08:30',
+        window_close: defaults?.super_window_close || '14:30' }));
     } else if (onDesk) {
       setF((p) => ({ ...p,
         tickers: p.tickers && !p.tickers.startsWith('(') ? p.tickers : (defaults?.tickers || 'SPY,QQQ,SPX'),
@@ -2931,10 +2939,11 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               value={isHot ? '(auto from HOT scan)' : isSuperHot ? '(auto from SUPERHOT scan)'
                 : isPairs ? '(each pair’s own ticker)'
                 : isBestPicks ? '(any ticker with ⭐⭐⭐ and 👍)'
-                : isStars ? '(any ticker with ⭐, ⭐⭐ or ⭐⭐⭐)' : f.tickers}
+                : isStars ? '(any ticker with ⭐, ⭐⭐ or ⭐⭐⭐)'
+                : isShDmi ? '(any ticker joining SUPERHOT)' : f.tickers}
               onChange={set('tickers')} placeholder="SPY,QQQ,SPX"
-              disabled={isAutoScan || isPairs || isPicks}
-              style={isAutoScan || isPairs || isPicks ? { opacity: 0.45 } : undefined}
+              disabled={isAutoScan || isPairs || anyTicker}
+              style={isAutoScan || isPairs || anyTicker ? { opacity: 0.45 } : undefined}
               title={isHot ? 'HOT tickers strategy auto-picks from 5min+15min scan intersection'
                 : isSuperHot ? 'SUPERHOT strategy auto-picks top N from the superhot scan'
                 : isPairs ? 'a best pair is a signal type on one ticker, so the pairs name the tickers'
@@ -3073,7 +3082,24 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           </div>
         </div>
         <p className="tr-note mt-3">
-          {isPicks ? (
+          {isShDmi ? (
+            <>
+              Super hot DMI: watches the HOT board&rsquo;s SUPERHOT list, and any ticker that joins
+              it buys a CALL for DMI UP and a PUT for DMI DOWN &mdash; each ticker once per side per
+              day, as the SUPERHOT alert posts it; the names already on the list when it arms are
+              left alone. Only inside {f.window_open}–{f.window_close} CST, and at most one entry per
+              ticker per {defaults?.super_cooldown_min ?? 60} min. The list is re-read every minute
+              and rescanned every five.{' '}
+              {pick === 'open_interest'
+                ? `The strike is the ${!zeroDte && !nearExpiry ? 'first 7+ day expiry’s' : 'nearest expiry’s'} best-filling out-of-the-money one (open interest, volume, tight quote, at least $0.20), whatever its delta; when that order is refused the next best is tried, up to 6.`
+                : `The strike is picked by delta ${f.delta}.`}{' '}
+              {zeroDte
+                ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
+                : nearExpiry ? 'The nearest expiry after today.' : 'The first expiry 7+ days out, held over the close.'}{' '}
+              Bought {orderTag(otype, discount)}, sized by Buy % (TP {f.tp_pct}% / SL {f.sl_pct}%).
+              Disarms itself at the 15:00 close.
+            </>
+          ) : isPicks ? (
             <>
               {isStars ? (
                 <>
