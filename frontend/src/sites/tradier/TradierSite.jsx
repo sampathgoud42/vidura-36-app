@@ -8,6 +8,7 @@ import NewsEvents from '../../shared/NewsEvents.jsx';
 import BestBetsLink from '../../shared/BestBets.jsx';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
+import SimHoldings from '../../shared/SimHoldings.jsx';
 import { deskDateTime, deskStamp, deskTime, wallClock, wallToDesk } from '../../shared/cst.js';
 import { useExperience } from '../../shared/experience.js';
 import '../../shared/worldHeader.css';
@@ -167,7 +168,11 @@ const STATUS_FILTERS = [
   ['sl_sold', 'SL STOPS'], ['closed', 'CLOSED'],
 ];
 
-const VENUE_FILTERS = [['all', 'ALL'], ['sandbox', 'SANDBOX'], ['live', 'LIVE']];
+const VENUE_FILTERS = [['all', 'ALL'], ['sandbox', 'PAPER'], ['live', 'LIVE']];
+// A position's venue as the server names it: live, Tradier's sandbox, or the
+// LONG-TERM (SIM) simulator.
+const VENUE_TAG = { live: ['live', 'LIVE'], sandbox: ['sbx', 'SANDBOX'], sim: ['sbx', 'SIM'] };
+const venueTag = (p) => VENUE_TAG[p.venue] || VENUE_TAG.sandbox;
 
 // chart granularity — a display preference, so unlike the LIVE venue it is
 // safe to remember across reloads
@@ -3614,7 +3619,7 @@ function AutoStatusLine({ st, className = '', onDisarm, busy }) {
     return (
       <p className={`tr-autoline on ${className}`}>
         <span className="dot" aria-hidden="true" />
-        armed on {st.live ? 'LIVE' : 'SANDBOX'} · {what}
+        armed on {st.live ? 'LIVE' : st.sim ? 'LONG-TERM (SIM)' : 'SANDBOX'} · {what}
         {scope ? ` · ${scope}` : ''}
         {st.window ? ` · ${st.window} CST` : ''}
         {st.order_type && st.order_type !== 'smart' ? ` · ${orderTag(st.order_type, st.discount_pct)}` : ''}
@@ -3677,8 +3682,8 @@ function LitePositions({ items, loaded, targetBusy, onSweep, onClose, onTarget }
                 <tr key={p.id}>
                   <td className="tr-mono" title={p.note || ''}>{p.occ_symbol}</td>
                   <td>
-                    <span className={`tr-venue ${p.sandbox ? 'sbx' : 'live'}`}>
-                      {p.sandbox ? 'SANDBOX' : 'LIVE'}
+                    <span className={`tr-venue ${venueTag(p)[0]}`}>
+                      {venueTag(p)[1]}
                     </span>
                   </td>
                   <td>{p.contracts}</td>
@@ -3933,8 +3938,30 @@ export default function TradierSite() {
     }).catch(() => setVenueInfo(null));
   }, [user]);
 
+  // The venue switch cycles SANDBOX -> LONG-TERM (SIM) -> LIVE -> SANDBOX.
+  // SIM is the operator's other paper venue (an in-house simulated account),
+  // offered once it exists; LIVE is confirmed, as it always was.
+  // the board's reload (defined below), for a paper-venue switch to call
+  const refreshRef = useRef(null);
+  const simOn = !!venueInfo?.sim?.active;
+  const setPaperVenue = async (sim) => {
+    if (!venueInfo?.sim?.configured || simOn === sim) return;
+    await vidura.setSimVenue(sim);
+    setVenueInfo((v) => (v ? { ...v, sim: { ...v.sim, active: sim } } : v));
+  };
   const toggleLive = async () => {
-    if (live) { setLive(false); return; }        // stepping back to paper is free
+    if (live) {                                   // stepping back to paper is free
+      try { await setPaperVenue(false); } catch (e) { pushErr('venue', e); }
+      setLive(false);
+      return;
+    }
+    if (!simOn && venueInfo?.sim?.configured) {
+      try {
+        await setPaperVenue(true);
+        if (user) refreshRef.current?.(true);
+      } catch (e) { pushErr('venue', e); }
+      return;
+    }
     const acct = venueInfo?.live?.account_id;
     const ok = await confirmDialog({
       title: 'Switch the desk to the LIVE account?',
@@ -4020,6 +4047,7 @@ export default function TradierSite() {
     loadPositions(user.user_id, filters.current.filter, filters.current.venueFilter);
   }, [user, live, loadBalance, loadPositions]);
 
+  refreshRef.current = refresh;
   useEffect(() => { refresh(true); }, [refresh]);
   useEffect(() => {
     if (user) loadPositions(user.user_id, filter, venueFilter);
@@ -4318,13 +4346,17 @@ export default function TradierSite() {
                 <div className="tr-stat">
                   <div className="tr-venuectl">
                     <button type="button"
-                      className={`tr-venue-btn ${live ? 'on' : ''}`}
+                      className={`tr-venue-btn ${live ? 'on' : ''}${!live && bal.simulated ? ' sim' : ''}`}
                       onClick={toggleLive} aria-pressed={live}
                       title={live
                         ? 'Trading the PRODUCTION account — click to return to sandbox'
-                        : 'Mock orders on the Tradier sandbox — click to arm the live account'}>
+                        : bal.simulated
+                          ? 'LONG-TERM (SIM): a simulated account, filled against real quotes — click to arm the live account'
+                          : venueInfo?.sim?.configured
+                            ? 'Mock orders on the Tradier sandbox — click for LONG-TERM (SIM)'
+                            : 'Mock orders on the Tradier sandbox — click to arm the live account'}>
                       <span className="tr-venue-dot" />
-                      {bal.sandbox ? 'SANDBOX' : 'LIVE'}
+                      {!bal.sandbox ? 'LIVE' : bal.simulated ? (bal.venue_label || 'LONG-TERM (SIM)') : 'SANDBOX'}
                     </button>
                     <button type="button"
                       className={`tr-autobtn ${autoST?.active ? 'on' : ''}`}
@@ -4372,6 +4404,9 @@ export default function TradierSite() {
               <LiteChart user={user} live={live} reloadKey={liteKey}
                 onError={pushErr} onBuy={(s) => openTicket({ symbol: s })}
                 isBlocked={isBlocked} />
+              {!live && simOn && (
+                <SimHoldings reloadKey={liteKey} onError={(e) => pushErr('sim', e)} />
+              )}
               <LitePositions items={items} loaded={!!positions} targetBusy={targetBusy}
                 onSweep={refresh} onClose={doClose} onTarget={saveTarget} />
             </div>
@@ -4455,6 +4490,10 @@ export default function TradierSite() {
               )}
             </div>
           )}
+          {/* LONG-TERM (SIM): the simulated account's shares, while it is the venue */}
+          {!live && simOn && (
+            <SimHoldings reloadKey={positions?.total ?? 0} onError={(e) => pushErr('sim', e)} />
+          )}
           <div className="tr-tablewrap">
             <table className="tr-table">
               <thead><tr>
@@ -4472,8 +4511,8 @@ export default function TradierSite() {
                   <tr key={p.id}>
                     <td>{p.id}</td>
                     <td>
-                      <span className={`tr-venue ${p.sandbox ? 'sbx' : 'live'}`}>
-                        {p.sandbox ? 'SANDBOX' : 'LIVE'}
+                      <span className={`tr-venue ${venueTag(p)[0]}`}>
+                        {venueTag(p)[1]}
                       </span>
                     </td>
                     <td className="tr-mono" title={p.note || ''}>{p.occ_symbol}</td>

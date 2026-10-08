@@ -106,14 +106,15 @@ def sweep_all_tenants(now: datetime | None = None) -> int:
             Position.expiration > today.isoformat())).all())
         done = {(r.tenant_id, r.position_id) for r in db.scalars(
             select(PositionRollover).where(PositionRollover.rolled_on == today.isoformat())).all()}
-        creds: dict[tuple[str, bool], object] = {}
+        creds: dict[tuple[str, bool, bool], object] = {}
         for pos in rows:
             if (pos.tenant_id, pos.id) in done:
                 continue
             try:
-                key = (pos.tenant_id, pos.venue_sandbox)
+                key = (pos.tenant_id, pos.venue_sandbox, bool(pos.simulated))
                 if key not in creds:
-                    creds[key] = monitor._credential(pos.tenant_id, pos.venue_sandbox)
+                    creds[key] = monitor._credential(pos.tenant_id, pos.venue_sandbox,
+                                                     pos.simulated)
                 rec = roll(pos, creds[key], today)
             except Exception as exc:                    # noqa: BLE001
                 logger.warning("rollover: position %s: %s", pos.id, type(exc).__name__)

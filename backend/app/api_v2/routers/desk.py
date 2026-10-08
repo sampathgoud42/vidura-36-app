@@ -38,9 +38,10 @@ MAX_DMI_SYMBOLS = 24
 
 
 def _credential(db: DbSession, tenant: Tenant, kr: Keyring, *, live: bool):
+    """Live, or the operator's paper venue: Tradier's sandbox or LONG-TERM (SIM)."""
     venue_name = "tradier" if live else "tradier_sandbox"
     try:
-        return tenants.load_credential(db, tenant.id, venue_name, kr)
+        return venue_mod.trading_credential(db, tenant.id, kr, live=live)
     except Exception as exc:                            # noqa: BLE001
         raise HTTPException(
             status_code=424,
@@ -254,6 +255,131 @@ def _cached_history(tenant_id: str, cred, limit: int, *, fresh: bool = False) ->
     return {**held["data"], "cached_age_s": round(time.time() - held["at"])}
 
 
+# ---- the LONG-TERM (SIM) venue ---------------------------------------------
+# An in-house simulated account (execution.sim): read it, make it the board's
+# paper venue, seed it, and trade its shares. Labelled LONG-TERM (SIM)
+# everywhere -- never presented as a real account.
+
+class SimVenueRequest(BaseModel):
+    active: bool
+
+
+class SimSeedRequest(BaseModel):
+    total: float = Field(gt=0, le=10_000_000)
+    cash: float = Field(ge=0, le=10_000_000)
+
+
+class SimTradeRequest(BaseModel):
+    symbol: str = Field(pattern=r"^[A-Za-z][A-Za-z.\-]{0,9}$")
+    quantity: float = Field(gt=0, le=1_000_000)
+    order_type: Literal["market", "limit"] = "market"
+    price: float | None = Field(default=None, gt=0)
+
+
+def _sim_client(db: DbSession, tenant: Tenant, kr: Keyring):
+    from app.domains.trading.execution import sim as sim_mod
+
+    if sim_mod.account(db, tenant.id) is None:
+        raise HTTPException(status_code=404, detail="there is no LONG-TERM (SIM) account yet")
+    cred = venue_mod.trading_credential(db, tenant.id, kr, live=False, sim=True)
+    return venue_mod._client(cred, sandbox=True)
+
+
+@market_router.get("/sim", operation_id="getSimAccount")
+@deps.tenant_scoped
+def sim_account(tenant: Tenant = Depends(deps.current_tenant),
+                db: DbSession = Depends(deps.get_db),
+                kr: Keyring = Depends(deps.keyring)) -> dict:
+    """The simulated account: its balances, holdings and recent orders."""
+    from app.domains.trading.execution import sim as sim_mod
+
+    acct = sim_mod.account(db, tenant.id)
+    if acct is None:
+        return {"configured": False, "label": sim_mod.LABEL}
+    active, label = acct.active, acct.label
+    seeded = {"equity": acct.seeded_equity,
+              "at": acct.seeded_at.isoformat() + "Z" if acct.seeded_at else None}
+    client = _sim_client(db, tenant, kr)
+    try:
+        return {"configured": True, "active": active, "label": label, "seeded": seeded,
+                "balances": client.balances(), "holdings": client.holdings(),
+                "orders": client.orders()[:50]}
+    finally:
+        client.close()
+
+
+@market_router.put("/sim/venue", operation_id="setSimVenue")
+@deps.tenant_scoped
+def sim_venue(payload: SimVenueRequest,
+              tenant: Tenant = Depends(deps.current_tenant),
+              db: DbSession = Depends(deps.get_db)) -> dict:
+    """Make LONG-TERM (SIM) the board's paper venue, or go back to Tradier's
+    sandbox. Positions stay where they were opened either way."""
+    from app.domains.trading.execution import sim as sim_mod
+
+    try:
+        sim_mod.set_active(db, tenant.id, payload.active)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    db.commit()
+    return {"active": sim_mod.is_active(db, tenant.id)}
+
+
+@market_router.post("/sim/seed", operation_id="seedSimAccount")
+@deps.tenant_scoped
+def sim_seed(payload: SimSeedRequest,
+             tenant: Tenant = Depends(deps.current_tenant),
+             db: DbSession = Depends(deps.get_db),
+             kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Open, or reset, the simulated account at ``total``: ``cash`` in cash and
+    the rest in a long-term mix of shares at current prices. Clears its
+    holdings and orders; simulated positions already on the board stay."""
+    from app.domains.trading.execution import sim as sim_mod
+
+    if payload.cash > payload.total:
+        raise HTTPException(status_code=422, detail="cash cannot exceed the total")
+    data = _credential(db, tenant, kr, live=False)
+    client = venue_mod._client(data, sandbox=True)
+    try:
+        data_client = client.data if venue_mod.is_simulated(data) else client
+        return sim_mod.seed(tenant.id, data_client, total=payload.total, cash=payload.cash)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    finally:
+        client.close()
+
+
+def _sim_trade(side: str, payload: SimTradeRequest, db, tenant, kr) -> dict:
+    from app.services.tradier_client import TradierError
+
+    client = _sim_client(db, tenant, kr)
+    try:
+        placed = client.place_equity_order(
+            symbol=payload.symbol.upper(), side=side, quantity=payload.quantity,
+            order_type=payload.order_type, price=payload.price)
+        return client.order_status(placed["id"])
+    except TradierError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    finally:
+        client.close()
+
+
+@market_router.post("/sim/buy", operation_id="buySimShares")
+@deps.tenant_scoped
+def sim_buy(payload: SimTradeRequest, tenant: Tenant = Depends(deps.current_tenant),
+            db: DbSession = Depends(deps.get_db), kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Buy shares in the simulated account (filled in the regular session)."""
+    return _sim_trade("buy", payload, db, tenant, kr)
+
+
+@market_router.post("/sim/sell", operation_id="sellSimShares")
+@deps.tenant_scoped
+def sim_sell(payload: SimTradeRequest, tenant: Tenant = Depends(deps.current_tenant),
+             db: DbSession = Depends(deps.get_db), kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Sell shares from the simulated account (filled in the regular session)."""
+    return _sim_trade("sell", payload, db, tenant, kr)
+
+
 # ---- venue + market data --------------------------------------------------
 
 @market_router.get("/venue", operation_id="getTradierVenue")
@@ -287,11 +413,19 @@ def venue_info(live: bool = Query(default=False),
     # only about the current venue told it nothing: it read v.live.configured
     # off a payload that had no `live` key, got undefined, and forced itself
     # back to sandbox on every load -- with no way to ever go live.
+    from app.domains.trading.execution import sim as sim_mod
+
+    acct = sim_mod.account(db, tenant.id)
+    sim_on = bool(acct and acct.active)
     return {
-        "venue": "live" if live else "sandbox",
+        "venue": "live" if live else "sim" if sim_on else "sandbox",
         "paper_only_server": settings.paper_only,
         "sandbox": described("tradier_sandbox"),
         "live": described("tradier"),
+        # The LONG-TERM (SIM) venue: an in-house simulated account, the
+        # board's paper venue while ``active``.
+        "sim": {"configured": acct is not None, "active": sim_on,
+                "label": acct.label if acct else sim_mod.LABEL},
         # The original flat keys, kept so nothing else that reads them breaks.
         "paper_only": settings.paper_only,
         "has_credential": described(
@@ -307,7 +441,7 @@ def balance(live: bool = Query(default=False),
             kr: Keyring = Depends(deps.keyring)) -> dict:
     cred = _credential(db, tenant, kr, live=live)
     try:
-        return {"venue": "live" if live else "sandbox",
+        return {"venue": "live" if live else "sim" if venue_mod.is_simulated(cred) else "sandbox",
                 **(venue_mod.balance(cred=cred, sandbox=not live) or {})}
     except Exception:                                   # noqa: BLE001
         # Never pass the venue own text through: a 401 body can carry the

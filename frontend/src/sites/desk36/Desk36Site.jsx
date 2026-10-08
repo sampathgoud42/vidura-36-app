@@ -5,6 +5,7 @@ import { Link } from 'react-router-dom';
 import { api, auth, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
 import SuperSignals, { BestPair } from '../../shared/SuperSignals.jsx';
+import SimHoldings from '../../shared/SimHoldings.jsx';
 import NewsEvents from '../../shared/NewsEvents.jsx';
 import BestBetsLink from '../../shared/BestBets.jsx';
 import { useExperience } from '../../shared/experience.js';
@@ -1052,6 +1053,21 @@ export default function Desk36Site() {
   // named the sandbox account in a dialog about going live — precisely the
   // number that has to be right.
   const [venues, setVenues] = useState(null);
+  // LONG-TERM (SIM): the operator's other paper venue, an in-house simulated
+  // account, chosen on the venue sheet beside the sandbox and live.
+  const simOn = !live && !!venues?.sim?.active;
+  const venueWord = live ? 'live venue' : simOn ? 'LONG-TERM (SIM)' : 'sandbox venue';
+  const chooseVenue = async (to) => {
+    try {
+      if (to !== 'live' && venues?.sim?.configured && (to === 'sim') !== !!venues?.sim?.active) {
+        await vidura.setSimVenue(to === 'sim');
+        setVenues((v) => (v ? { ...v, sim: { ...v.sim, active: to === 'sim' } } : v));
+      }
+      setLive(to === 'live');
+      setOrderKey((k) => k + 1);                  // balance and positions, again
+    } catch (e) { failNow(e); }
+    setVenueAsk(false);
+  };
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoST, setAutoST] = useState(null);
   const [autoBusy, setAutoBusy] = useState(false);
@@ -1429,12 +1445,15 @@ export default function Desk36Site() {
               stray tap. */}
           <button type="button" className={`d36-venue ${live ? 'live' : 'paper'}`}
             onClick={() => setVenueAsk(true)}
-            aria-label={live ? 'live venue' : 'paper venue'}
+            aria-label={live ? 'live venue' : simOn ? 'LONG-TERM (SIM) venue' : 'paper venue'}
             title={live
               ? 'LIVE — orders from this board are real. Tap to switch.'
+              : simOn ? 'LONG-TERM (SIM) — a simulated account, filled against real quotes. Tap to switch.'
               : 'Paper — orders go to the Tradier sandbox. Tap to switch.'}>
             {live ? (
               <span className="d36-venue-live" aria-hidden="true">●<span> live</span></span>
+            ) : simOn ? (
+              <span className="d36-venue-sim" aria-hidden="true">SIM</span>
             ) : (
               <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
                 fill="none" stroke="currentColor" strokeWidth="1.7"
@@ -1603,9 +1622,10 @@ export default function Desk36Site() {
           <div className="d36-secthd">
             <span className="d36-sectlabel">positions</span>
             <span className="d36-charthint">
-              {live ? 'live venue' : 'sandbox venue'} · open only
+              {venueWord} · open only
             </span>
           </div>
+          {user && simOn && <SimHoldings touch reloadKey={liteKey + orderKey} onError={onPanelErr} />}
           {user && (
             <PositionsPanel user={user} live={live} lite reloadKey={liteKey + orderKey}
               blocked={busy} onError={onPanelErr} onOk={onPanelOk} />
@@ -1678,8 +1698,9 @@ export default function Desk36Site() {
                 onClick={() => setPosOpen((v) => !v)}>
                 {posOpen ? '▾' : '▸'} positions
               </button>
-              <span className="d36-charthint">{live ? 'live venue' : 'sandbox venue'}</span>
+              <span className="d36-charthint">{venueWord}</span>
             </div>
+            {posOpen && user && simOn && <SimHoldings touch reloadKey={orderKey} onError={onPanelErr} />}
             {posOpen && user && (
               <PositionsPanel user={user} live={live} blocked={busy}
                 onError={onPanelErr} onOk={onPanelOk} />
@@ -1889,8 +1910,20 @@ export default function Desk36Site() {
               )}
             </p>
 
+            {venues?.sim?.configured && (
+              <div className="d36-venuepick" role="group" aria-label="paper venue">
+                <button type="button" className={`d36-go ${!live && !simOn ? 'on' : ''}`}
+                  disabled={!live && !simOn} onClick={() => chooseVenue('sandbox')}>
+                  sandbox
+                </button>
+                <button type="button" className={`d36-go sim ${simOn ? 'on' : ''}`}
+                  disabled={simOn} onClick={() => chooseVenue('sim')}>
+                  LONG-TERM (SIM)
+                </button>
+              </div>
+            )}
             <button type="button" className={`d36-go ${live ? 'call' : 'put'}`}
-              onClick={() => { setLive((v) => !v); setVenueAsk(false); }}>
+              onClick={() => chooseVenue(live ? (venues?.sim?.active ? 'sim' : 'sandbox') : 'live')}>
               {live ? 'switch to paper' : 'switch to live'}
             </button>
           </div>

@@ -95,7 +95,7 @@ def _serialise(pos: Position) -> dict:
         "stop_protection": pos.stop_protection,
         "status": pos.status,
         "strategy": pos.strategy,
-        "venue": "sandbox" if pos.venue_sandbox else "live",
+        "venue": "sim" if pos.simulated else "sandbox" if pos.venue_sandbox else "live",
         "needs_review": pos.needs_review,
         "opened_at": pos.opened_at,
         "closed_at": pos.closed_at,
@@ -109,10 +109,13 @@ def _serialise(pos: Position) -> dict:
     }
 
 
-def _credential(db: DbSession, tenant: Tenant, kr: Keyring, *, live: bool):
+def _credential(db: DbSession, tenant: Tenant, kr: Keyring, *, live: bool,
+                sim: bool | None = None):
+    """Live, or paper: the operator's paper venue, or -- for a position --
+    the one it was opened on (``sim``, its Position.simulated)."""
     venue_name = "tradier" if live else "tradier_sandbox"
     try:
-        return tenants.load_credential(db, tenant.id, venue_name, kr)
+        return venue_mod.trading_credential(db, tenant.id, kr, live=live, sim=sim)
     except Exception as exc:                            # noqa: BLE001
         # Never pass the venue's own text through: a 401 body can contain the
         # token that was rejected.
@@ -138,19 +141,19 @@ def _add_marks(db: DbSession, tenant: Tenant, kr: Keyring,
     filled ones -- what the desks' MARK and P&L columns show before a position
     closes, at the current bid. One quote call per venue. A venue that cannot
     be reached leaves the marks empty: they are a courtesy, the list is not."""
-    by_venue: dict[bool, list[int]] = {}
+    by_venue: dict[tuple[bool, bool], list[int]] = {}
     for i, pos in enumerate(rows):
         if pos.status in ACTIVE:
-            by_venue.setdefault(bool(pos.venue_sandbox), []).append(i)
-    for sandbox, idx in by_venue.items():
+            by_venue.setdefault((bool(pos.venue_sandbox), bool(pos.simulated)), []).append(i)
+    for (sandbox, simulated), idx in by_venue.items():
         try:
-            cred = tenants.load_credential(
-                db, tenant.id, "tradier_sandbox" if sandbox else "tradier", kr)
+            cred = venue_mod.trading_credential(db, tenant.id, kr, live=not sandbox,
+                                                sim=simulated)
             quoted = venue_mod.quotes([rows[i].occ_symbol for i in idx],
                                       cred=cred, sandbox=sandbox) or []
         except Exception:                               # noqa: BLE001
             logger.info("marks unavailable for %s (%s)", tenant.slug,
-                        "sandbox" if sandbox else "live")
+                        "sim" if simulated else "sandbox" if sandbox else "live")
             continue
         bids = {str(q.get("symbol") or "").upper(): q.get("bid") for q in quoted}
         for i in idx:
@@ -176,8 +179,15 @@ def list_positions(status: str | None = Query(default=None),
     wanted = _STATUS_WORDS.get(status, (status,)) if status else None
     if wanted:
         stmt = stmt.where(Position.status.in_(wanted))
-    if venue in ("sandbox", "live"):
-        stmt = stmt.where(Position.venue_sandbox.is_(venue == "sandbox"))
+    if venue in ("sandbox", "live", "sim"):
+        stmt = stmt.where(Position.venue_sandbox.is_(venue != "live"))
+    if venue in ("sandbox", "sim"):
+        # "sandbox" is the board's word for paper: whichever paper venue the
+        # operator trades -- Tradier's sandbox, or LONG-TERM (SIM).
+        from app.domains.trading.execution import sim as sim_mod
+
+        simulated = venue == "sim" or sim_mod.is_active(db, tenant.id)
+        stmt = stmt.where(Position.simulated.is_(simulated))
 
     # Counted over the SAME predicate as the rows. A total computed without
     # the tenant filter is a leak that returns no rows.
@@ -315,7 +325,7 @@ def close_position(position_id: int,
         db.commit()
         raise HTTPException(status_code=409, detail=str(exc)) from None
 
-    cred = _credential(db, tenant, kr, live=not pos.venue_sandbox)
+    cred = _credential(db, tenant, kr, live=not pos.venue_sandbox, sim=pos.simulated)
     try:
         closed = orders.close_position(db, tenant_id=tenant.id, cred=cred,
                                        pos=pos, force=force)
@@ -518,7 +528,7 @@ def flatten(idempotency_key: str | None = Header(default=None,
     closed, failed = [], []
     for pos in rows:
         try:
-            cred = _credential(db, tenant, kr, live=not pos.venue_sandbox)
+            cred = _credential(db, tenant, kr, live=not pos.venue_sandbox, sim=pos.simulated)
             orders.close_position(db, tenant_id=tenant.id, cred=cred, pos=pos)
             closed.append(pos.id)
         except Exception as exc:                        # noqa: BLE001
@@ -552,7 +562,7 @@ def set_target(position_id: int, payload: TargetRequest,
     from app.domains.trading.risk.validation import round_exit
 
     target = round_exit(payload.target_price, entry=pos.entry_price or None, side="tp")
-    cred = _credential(db, tenant, kr, live=not pos.venue_sandbox)
+    cred = _credential(db, tenant, kr, live=not pos.venue_sandbox, sim=pos.simulated)
     if pos.tp_order_id:
         venue_mod.cancel_order(pos.tp_order_id, cred=cred,
                                sandbox=pos.venue_sandbox)

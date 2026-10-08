@@ -90,14 +90,16 @@ class MonitorPassIncomplete(RuntimeError):
     """
 
 
-def _credential(tenant_id: str, sandbox: bool):
+def _credential(tenant_id: str, sandbox: bool, simulated: bool = False):
+    """The credential of the venue a position was opened on: live, Tradier's
+    sandbox, or LONG-TERM (SIM) -- never the board's current choice."""
     from app.api_v2 import deps
+    from app.domains.trading.execution import venue as venue_mod
     from app.platform.db.session import session_scope
-    from app.tenancy import repository as tenants
 
-    venue_name = "tradier_sandbox" if sandbox else "tradier"
     with session_scope() as db:
-        return tenants.load_credential(db, tenant_id, venue_name, deps.keyring())
+        return venue_mod.trading_credential(db, tenant_id, deps.keyring(), live=not sandbox,
+                                            sim=bool(simulated))
 
 
 def run_pass(*, tenant_id: str) -> dict:
@@ -197,7 +199,7 @@ def sweep_all_tenants() -> list[dict]:
 # ---- one position ---------------------------------------------------------
 
 def _check_one(db, tenant_id: str, pos: Position, events: list[str]) -> None:
-    cred = _credential(tenant_id, pos.venue_sandbox)
+    cred = _credential(tenant_id, pos.venue_sandbox, pos.simulated)
     sandbox = pos.venue_sandbox
 
     if pos.status == "pending":

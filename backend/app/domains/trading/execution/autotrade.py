@@ -151,6 +151,9 @@ class Watcher:
     tickers: list[str]
     strategy: str
     live: bool
+    # Paper on LONG-TERM (SIM) rather than Tradier's sandbox: fixed at arm
+    # time, so flipping the board's venue never moves a running watcher.
+    sim: bool = False
     buy_pct: float
     tp_pct: float
     sl_pct: float
@@ -271,6 +274,8 @@ class Watcher:
             "strategy": self.strategy,
             "tickers": ",".join(self.tickers),
             "live": self.live,
+            "sim": self.sim,
+            "venue": "live" if self.live else "sim" if self.sim else "sandbox",
             "armed_at": self.armed_at.isoformat(),
             "buy_pct": self.buy_pct, "tp_pct": self.tp_pct,
             "sl_pct": self.sl_pct, "min_contracts": self.min_contracts,
@@ -411,8 +416,10 @@ def _place(watcher: Watcher, ticker: str, kind: str) -> None:
             return
         try:
             try:
-                cred = tenants.load_credential(db, watcher.tenant_id, venue_name,
-                                               deps.keyring())
+                from app.domains.trading.execution import venue as venue_mod
+
+                cred = venue_mod.trading_credential(db, watcher.tenant_id, deps.keyring(),
+                                                    live=watcher.live, sim=watcher.sim)
             except Exception:                           # noqa: BLE001
                 # Never relay the venue's own text: a 401 body can carry the token.
                 raise ExecutionRefused(
@@ -442,7 +449,7 @@ def _place(watcher: Watcher, ticker: str, kind: str) -> None:
 
 def _run(watcher: Watcher) -> None:
     watcher.log(f"armed on {', '.join(watcher.tickers)} "
-                f"({'LIVE' if watcher.live else 'paper'})")
+                f"({'LIVE' if watcher.live else 'LONG-TERM (SIM)' if watcher.sim else 'paper'})")
     while not watcher.stop_flag.is_set():
         try:
             if not clock.is_regular_session():
@@ -570,8 +577,10 @@ def _enter(watcher: Watcher, row: dict, side: str):
             return None
         try:
             try:
-                cred = tenants.load_credential(db, watcher.tenant_id, venue_name,
-                                               deps.keyring())
+                from app.domains.trading.execution import venue as venue_mod
+
+                cred = venue_mod.trading_credential(db, watcher.tenant_id, deps.keyring(),
+                                                    live=watcher.live, sim=watcher.sim)
             except Exception:                           # noqa: BLE001
                 # Never relay the venue's own text: a 401 body can carry the token.
                 raise ExecutionRefused(
@@ -732,7 +741,7 @@ def _run_super(watcher: Watcher) -> None:
             else f"{len(watcher.signals)} signal type(s) for")
     watcher.log(f"armed on {what} {', '.join(watcher.tickers) or 'any ticker'} · "
                 f"{watcher.window_open}-{watcher.window_close} CST"
-                f" ({'LIVE' if watcher.live else 'paper'})")
+                f" ({'LIVE' if watcher.live else 'LONG-TERM (SIM)' if watcher.sim else 'paper'})")
     baseline_day: str | None = None
     saw_session = False
     while not watcher.stop_flag.is_set():
@@ -825,7 +834,7 @@ def _superhot_tick(watcher: Watcher, now: datetime, baseline_day: str | None) ->
 def _run_superhot(watcher: Watcher) -> None:
     watcher.log(f"armed on new SUPERHOT names, any ticker · "
                 f"{watcher.window_open}-{watcher.window_close} CST"
-                f" ({'LIVE' if watcher.live else 'paper'})")
+                f" ({'LIVE' if watcher.live else 'LONG-TERM (SIM)' if watcher.sim else 'paper'})")
     baseline_day: str | None = None
     saw_session = False
     while not watcher.stop_flag.is_set():
@@ -1034,6 +1043,14 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             "tenant %s: arming an unattended watcher while stop monitoring is "
             "stale -- TBOT_ENFORCE_STOP_WATCHDOG is off", tenant_id)
 
+    paper_sim = False
+    if not live:
+        from app.domains.trading.execution import sim as sim_mod
+        from app.platform.db.session import session_scope
+
+        with session_scope() as db:
+            paper_sim = sim_mod.is_active(db, tenant_id)
+
     with _LOCK:
         existing = (_WATCHERS.get(tenant_id) or {}).get(strategy)
         if existing is not None and not existing.stop_flag.is_set():
@@ -1044,6 +1061,7 @@ def start(tenant_id: str, *, tickers: str, strategy: str, live: bool,
             holder, recent = _claim_desk(tenant_id, strategy, wanted)
         watcher = Watcher(
             tenant_id=tenant_id, tickers=wanted, strategy=strategy, live=live,
+            sim=paper_sim,
             buy_pct=buy_pct, tp_pct=tp_pct, sl_pct=sl_pct,
             tolerance_pct=tolerance_pct, min_contracts=min_contracts,
             delta_min=delta_min, delta_max=delta_max, armed_at=clock.now(),
