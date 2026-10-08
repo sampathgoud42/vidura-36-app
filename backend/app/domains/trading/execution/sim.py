@@ -1,7 +1,7 @@
-"""The LONG-TERM (SIM) venue: an in-house paper broker.
+"""The SIP (SIM) venue: an in-house paper broker.
 
 A third venue beside Tradier's live account and its sandbox, labelled
-"LONG-TERM (SIM)" wherever it shows -- it is simulated, and never presented
+"SIP (SIM)" wherever it shows -- it is simulated, and never presented
 as a real account. ``SimClient`` answers the same calls ``TradierClient``
 does (balances, positions, orders, order status, place, cancel), so the venue
 seam (execution.venue) hands one out for a simulated credential and nothing
@@ -38,7 +38,7 @@ from app.services.tradier_client import TradierError
 
 logger = logging.getLogger(__name__)
 
-LABEL = "LONG-TERM (SIM)"
+LABEL = "SIP (SIM)"
 OPTION_MULTIPLIER = 100
 WORKING = ("open", "pending")
 BUY_SIDES = ("buy", "buy_to_open")
@@ -333,7 +333,7 @@ class SimClient:
 
     def holdings(self) -> list[dict]:
         """Every holding with its mark, value and unrealised P&L -- the board's
-        LONG-TERM (SIM) list."""
+        SIP (SIM) list."""
         self._match()
         with session_scope() as db:
             rows = db.scalars(TenantRepository(db, self.tenant_id).query(SimHolding)
@@ -406,7 +406,7 @@ def set_active(db, tenant_id: str, active: bool) -> None:
     if acct is None:
         if not active:
             return
-        raise ValueError("there is no LONG-TERM (SIM) account yet -- seed it first")
+        raise ValueError("there is no SIP (SIM) account yet -- seed it first")
     acct.active = bool(active)
 
 

@@ -157,7 +157,7 @@
 .d36-venue.paper { color: var(--d36-green); border-color: rgba(134, 239, 172, 0.35); }
 .d36-venue-live { display: inline-flex; align-items: center; gap: 4px; }
 .d36-venue-live span { font-size: 8.5px; font-weight: 700; }
-/* LONG-TERM (SIM) on the venue mark: amber, never the live red */
+/* SIP (SIM) on the venue mark: amber, never the live red */
 .d36-venue-sim { font-size: 9px; font-weight: 800; letter-spacing: 0.08em; color: #fbbf24; }
 
 /* ── venue switch confirmation ──────────────────────────────────────────── */
@@ -930,7 +930,7 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
 .d36-go.call { background: var(--d36-green-bg); color: #06251a; }
 .d36-go.put { background: var(--d36-red-bg); color: #2b0410; }
 .d36-go:disabled { opacity: 0.5; cursor: progress; }
-/* the venue sheet's paper choices: Tradier's sandbox, or LONG-TERM (SIM) */
+/* the venue sheet's paper choices: Tradier's sandbox, or SIP (SIM) */
 .d36-venuepick { display: flex; margin: 0 0 10px; }
 .d36-venuepick .d36-go { flex: 1; margin: 0 4px; background: transparent; border: 1px solid var(--d36-line); color: var(--d36-ink); }
 .d36-venuepick .d36-go.on { border-color: var(--d36-green); color: var(--d36-green); opacity: 1; cursor: default; }

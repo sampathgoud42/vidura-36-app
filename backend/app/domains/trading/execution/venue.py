@@ -63,7 +63,7 @@ def _client(cred: VenueCredential, *, sandbox: bool):
     from app.services.tradier_client import TradierClient, TradierCredentials
 
     if getattr(cred, "sim_account", None):
-        # The LONG-TERM (SIM) venue: the account half simulated here, the
+        # The SIP (SIM) venue: the account half simulated here, the
         # market half Tradier's, through the credential's own environment.
         from app.domains.trading.execution.sim import SimClient
 
@@ -85,7 +85,7 @@ def is_simulated(cred) -> bool:
 def trading_credential(db, tenant_id: str, keyring, *, live: bool,
                        sim: bool | None = None) -> VenueCredential:
     """The credential a trade goes through: live -> Tradier's account; paper ->
-    Tradier's sandbox, or the LONG-TERM (SIM) simulator. ``sim`` None is the
+    Tradier's sandbox, or the SIP (SIM) simulator. ``sim`` None is the
     operator's own choice of paper venue (sim.is_active); a position passes
     its own (Position.simulated), so it is always worked where it was opened.
 

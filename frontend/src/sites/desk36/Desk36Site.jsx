@@ -1053,10 +1053,10 @@ export default function Desk36Site() {
   // named the sandbox account in a dialog about going live — precisely the
   // number that has to be right.
   const [venues, setVenues] = useState(null);
-  // LONG-TERM (SIM): the operator's other paper venue, an in-house simulated
+  // SIP (SIM): the operator's other paper venue, an in-house simulated
   // account, chosen on the venue sheet beside the sandbox and live.
   const simOn = !live && !!venues?.sim?.active;
-  const venueWord = live ? 'live venue' : simOn ? 'LONG-TERM (SIM)' : 'sandbox venue';
+  const venueWord = live ? 'live venue' : simOn ? 'SIP (SIM)' : 'sandbox venue';
   const chooseVenue = async (to) => {
     try {
       if (to !== 'live' && venues?.sim?.configured && (to === 'sim') !== !!venues?.sim?.active) {
@@ -1449,10 +1449,10 @@ export default function Desk36Site() {
               // asked afresh: a SIM account opened since load is offered at once
               vidura.tradierVenue(user?.user_id).then(setVenues).catch(() => {});
             }}
-            aria-label={live ? 'live venue' : simOn ? 'LONG-TERM (SIM) venue' : 'paper venue'}
+            aria-label={live ? 'live venue' : simOn ? 'SIP (SIM) venue' : 'paper venue'}
             title={live
               ? 'LIVE — orders from this board are real. Tap to switch.'
-              : simOn ? 'LONG-TERM (SIM) — a simulated account, filled against real quotes. Tap to switch.'
+              : simOn ? 'SIP (SIM) — a simulated account, filled against real quotes. Tap to switch.'
               : 'Paper — orders go to the Tradier sandbox. Tap to switch.'}>
             {live ? (
               <span className="d36-venue-live" aria-hidden="true">●<span> live</span></span>
@@ -1922,7 +1922,7 @@ export default function Desk36Site() {
                 </button>
                 <button type="button" className={`d36-go sim ${simOn ? 'on' : ''}`}
                   disabled={simOn} onClick={() => chooseVenue('sim')}>
-                  LONG-TERM (SIM)
+                  SIP (SIM)
                 </button>
               </div>
             )}

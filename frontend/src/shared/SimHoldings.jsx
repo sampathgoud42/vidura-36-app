@@ -3,7 +3,7 @@ import { vidura } from './viduraApi.js';
 import { confirmDialog } from './Dialog.jsx';
 import './simHoldings.css';
 
-// The LONG-TERM (SIM) venue's holdings: the simulated account's shares (and
+// The SIP (SIM) venue's holdings: the simulated account's shares (and
 // any option it holds), each with its cost, mark, value and P&L, and a sell.
 // Shown only while SIM is the board's venue, and always labelled as
 // simulated -- it is never presented as a real account.
@@ -32,7 +32,7 @@ export default function SimHoldings({ reloadKey = 0, touch = false, onError }) {
       title: `Sell ${qtyText(h.quantity)} ${h.symbol}?`,
       body: `A market sell of the whole simulated holding, about ${usd(h.value)} at the current price. `
         + 'Filled in the regular session; outside it, it waits for the open.',
-      notes: ['LONG-TERM (SIM) — simulated, no real money moves.'],
+      notes: ['SIP (SIM) — simulated, no real money moves.'],
       confirmText: 'Sell', cancelText: 'Keep',
     });
     if (!ok) return;
@@ -45,9 +45,9 @@ export default function SimHoldings({ reloadKey = 0, touch = false, onError }) {
   const b = res.balances || {};
   const rows = (res.holdings || []).filter((h) => h.asset === 'equity');
   return (
-    <section className={`sim-hold${touch ? ' sim-hold--touch' : ''}`} aria-label="LONG-TERM (SIM) holdings">
+    <section className={`sim-hold${touch ? ' sim-hold--touch' : ''}`} aria-label="SIP (SIM) holdings">
       <div className="sim-hd">
-        <span className="sim-tag">{res.label || 'LONG-TERM (SIM)'}</span>
+        <span className="sim-tag">{res.label || 'SIP (SIM)'}</span>
         <span className="sim-sum">
           equity <b>{usd(b.total_equity)}</b> · cash <b>{usd(b.total_cash)}</b> · holdings <b>{usd(b.market_value)}</b>
           {' · '}open P&amp;L <b className={b.open_pl > 0 ? 'up' : b.open_pl < 0 ? 'down' : ''}>{usd(b.open_pl)}</b>

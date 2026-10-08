@@ -183,7 +183,7 @@ def list_positions(status: str | None = Query(default=None),
         stmt = stmt.where(Position.venue_sandbox.is_(venue != "live"))
     if venue in ("sandbox", "sim"):
         # "sandbox" is the board's word for paper: whichever paper venue the
-        # operator trades -- Tradier's sandbox, or LONG-TERM (SIM).
+        # operator trades -- Tradier's sandbox, or SIP (SIM).
         from app.domains.trading.execution import sim as sim_mod
 
         simulated = venue == "sim" or sim_mod.is_active(db, tenant.id)

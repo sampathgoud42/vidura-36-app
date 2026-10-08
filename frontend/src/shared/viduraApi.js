@@ -470,7 +470,7 @@ export const vidura = {
   // `live` is never persisted anywhere: every call states its venue, so a
   // reload always comes back on the sandbox.
   tradierVenue: (userId) => api.get('/tradier/venue', { params: {} }),
-  // The LONG-TERM (SIM) venue: an in-house simulated account. Its balances,
+  // The SIP (SIM) venue: an in-house simulated account. Its balances,
   // holdings and orders; whether it is the board's paper venue; its shares.
   simAccount: () => api.get('/tradier/sim'),
   setSimVenue: (active) => api.put('/tradier/sim/venue', { active }),

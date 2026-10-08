@@ -92,7 +92,7 @@ class MonitorPassIncomplete(RuntimeError):
 
 def _credential(tenant_id: str, sandbox: bool, simulated: bool = False):
     """The credential of the venue a position was opened on: live, Tradier's
-    sandbox, or LONG-TERM (SIM) -- never the board's current choice."""
+    sandbox, or SIP (SIM) -- never the board's current choice."""
     from app.api_v2 import deps
     from app.domains.trading.execution import venue as venue_mod
     from app.platform.db.session import session_scope

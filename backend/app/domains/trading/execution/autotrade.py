@@ -151,7 +151,7 @@ class Watcher:
     tickers: list[str]
     strategy: str
     live: bool
-    # Paper on LONG-TERM (SIM) rather than Tradier's sandbox: fixed at arm
+    # Paper on SIP (SIM) rather than Tradier's sandbox: fixed at arm
     # time, so flipping the board's venue never moves a running watcher.
     sim: bool = False
     buy_pct: float
@@ -449,7 +449,7 @@ def _place(watcher: Watcher, ticker: str, kind: str) -> None:
 
 def _run(watcher: Watcher) -> None:
     watcher.log(f"armed on {', '.join(watcher.tickers)} "
-                f"({'LIVE' if watcher.live else 'LONG-TERM (SIM)' if watcher.sim else 'paper'})")
+                f"({'LIVE' if watcher.live else 'SIP (SIM)' if watcher.sim else 'paper'})")
     while not watcher.stop_flag.is_set():
         try:
             if not clock.is_regular_session():
@@ -741,7 +741,7 @@ def _run_super(watcher: Watcher) -> None:
             else f"{len(watcher.signals)} signal type(s) for")
     watcher.log(f"armed on {what} {', '.join(watcher.tickers) or 'any ticker'} · "
                 f"{watcher.window_open}-{watcher.window_close} CST"
-                f" ({'LIVE' if watcher.live else 'LONG-TERM (SIM)' if watcher.sim else 'paper'})")
+                f" ({'LIVE' if watcher.live else 'SIP (SIM)' if watcher.sim else 'paper'})")
     baseline_day: str | None = None
     saw_session = False
     while not watcher.stop_flag.is_set():
@@ -834,7 +834,7 @@ def _superhot_tick(watcher: Watcher, now: datetime, baseline_day: str | None) ->
 def _run_superhot(watcher: Watcher) -> None:
     watcher.log(f"armed on new SUPERHOT names, any ticker · "
                 f"{watcher.window_open}-{watcher.window_close} CST"
-                f" ({'LIVE' if watcher.live else 'LONG-TERM (SIM)' if watcher.sim else 'paper'})")
+                f" ({'LIVE' if watcher.live else 'SIP (SIM)' if watcher.sim else 'paper'})")
     baseline_day: str | None = None
     saw_session = False
     while not watcher.stop_flag.is_set():

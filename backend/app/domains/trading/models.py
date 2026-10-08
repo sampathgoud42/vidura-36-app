@@ -27,7 +27,7 @@ class Position(Base, TenantOwned, Timestamped):
     # Paper and live must never be confusable. Sandbox is the default
     # everywhere, so reaching the real account is always a deliberate act.
     venue_sandbox: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    # The LONG-TERM (SIM) venue: a paper position held by the in-house
+    # The SIP (SIM) venue: a paper position held by the in-house
     # simulator (execution.sim), not by Tradier's sandbox. Always with
     # venue_sandbox true -- it is never the real account.
     simulated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
@@ -263,10 +263,10 @@ class PositionRollover(Base, TenantOwned, Timestamped):
     )
 
 
-# ---- the LONG-TERM (SIM) venue -----------------------------------------------
+# ---- the SIP (SIM) venue -----------------------------------------------
 # An in-house paper broker (execution.sim): an operator's simulated cash,
 # holdings and orders, filled against real Tradier quotes. Labelled
-# "LONG-TERM (SIM)" everywhere it shows -- it is never presented as a real
+# "SIP (SIM)" everywhere it shows -- it is never presented as a real
 # account.
 
 class SimAccount(Base, TenantOwned, Timestamped):
@@ -277,7 +277,7 @@ class SimAccount(Base, TenantOwned, Timestamped):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tenant_id: Mapped[str] = tenant_fk()
-    label: Mapped[str] = mapped_column(String(32), nullable=False, default="LONG-TERM (SIM)")
+    label: Mapped[str] = mapped_column(String(32), nullable=False, default="SIP (SIM)")
     active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     cash: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
     # what it was seeded with, and when -- the account's own history

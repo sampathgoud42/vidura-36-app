@@ -38,7 +38,7 @@ MAX_DMI_SYMBOLS = 24
 
 
 def _credential(db: DbSession, tenant: Tenant, kr: Keyring, *, live: bool):
-    """Live, or the operator's paper venue: Tradier's sandbox or LONG-TERM (SIM)."""
+    """Live, or the operator's paper venue: Tradier's sandbox or SIP (SIM)."""
     venue_name = "tradier" if live else "tradier_sandbox"
     try:
         return venue_mod.trading_credential(db, tenant.id, kr, live=live)
@@ -255,9 +255,9 @@ def _cached_history(tenant_id: str, cred, limit: int, *, fresh: bool = False) ->
     return {**held["data"], "cached_age_s": round(time.time() - held["at"])}
 
 
-# ---- the LONG-TERM (SIM) venue ---------------------------------------------
+# ---- the SIP (SIM) venue ---------------------------------------------
 # An in-house simulated account (execution.sim): read it, make it the board's
-# paper venue, seed it, and trade its shares. Labelled LONG-TERM (SIM)
+# paper venue, seed it, and trade its shares. Labelled SIP (SIM)
 # everywhere -- never presented as a real account.
 
 class SimVenueRequest(BaseModel):
@@ -280,7 +280,7 @@ def _sim_client(db: DbSession, tenant: Tenant, kr: Keyring):
     from app.domains.trading.execution import sim as sim_mod
 
     if sim_mod.account(db, tenant.id) is None:
-        raise HTTPException(status_code=404, detail="there is no LONG-TERM (SIM) account yet")
+        raise HTTPException(status_code=404, detail="there is no SIP (SIM) account yet")
     cred = venue_mod.trading_credential(db, tenant.id, kr, live=False, sim=True)
     return venue_mod._client(cred, sandbox=True)
 
@@ -313,7 +313,7 @@ def sim_account(tenant: Tenant = Depends(deps.current_tenant),
 def sim_venue(payload: SimVenueRequest,
               tenant: Tenant = Depends(deps.current_tenant),
               db: DbSession = Depends(deps.get_db)) -> dict:
-    """Make LONG-TERM (SIM) the board's paper venue, or go back to Tradier's
+    """Make SIP (SIM) the board's paper venue, or go back to Tradier's
     sandbox. Positions stay where they were opened either way."""
     from app.domains.trading.execution import sim as sim_mod
 
@@ -422,7 +422,7 @@ def venue_info(live: bool = Query(default=False),
         "paper_only_server": settings.paper_only,
         "sandbox": described("tradier_sandbox"),
         "live": described("tradier"),
-        # The LONG-TERM (SIM) venue: an in-house simulated account, the
+        # The SIP (SIM) venue: an in-house simulated account, the
         # board's paper venue while ``active``.
         "sim": {"configured": acct is not None, "active": sim_on,
                 "label": acct.label if acct else sim_mod.LABEL},
