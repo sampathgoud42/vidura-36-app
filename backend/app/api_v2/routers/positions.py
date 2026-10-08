@@ -45,6 +45,9 @@ class OpenRequest(BaseModel):
     tolerance_pct: float = 25.0
     expiration: str | None = None
     zero_dte: bool = False
+    # 0DTE off: the nearest expiry (on), or the first 7+ days out (off), held
+    # over the close and recorded as rolled over.
+    near_expiry: bool = True
     live: bool = False
     strategy: str = "Manual"
     # Guard 3's deliberate override. The default answers no.
@@ -56,6 +59,9 @@ class OpenRequest(BaseModel):
     # desk that only knew the discount was asking for.
     order_type: Literal["smart", "market", "limit"] | None = None
     discount_pct: float = Field(default=0, ge=0, le=50)
+    # How the strike is chosen: the delta band, or the expiry's most-held
+    # out-of-the-money strike (the next most-held when that one is refused).
+    pick: Literal["delta", "open_interest"] = "delta"
 
 
 def _order_type(order_type: str | None, discount_pct: float) -> str:
@@ -89,20 +95,27 @@ def _serialise(pos: Position) -> dict:
         "stop_protection": pos.stop_protection,
         "status": pos.status,
         "strategy": pos.strategy,
-        "venue": "sandbox" if pos.venue_sandbox else "live",
+        "venue": "sim" if pos.simulated else "sandbox" if pos.venue_sandbox else "live",
         "needs_review": pos.needs_review,
         "opened_at": pos.opened_at,
         "closed_at": pos.closed_at,
         "exit_price": pos.exit_price,
         "pnl_usd": pos.pnl_usd,
         "note": pos.note,
+        # Held over the close (the 🌙 switch, or bought on a 7+ day expiry).
+        # The desk's carry chip reads this; it was never sent, so the chip
+        # could not show a carried position as carried.
+        "carry_over": (pos.strategy or "").endswith(" +carry"),
     }
 
 
-def _credential(db: DbSession, tenant: Tenant, kr: Keyring, *, live: bool):
+def _credential(db: DbSession, tenant: Tenant, kr: Keyring, *, live: bool,
+                sim: bool | None = None):
+    """Live, or paper: the operator's paper venue, or -- for a position --
+    the one it was opened on (``sim``, its Position.simulated)."""
     venue_name = "tradier" if live else "tradier_sandbox"
     try:
-        return tenants.load_credential(db, tenant.id, venue_name, kr)
+        return venue_mod.trading_credential(db, tenant.id, kr, live=live, sim=sim)
     except Exception as exc:                            # noqa: BLE001
         # Never pass the venue's own text through: a 401 body can contain the
         # token that was rejected.
@@ -128,19 +141,19 @@ def _add_marks(db: DbSession, tenant: Tenant, kr: Keyring,
     filled ones -- what the desks' MARK and P&L columns show before a position
     closes, at the current bid. One quote call per venue. A venue that cannot
     be reached leaves the marks empty: they are a courtesy, the list is not."""
-    by_venue: dict[bool, list[int]] = {}
+    by_venue: dict[tuple[bool, bool], list[int]] = {}
     for i, pos in enumerate(rows):
         if pos.status in ACTIVE:
-            by_venue.setdefault(bool(pos.venue_sandbox), []).append(i)
-    for sandbox, idx in by_venue.items():
+            by_venue.setdefault((bool(pos.venue_sandbox), bool(pos.simulated)), []).append(i)
+    for (sandbox, simulated), idx in by_venue.items():
         try:
-            cred = tenants.load_credential(
-                db, tenant.id, "tradier_sandbox" if sandbox else "tradier", kr)
+            cred = venue_mod.trading_credential(db, tenant.id, kr, live=not sandbox,
+                                                sim=simulated)
             quoted = venue_mod.quotes([rows[i].occ_symbol for i in idx],
                                       cred=cred, sandbox=sandbox) or []
         except Exception:                               # noqa: BLE001
             logger.info("marks unavailable for %s (%s)", tenant.slug,
-                        "sandbox" if sandbox else "live")
+                        "sim" if simulated else "sandbox" if sandbox else "live")
             continue
         bids = {str(q.get("symbol") or "").upper(): q.get("bid") for q in quoted}
         for i in idx:
@@ -166,8 +179,15 @@ def list_positions(status: str | None = Query(default=None),
     wanted = _STATUS_WORDS.get(status, (status,)) if status else None
     if wanted:
         stmt = stmt.where(Position.status.in_(wanted))
-    if venue in ("sandbox", "live"):
-        stmt = stmt.where(Position.venue_sandbox.is_(venue == "sandbox"))
+    if venue in ("sandbox", "live", "sim"):
+        stmt = stmt.where(Position.venue_sandbox.is_(venue != "live"))
+    if venue in ("sandbox", "sim"):
+        # "sandbox" is the board's word for paper: whichever paper venue the
+        # operator trades -- Tradier's sandbox, or SIP (SIM).
+        from app.domains.trading.execution import sim as sim_mod
+
+        simulated = venue == "sim" or sim_mod.is_active(db, tenant.id)
+        stmt = stmt.where(Position.simulated.is_(simulated))
 
     # Counted over the SAME predicate as the rows. A total computed without
     # the tenant filter is a leak that returns no rows.
@@ -248,8 +268,10 @@ def open_position(payload: OpenRequest,
             delta_max=payload.delta_max, tolerance_pct=payload.tolerance_pct,
             sandbox=sandbox, strategy=payload.strategy,
             expiration=payload.expiration, zero_dte=payload.zero_dte,
+            near_expiry=payload.near_expiry,
             allow_add=payload.allow_add, order_type=order_type,
             discount_pct=payload.discount_pct if order_type == "limit" else 0.0,
+            pick=payload.pick,
         )
         result = _serialise(pos)
         idempotency.succeed(db, attempt, result=result, position_id=pos.id,
@@ -303,7 +325,7 @@ def close_position(position_id: int,
         db.commit()
         raise HTTPException(status_code=409, detail=str(exc)) from None
 
-    cred = _credential(db, tenant, kr, live=not pos.venue_sandbox)
+    cred = _credential(db, tenant, kr, live=not pos.venue_sandbox, sim=pos.simulated)
     try:
         closed = orders.close_position(db, tenant_id=tenant.id, cred=cred,
                                        pos=pos, force=force)
@@ -506,7 +528,7 @@ def flatten(idempotency_key: str | None = Header(default=None,
     closed, failed = [], []
     for pos in rows:
         try:
-            cred = _credential(db, tenant, kr, live=not pos.venue_sandbox)
+            cred = _credential(db, tenant, kr, live=not pos.venue_sandbox, sim=pos.simulated)
             orders.close_position(db, tenant_id=tenant.id, cred=cred, pos=pos)
             closed.append(pos.id)
         except Exception as exc:                        # noqa: BLE001
@@ -536,18 +558,22 @@ def set_target(position_id: int, payload: TargetRequest,
             detail=f"a target of {payload.target_price:.2f} is at or below the "
                    f"entry of {pos.entry_price:.2f}")
 
-    cred = _credential(db, tenant, kr, live=not pos.venue_sandbox)
+    # on the same price steps as every computed target (validation.round_exit)
+    from app.domains.trading.risk.validation import round_exit
+
+    target = round_exit(payload.target_price, entry=pos.entry_price or None, side="tp")
+    cred = _credential(db, tenant, kr, live=not pos.venue_sandbox, sim=pos.simulated)
     if pos.tp_order_id:
         venue_mod.cancel_order(pos.tp_order_id, cred=cred,
                                sandbox=pos.venue_sandbox)
         placed = venue_mod.place_sell(
             cred=cred, underlying=pos.underlying, occ_symbol=pos.occ_symbol,
-            quantity=pos.contracts, price=payload.target_price,
+            quantity=pos.contracts, price=target,
             sandbox=pos.venue_sandbox)
         pos.tp_order_id = placed.order_id
-    pos.tp_price = payload.target_price
+    pos.tp_price = target
     if pos.entry_price:
-        pos.tp_pct = round((payload.target_price / pos.entry_price - 1) * 100, 2)
+        pos.tp_pct = round((target / pos.entry_price - 1) * 100, 2)
     db.commit()
     return _serialise(pos)
 

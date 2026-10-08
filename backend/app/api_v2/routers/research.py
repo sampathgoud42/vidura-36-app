@@ -233,78 +233,35 @@ def get_gex0dte(tenant: Tenant = Depends(deps.current_tenant),
     payload = _svc().latest_payload(db, "gex0dte")
     if payload is None:
         raise _not_found(
-            "no 0DTE snapshot yet - press Update 0DTE to fetch one")
+            "no SPY GEX reading yet - it is read at 08:45 and 11:19 CT, or refresh it")
     payload.update(gex0dte.staleness(payload.get("fetched_at")))
-    payload.update(gex0dte.pusher_state(db))
+    payload["budget"] = gex0dte.budget(db)
     return payload
-
-
-class Gex0dteRefresh(BaseModel):
-    payload: dict | None = None
-    ticker: str = "SPY"
-    # Per-cycle metadata from the browser pusher. Declared because pydantic
-    # would otherwise drop it silently and the trail would vanish.
-    client: dict | None = None
 
 
 @router.post("/gex0dte/refresh", operation_id="refreshGex0dte")
 @deps.tenant_scoped
-def refresh_gex0dte(body: Gex0dteRefresh,
-                    pusher: Tenant | None = Depends(deps.gex_pusher),
+def refresh_gex0dte(tenant: Tenant = Depends(deps.current_tenant),
                     db: DbSession = Depends(deps.get_db)) -> dict:
-    """Store a chain, pushed from a browser tab or fetched here.
+    """Read SPY gamma from flashAlpha now -- one of the desk's five daily calls.
 
-    Any operator rather than admin: this is the desk's own data path -- a tab
-    the operator already has open pushes what it already sees -- and it costs
-    no metered budget. The getgamma bookmarklet pushes with the scoped push
-    token instead (deps.gex_pusher), and that token only ever pushes: without
-    a chain in the body it is refused rather than made to fetch one here.
+    On demand: refused (429) when it would leave today's scheduled reads
+    (08:45, 11:19 CT) without their calls. Any operator may press it, as any
+    could press the old Update 0DTE; the budget is the guard, not the role.
     """
+    from app.services import gex as gex_svc
     from app.services import gex0dte
 
-    raw = body.payload
-    if raw is None and pusher is None:
-        raise HTTPException(status_code=422,
-                            detail="the push token pushes a chain; send one as payload")
-    if raw is None:
-        try:
-            raw = gex0dte.fetch_live(ticker=body.ticker)
-        except gex0dte.GammaError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
     try:
-        view = gex0dte.compute(raw)
-    except gex0dte.GammaError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    _svc().store_payload(db, "gex0dte", view, source="getgamma.io")
-    gex0dte.record_hour(db, view)
+        out = gex0dte.refresh(db)
+    except gex_svc.QuotaExhausted as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except (gex_svc.GexError, gex0dte.GammaError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    view = dict(out["view"])
+    view.update(gex0dte.staleness(view.get("fetched_at")))
+    view["budget"] = gex0dte.budget(db)
     return view
-
-
-class HeartbeatIn(BaseModel):
-    session: str = "?"
-    seq: int = 0
-    ok: bool = False
-    reason: str | None = None
-    wall: int | None = None
-    mono: int | None = None
-
-
-@router.post("/gex0dte/heartbeat", operation_id="gex0dtePusherHeartbeat")
-@deps.tenant_scoped
-def gex0dte_heartbeat(body: HeartbeatIn,
-                      pusher: Tenant | None = Depends(deps.gex_pusher),
-                      db: DbSession = Depends(deps.get_db)) -> dict:
-    """Record that a push cycle happened, whatever its outcome.
-
-    Strictly separate from the data path. Routing liveness through /refresh
-    would make the SERVER call the vendor on every failed cycle, and would
-    stamp a stalled feed as fresh -- the two things this design does not do.
-    """
-    from app.services import gex0dte
-
-    gex0dte.record_heartbeat(db, body.session, body.seq, body.ok, body.reason,
-                             body.wall, body.mono)
-    return {"ok": True}
 
 
 @router.get("/gex0dte/history", operation_id="getGex0dteHistory")

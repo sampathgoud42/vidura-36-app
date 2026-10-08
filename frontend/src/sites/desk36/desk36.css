@@ -157,6 +157,8 @@
 .d36-venue.paper { color: var(--d36-green); border-color: rgba(134, 239, 172, 0.35); }
 .d36-venue-live { display: inline-flex; align-items: center; gap: 4px; }
 .d36-venue-live span { font-size: 8.5px; font-weight: 700; }
+/* SIP (SIM) on the venue mark: amber, never the live red */
+.d36-venue-sim { font-size: 9px; font-weight: 800; letter-spacing: 0.08em; color: #fbbf24; }
 
 /* ── venue switch confirmation ──────────────────────────────────────────── */
 .d36-venueblink {
@@ -928,6 +930,11 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
 .d36-go.call { background: var(--d36-green-bg); color: #06251a; }
 .d36-go.put { background: var(--d36-red-bg); color: #2b0410; }
 .d36-go:disabled { opacity: 0.5; cursor: progress; }
+/* the venue sheet's paper choices: Tradier's sandbox, or SIP (SIM) */
+.d36-venuepick { display: flex; margin: 0 0 10px; }
+.d36-venuepick .d36-go { flex: 1; margin: 0 4px; background: transparent; border: 1px solid var(--d36-line); color: var(--d36-ink); }
+.d36-venuepick .d36-go.on { border-color: var(--d36-green); color: var(--d36-green); opacity: 1; cursor: default; }
+.d36-venuepick .d36-go.sim.on { border-color: #fbbf24; color: #fbbf24; }
 .d36-warn {
   margin-top: 9px; text-align: center;
   font-size: 9px; letter-spacing: 0.13em; text-transform: uppercase;
@@ -967,6 +974,42 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
   content: ''; position: absolute; left: -4px; right: -4px; top: -8px; bottom: -8px;
 }
 .d36-literefresh:active { transform: scale(0.96); }
+/* SPY 0DTE GEX beside the two numbers: the Tradier world's GexInline in
+   this board's type and colours. Its two marks get 44pt of reach. */
+.d36-litegex {
+  --tr-green: var(--d36-green); --tr-red: var(--d36-red);
+  --tr-faint: var(--d36-faint); --tr-dim: var(--d36-dim);
+  --tr-accent: var(--d36-green); --tr-line: var(--d36-line);
+  min-width: 0;
+}
+.d36-litegex .tr-stat .k {
+  display: flex; align-items: center;
+  font-size: 9px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--d36-faint); white-space: nowrap;
+}
+.d36-litegex .tr-stat .v {
+  font-size: 18px; font-weight: 800; line-height: 1.1;
+  font-family: ui-monospace, Consolas, monospace; font-variant-numeric: tabular-nums;
+}
+.d36-litegex .tr-gex-age { color: var(--d36-faint); }
+.d36-litegex .tr-gex-toggle {
+  position: relative; background: none; border: 0; padding: 0 4px;
+  color: var(--d36-faint); font-size: 11px; cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.d36-litegex .tr-gex-toggle::after {
+  content: ''; position: absolute; left: -6px; right: -6px; top: -14px; bottom: -14px;
+}
+.d36-litegex .tr-gex-toggle:disabled { opacity: 0.4; cursor: default; }
+.d36-litegex .tr-gex-hist {
+  margin-top: 4px; max-width: 70vw; max-height: 96px; overflow-y: auto;
+  -webkit-overflow-scrolling: touch; font-size: 10px;
+}
+.d36-litegex .tr-gex-list, .d36-litegex .tr-gex-mins { display: flex; flex-wrap: wrap; row-gap: 2px; }
+.d36-litegex .tr-gex-list .sep, .d36-litegex .tr-gex-mins .sep { color: var(--d36-faint); margin: 0 2px; }
+.d36-litegex .val.pos { color: var(--d36-green); font-weight: 700; }
+.d36-litegex .val.neg { color: var(--d36-red); font-weight: 700; }
+.d36-litegex .tr-note { font-size: 10px; }
 .d36-litelive {
   display: inline-flex; align-items: center; margin-left: 8px;
   font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase;
@@ -998,3 +1041,30 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
 .d36-litechart { padding: 0 8px; }
 /* its ticker is editable (tap it): 16px, or iOS Safari zooms the page in */
 .d36-litechart .tr-syminput { font-size: 16px; }
+
+/* The auto-trader's last refused entry, under its armed line: red, wrapping,
+   so a strike list that ran out is seen. The watcher has moved on already. */
+.tr-autoline .tr-autoerr {
+  display: block; margin-top: 4px; color: var(--tr-red, #f87171);
+  white-space: normal; overflow-wrap: anywhere; line-height: 1.35;
+}
+/* DELTA | OPEN INT strike-pick toggle, on the BUY tickets and the arm form. */
+.tr-pick-toggle { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.tr-pick-note { display: block; margin-top: 4px; line-height: 1.35; }
+
+/* News & Events sits at the top of the board, inside the page gutter. */
+.d36-news { padding: 0 12px; margin-top: 8px; }
+
+/* Auto-trade: one line per armed strategy, each with its own ✕ disarm. */
+.tr-autolines { display: flex; flex-direction: column; }
+.tr-autolines .tr-autoline + .tr-autoline { margin-top: 2px; }
+.tr-autoline .tr-autodisarm {
+  margin-left: 8px; padding: 0 6px; min-width: 22px; min-height: 18px;
+  background: none; border: 1px solid currentColor; border-radius: 4px;
+  color: var(--tr-red, #f87171); font: inherit; line-height: 1.2; cursor: pointer;
+  vertical-align: middle;
+}
+.tr-autoline .tr-autodisarm:disabled { opacity: 0.5; cursor: default; }
+.tr-autoline.tr-autoctl { display: flex; gap: 6px; flex-wrap: wrap; color: inherit; }
+/* phone: the disarm targets meet Apple's 44px */
+.d36-autoline .tr-autodisarm { min-width: 44px; min-height: 32px; }

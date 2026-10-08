@@ -81,6 +81,36 @@ class BestBetsRow(Base):
     scanned_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
 
 
+class BreakoutHistory(Base):
+    """One ticker that passed a BreakoutRadar scan in the last 30 days.
+
+    The one stored-scan table that is NOT truncate-and-load: a sweep upserts
+    each ticker it passes (scan_store.replace_breakout), so a rescan no longer
+    forgets the names that stopped passing. ``popped_at`` is when its latest
+    breakout candle first showed -- the table's order, newest first -- and
+    ``hits`` counts distinct breakout candles: above one, it broke out again.
+    Rows not passed for HISTORY_DAYS are dropped.
+    """
+
+    __tablename__ = "scan_breakout_history"
+    __table_args__ = (
+        UniqueConstraint("market", "timeframe", "ticker", name="one_history_per_ticker"),
+        Index("ix_scan_breakout_history_combo", "market", "timeframe", "popped_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    market: Mapped[str] = mapped_column(String(8), nullable=False)
+    timeframe: Mapped[str] = mapped_column(String(4), nullable=False)
+    ticker: Mapped[str] = mapped_column(String(24), nullable=False)
+    first_seen: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    popped_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    last_seen: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    # the breakout candle's timestamp, as the row gives it: a new one is a new breakout
+    breakout_at: Mapped[str | None] = mapped_column(String(40))
+    hits: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
+    data: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+
+
 class BreakoutRow(Base):
     """One ticker of a BreakoutRadar scan: a breakout, or a near miss."""
 

@@ -191,6 +191,27 @@ def size_contracts(
     tolerance_pct: float = DEFAULT_TOLERANCE_PCT,
     min_contracts: int = 1,
 ) -> tuple[int, dict]:
+    """The band's count (_size_in_band), never more than MAX_CONTRACTS: Buy %
+    that works out to more is placed at the cap."""
+    from app.domains.trading.execution.selection import MAX_CONTRACTS
+
+    count, sizing = _size_in_band(balance_usd, buy_pct, limit_price,
+                                  tolerance_pct=tolerance_pct, min_contracts=min_contracts)
+    if count > MAX_CONTRACTS:
+        cost = sizing.get("cost_per_contract_usd") or 0.0
+        return MAX_CONTRACTS, dict(sizing, total_usd=round(MAX_CONTRACTS * cost, 2),
+                                   capped_at=MAX_CONTRACTS)
+    return count, sizing
+
+
+def _size_in_band(
+    balance_usd: float,
+    buy_pct: float,
+    limit_price: float,
+    *,
+    tolerance_pct: float = DEFAULT_TOLERANCE_PCT,
+    min_contracts: int = 1,
+) -> tuple[int, dict]:
     """How many contracts to buy, and the arithmetic that says why.
 
     The budget is balance x buy_pct — a target, not a hard cap. Contracts are
@@ -525,11 +546,14 @@ def exit_prices(entry: float, tp_pct: float, sl_pct: float) -> tuple[float, floa
     protective on both sides: the TP never sells under its target, the SL
     never stops later than its floor.
     """
+    from app.domains.trading.risk.validation import round_exit
+
     def _ceil_penny(x: float) -> float:
         return math.ceil(x * 100 - 1e-6) / 100.0
 
-    return (_ceil_penny(entry * (1 + tp_pct / 100.0)),
-            _ceil_penny(entry * (1 - sl_pct / 100.0)))
+    # then onto the operator's price steps, as the v2 desk's exits are
+    return (round_exit(_ceil_penny(entry * (1 + tp_pct / 100.0)), entry=entry, side="tp"),
+            round_exit(_ceil_penny(entry * (1 - sl_pct / 100.0)), entry=entry, side="sl"))
 
 
 def _target_override(pos: TradierPosition) -> float | None:

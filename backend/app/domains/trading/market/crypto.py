@@ -1,4 +1,4 @@
-"""Crypto DMI: the same 1m/2m/5m/10m board, priced from Coinbase.
+"""Crypto DMI: the same 2m/5m/10m/15m/30m board, priced from Coinbase.
 
 Crypto is the one market on this desk that never closes, so unlike the
 commodity board there is no session to switch sources around. One feed
@@ -61,8 +61,11 @@ COINS = [
 # quote pair chosen carelessly shows a real number for the wrong asset.
 
 
-def _bars_from_coinbase(product: str, *, timeout: float = 15.0) -> list[dict]:
-    """1-minute candles, oldest first.
+def _bars_from_coinbase(product: str, *, timeout: float = 15.0,
+                        granularity: int = 60) -> list[dict]:
+    """Candles of ``granularity`` seconds (60 = 1-minute), oldest first.
+    Coinbase answers at most 300 per call: five hours of 1-minute bars, 25
+    hours of 5-minute ones -- which is why 15m / 30m fold from the latter.
 
     Coinbase returns ``[time, low, high, open, close, volume]`` NEWEST FIRST,
     and every indicator here assumes oldest first. Feeding the list through
@@ -73,7 +76,7 @@ def _bars_from_coinbase(product: str, *, timeout: float = 15.0) -> list[dict]:
     import httpx
 
     response = httpx.get(COINBASE_CANDLES.format(product=product),
-                         params={"granularity": 60}, timeout=timeout)
+                         params={"granularity": granularity}, timeout=timeout)
     response.raise_for_status()
     raw = response.json()
     if not isinstance(raw, list):
@@ -106,12 +109,18 @@ def _row(coin: Coin) -> dict:
         return board.unavailable_row(
             coin.key, coin.label, coin.product, bars_seen=len(bars),
             reason=f"only {len(bars)} bars; {indicators.MIN_BARS} needed")
+    try:
+        # 15m and 30m need ~15 hours; 300 one-minute bars reach five.
+        slow = _bars_from_coinbase(coin.product, granularity=300)
+    except Exception as exc:                            # noqa: BLE001
+        logger.info("crypto %s 5m: %s: %s", coin.product, type(exc).__name__, exc)
+        slow = None
     return board.row_from_bars(coin.key, coin.label, coin.product, bars,
-                               "coinbase")
+                               "coinbase", slow_bars=slow)
 
 
 def snapshot(*, force: bool = False) -> dict:
-    """The crypto board: one row per coin, 1m/2m/5m/10m."""
+    """The crypto board: one row per coin, 2m/5m/10m/15m/30m."""
     global _cache
 
     if not force:

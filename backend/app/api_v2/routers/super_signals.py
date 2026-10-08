@@ -46,8 +46,18 @@ def session(date: str | None = Query(default=None, pattern=DATE),
     """One session's signals, the watchlist tracker's hits and desk health.
 
     No date is today on a trading day, otherwise the last session -- so a
-    weekend visit shows Friday rather than an empty board."""
-    return _relay(desk.get_json, "/api/session", {"date": date} if date else None)
+    weekend visit shows Friday rather than an empty board.
+
+    Each signal carries the channel's marks: ``stars`` (1-3, the pair's win
+    rate above 66% over the last 1, 3 or 7 sessions before this one) and the
+    ``star_record`` that earned them."""
+    from app.domains.notify import super_telegram
+
+    data = _relay(desk.get_json, "/api/session", {"date": date} if date else None)
+    try:
+        return super_telegram.mark_session(data)
+    except Exception:                                   # noqa: BLE001
+        return data
 
 
 @router.get("/rank", operation_id="getSuperSignalsRank")
@@ -121,10 +131,16 @@ def report(report_date: str = PathParam(pattern=DATE),
 # like every other key and never comes back out -- an answer says only whether
 # one is saved.
 class TelegramFeedRequest(BaseModel):
+    # Which channel's feed: "vidura" (only the three-star best pairs) or
+    # "super" (every signal). The token is one, shared by both.
+    channel: str = Field(default="vidura", max_length=16)
     token: str | None = Field(default=None, max_length=128)
     chat_id: str | None = Field(default=None, max_length=64)
     chat_title: str | None = Field(default=None, max_length=128)
     enabled: bool | None = None
+    # The other posts' switches: the half-hourly HOT boards, the SUPERHOT alerts.
+    post_hot: bool | None = None
+    post_superhot: bool | None = None
 
 
 class TelegramChatsRequest(BaseModel):
@@ -145,14 +161,15 @@ def _telegram(fn, *args, **kwargs):
 
 @router.get("/telegram", operation_id="getSuperSignalsTelegram")
 @deps.tenant_scoped
-def telegram_get(tenant: Tenant = Depends(deps.current_tenant),
+def telegram_get(channel: str = Query(default="vidura", max_length=16),
+                 tenant: Tenant = Depends(deps.current_tenant),
                  db: DbSession = Depends(deps.get_db),
                  kr=Depends(deps.keyring)) -> dict:
-    """Where this operator's new signals go: the chat, the switch, the last
-    post and the last error, and whether a bot token is saved."""
+    """Where this operator's new signals go on one channel: the chat, the
+    switches, the last post and the last error, and whether a bot token is saved."""
     from app.domains.notify import super_telegram
 
-    return super_telegram.get_state(db, tenant.id, kr)
+    return _telegram(super_telegram.get_state, db, tenant.id, kr, channel)
 
 
 @router.put("/telegram", operation_id="setSuperSignalsTelegram")
@@ -168,7 +185,8 @@ def telegram_set(payload: TelegramFeedRequest,
     return _telegram(super_telegram.set_state, db, tenant, kr,
                      token=payload.token, chat_id=payload.chat_id,
                      chat_title=payload.chat_title, enabled=payload.enabled,
-                     actor=tenant.slug)
+                     post_hot=payload.post_hot, post_superhot=payload.post_superhot,
+                     actor=tenant.slug, channel=payload.channel)
 
 
 @router.post("/telegram/chats", operation_id="listSuperSignalsTelegramChats")
@@ -189,10 +207,11 @@ def telegram_chats(payload: TelegramChatsRequest,
 
 @router.post("/telegram/test", operation_id="testSuperSignalsTelegram")
 @deps.tenant_scoped
-def telegram_test(tenant: Tenant = Depends(deps.current_tenant),
+def telegram_test(channel: str = Query(default="vidura", max_length=16),
+                  tenant: Tenant = Depends(deps.current_tenant),
                   db: DbSession = Depends(deps.get_db),
                   kr=Depends(deps.keyring)) -> dict:
-    """One test message to the saved chat."""
+    """One test message to the channel's saved chat."""
     from app.domains.notify import super_telegram
 
-    return _telegram(super_telegram.send_test, db, tenant.id, kr)
+    return _telegram(super_telegram.send_test, db, tenant.id, kr, channel)

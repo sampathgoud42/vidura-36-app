@@ -1,185 +1,154 @@
-"""SPY 0DTE dealer-gamma from getgamma.io's option chain.
+"""SPY gamma for the desk's "SPY 0DTE GEX" stat, from flashAlpha.
 
-The vendor endpoint returns the RAW chain — per-contract gamma, open interest
-and strike — and its dashboard computes the headline numbers in the browser.
-So we compute them here:
+Source: flashAlpha's /v1/stock/SPY/summary on the FREE key, five calls a day
+for the whole desk (services/gex.py meters them). Two are spent on a schedule
+-- 08:45 and 11:19 CT on weekdays -- and the other three are on demand, from
+the desk's refresh. An on-demand refresh that would leave a scheduled slot
+with no call is refused.
 
-    net GEX    signed dollar gamma across the chain (calls +, puts -)
-    flip       the strike where CUMULATIVE gamma crosses zero
-    call wall  strike carrying the most call gamma
-    put wall   strike carrying the most put gamma
-    magnets    the heaviest-gamma strikes bracketing spot — price tends to
-               pin between them into the close
+WHAT IT IS, AND IS NOT: the free summary carries flashAlpha's ALL-EXPIRY
+exposure -- net GEX, gamma flip, call wall, put wall, regime. Its per-expiry
+and 0DTE breakdowns (exposure.zero_dte, top_strikes) are empty on this plan;
+the true 0DTE endpoint is Growth tier. For SPY most gamma sits in the next
+two sessions, so the all-expiry reading tracks the near-dated book, but it is
+not a 0DTE-only number, and there are no per-strike magnets. The view says so
+(``scope``).
 
-TRANSPORT NOTE (2026-07-30): getgamma sits behind Vercel bot protection that
-answers a server-side request with HTTP 429 + a "Security Checkpoint" page,
-even carrying the exact browser headers and a valid session cookie. A real
-browser on the site gets 200. Defeating that check is not something this
-service does, so ``fetch_live`` reports the block plainly and the endpoint
-also accepts a payload captured from the browser. The maths below is the same
-either way.
+This replaced getgamma.io, which was a browser bookmarklet pushing the raw
+0DTE chain every minute (getgamma blocks server-side requests). The hourly
+history below is the same table, now filled by these readings.
 """
 
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timezone
 from zoneinfo import ZoneInfo
-from typing import Any
 
 log = logging.getLogger(__name__)
 
-VENDOR_URL = "https://www.getgamma.io/api/options"
-CONTRACT_MULTIPLIER = 100          # one option = 100 shares
-
-# Ordinary browser-shaped headers so a legitimate request is not rejected for
-# looking malformed. Nothing here attempts to defeat the bot check.
-_HEADERS = {
-    "accept": "*/*",
-    "accept-language": "en-US,en;q=0.9",
-    "referer": "https://www.getgamma.io/dashboard",
-    "user-agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-        "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36"
-    ),
-}
+CST = ZoneInfo("America/Chicago")
+# The scheduled flashAlpha reads, CT, weekdays. A slot missed while the
+# server was down is still taken within SLOT_GRACE_MIN of its time.
+SLOTS = (time(8, 45), time(11, 19))
+SLOT_GRACE_MIN = 30
+POLL_S = 60
+SCOPE = "all expiries (flashAlpha free summary)"
 
 
 class GammaError(Exception):
-    """Vendor unreachable, challenged, or the session expired."""
+    pass
 
 
-def _num(value: Any) -> float | None:
-    try:
-        out = float(value)
-    except (TypeError, ValueError):
-        return None
-    return None if out != out else out          # drop NaN
-
-
-def fetch_live(ticker: str = "SPY", strikes: int = 50) -> dict:
-    """Try the vendor directly. No credentials: the endpoint needs none.
-
-    Verified 2026-07-30 — identical requests with a session JWT, with only the
-    gamma_fp visitor cookie, and with no cookies at all all return HTTP 429 +
-    a Vercel checkpoint page, while a real browser gets 200. The gate is client
-    fingerprinting, not authentication, so there is nothing to authenticate
-    with and nothing here tries to look like a browser past that check.
-    """
-    import requests
-
-    try:
-        resp = requests.get(
-            VENDOR_URL,
-            params={"ticker": ticker, "mode": "0dte", "strikes": strikes},
-            headers=_HEADERS,
-            timeout=30,
-        )
-    except Exception as exc:                     # network / DNS / TLS
-        raise GammaError(f"getgamma unreachable: {exc}") from exc
-
-    ctype = resp.headers.get("content-type") or ""
-    if "json" not in ctype:
-        raise GammaError(
-            f"getgamma answered HTTP {resp.status_code} with a bot-check page, not JSON. "
-            "Its edge blocks server-side calls regardless of cookies — push the "
-            "chain from a browser tab on getgamma.io instead."
-        )
-    if resp.status_code >= 400:
-        raise GammaError(f"getgamma HTTP {resp.status_code}")
-    return resp.json()
-
-
-def compute(payload: dict) -> dict:
-    """Turn the raw chain into the desk line. Pure — no network, no clock."""
-    if not isinstance(payload, dict):
-        raise GammaError("payload is not an object")
-    contracts = payload.get("contracts")
-    if not isinstance(contracts, list) or not contracts:
-        raise GammaError("payload carries no option contracts")
-    spot = _num(payload.get("spotPrice"))
-    if not spot:
-        raise GammaError("payload carries no spot price")
-
-    # dollar gamma per 1% move, the convention the desk line quotes
-    unit = CONTRACT_MULTIPLIER * spot * spot * 0.01
-
-    per_strike: dict[float, dict[str, float]] = {}
-    oi_by_strike: dict[float, dict[str, float]] = {}
-    for c in contracts:
-        strike = _num(c.get("strike_price"))
-        gamma = _num((c.get("greeks") or {}).get("gamma"))
-        oi = _num(c.get("open_interest"))
-        if strike is None or gamma is None or oi is None or oi <= 0:
-            continue
-        side = str(c.get("contract_type") or "").lower()
-        if side not in ("call", "put"):
-            continue
-        per_strike.setdefault(strike, {"call": 0.0, "put": 0.0})[side] += gamma * oi * unit
-        oi_by_strike.setdefault(strike, {"call": 0.0, "put": 0.0})[side] += oi
-
-    if not per_strike:
-        raise GammaError("no contracts carried gamma and open interest")
-
-    strikes_sorted = sorted(per_strike)
-    # dealers are short calls / long puts: call gamma positive, put gamma negative
-    net_by_strike = {k: per_strike[k]["call"] - per_strike[k]["put"] for k in strikes_sorted}
-    net_gex = sum(net_by_strike.values())
-    call_gex = sum(per_strike[k]["call"] for k in strikes_sorted)
-    put_gex = sum(per_strike[k]["put"] for k in strikes_sorted)
-
-    # Walls are the OPEN-INTEREST peaks per side, not the gamma peaks — checked
-    # against getgamma's own dashboard on 2026-07-30: it showed call wall 740 /
-    # put wall 726, which are max call OI and max put OI. The gamma peak that
-    # day sat at 738, so ranking by exposure gave the wrong put wall.
-    call_wall = max(strikes_sorted, key=lambda k: oi_by_strike[k]["call"])
-    put_wall = max(strikes_sorted, key=lambda k: oi_by_strike[k]["put"])
-
-    # gamma flip: where the running total crosses zero, interpolated between
-    # the bracketing strikes rather than snapped to one of them
-    flip = None
-    running = 0.0
-    prev_k, prev_run = None, 0.0
-    for k in strikes_sorted:
-        running += net_by_strike[k]
-        if prev_k is not None and (prev_run <= 0 < running or prev_run >= 0 > running):
-            span = running - prev_run
-            flip = k if span == 0 else prev_k + (k - prev_k) * (-prev_run / span)
-            break
-        prev_k, prev_run = k, running
-
-    # Magnets are the SIGNED extremes, matching getgamma's "+GEX MAGNET" and
-    # "-GEX MAGNET": the single most positive and most negative net-gamma
-    # strikes. (Its dashboard showed +740 / -733 and these reproduce both.)
-    # Not "heaviest absolute near spot" — that picked the wrong pair.
-    magnet_hi = max(strikes_sorted, key=lambda k: net_by_strike[k])   # +GEX
-    magnet_lo = min(strikes_sorted, key=lambda k: net_by_strike[k])   # -GEX
-    magnets = sorted({magnet_hi, magnet_lo}, reverse=True)
-
-    regime = "NEG" if net_gex < 0 else "POS"
+def from_flashalpha(payload: dict) -> dict:
+    """The desk view from one flashAlpha /summary payload. Pure."""
+    ex = (payload or {}).get("exposure") or {}
+    spot = ((payload or {}).get("price") or {}).get("last")
+    net = ex.get("net_gex")
+    if net is None:
+        raise GammaError("the flashAlpha summary carried no net GEX")
+    flip = ex.get("gamma_flip")
+    flip = round(float(flip), 2) if isinstance(flip, (int, float)) else None
+    regime = "NEG" if float(net) < 0 else "POS"
+    call_wall, put_wall = ex.get("call_wall"), ex.get("put_wall")
+    ticker = str(payload.get("symbol") or "SPY").upper()
     return {
-        "ticker": payload.get("ticker") or "SPY",
-        "mode": payload.get("mode") or "0dte",
-        "spot": round(spot, 2),
-        "regime": regime,
-        "net_gex": round(net_gex, 2),
-        "call_gex": round(call_gex, 2),
-        "put_gex": round(put_gex, 2),
-        "flip": round(flip, 2) if flip is not None else None,
-        "call_wall": call_wall,
-        "put_wall": put_wall,
-        "magnet_hi": magnet_hi,
-        "magnet_lo": magnet_lo,
-        "magnets": magnets,
-        "market_status": payload.get("marketStatus"),
-        "market_open": payload.get("marketOpen"),
-        "vendor_ts": payload.get("timestamp"),
-        "contracts": len(contracts),
-        "strikes": len(strikes_sorted),
+        "ticker": ticker, "mode": "all_expiry", "scope": SCOPE, "source": "flashAlpha",
+        "spot": round(float(spot), 2) if isinstance(spot, (int, float)) else spot,
+        "regime": regime, "vendor_regime": ex.get("regime"),
+        "net_gex": float(net), "call_gex": None, "put_gex": None,
+        "flip": flip, "call_wall": call_wall, "put_wall": put_wall,
+        "magnet_hi": None, "magnet_lo": None, "magnets": [],
+        "max_pain": ex.get("max_pain"),
+        "gamma_note": (ex.get("interpretation") or {}).get("gamma"),
+        "vendor_ts": payload.get("as_of"),
         "fetched_at": datetime.now(timezone.utc).isoformat(),
-        "note": summary_line(payload.get("ticker") or "SPY", regime, net_gex,
-                             flip, call_wall, put_wall, magnet_hi, magnet_lo),
+        "note": summary_line(ticker, regime, float(net), flip, call_wall, put_wall,
+                             None, None) + " · all expiries",
     }
+
+
+def slot_due(now: datetime | None = None) -> str | None:
+    """The scheduled slot to take now ("08:45"), or None."""
+    now = (now or datetime.now(timezone.utc)).astimezone(CST)
+    if now.weekday() > 4:
+        return None
+    minutes = now.hour * 60 + now.minute
+    for slot in SLOTS:
+        start = slot.hour * 60 + slot.minute
+        if start <= minutes < start + SLOT_GRACE_MIN:
+            return slot.strftime("%H:%M")
+    return None
+
+
+def pending_slots(now: datetime | None = None, taken: set[str] | None = None) -> list[str]:
+    """Today's scheduled slots not yet taken and not yet past their grace --
+    the calls an on-demand refresh must leave in the budget."""
+    now = (now or datetime.now(timezone.utc)).astimezone(CST)
+    if now.weekday() > 4:
+        return []
+    minutes = now.hour * 60 + now.minute
+    out = []
+    for slot in SLOTS:
+        label = slot.strftime("%H:%M")
+        if label in (taken or set()):
+            continue
+        if minutes < slot.hour * 60 + slot.minute + SLOT_GRACE_MIN:
+            out.append(label)
+    return out
+
+
+def refresh(db, *, slot: str | None = None) -> dict:
+    """One flashAlpha SPY call: the desk's GEX view, its hour slot, and the
+    banner's SPY row (gex.refresh). ``slot`` marks a scheduled read; without
+    it the call is on demand and must leave the pending slots their calls."""
+    from app.services import gex as gex_svc
+    from app.services import super_research as sr
+
+    result = gex_svc.refresh(db, ["spy"], persist=True, slot=slot)
+    raw = (result.get("raw") or {}).get("spy")
+    if raw is None:
+        raise GammaError("; ".join((result.get("errors") or {}).values()) or "no SPY reading")
+    view = from_flashalpha(raw)
+    sr.store_payload(db, "gex0dte", view, source=f"flashAlpha {slot}" if slot else "flashAlpha")
+    record_hour(db, view)
+    return {"view": view, "quota": result.get("quota")}
+
+
+def budget(db) -> dict:
+    """Today's flashAlpha spend as the desk shows it: the scheduled reads and
+    whether each has run, and how many on-demand refreshes are left."""
+    from app.services import gex as gex_svc
+
+    quota = gex_svc.quota_state(db)
+    taken = gex_svc.slots_taken(db)
+    pending = pending_slots(taken=taken)
+    return {
+        "scheduled": [{"slot": s.strftime("%H:%M"), "taken": s.strftime("%H:%M") in taken}
+                      for s in SLOTS],
+        "on_demand_left": max(0, quota["remaining"] - len(pending)),
+        "used": quota["used_by_api"], "cap": quota["cap"],
+    }
+
+
+def sweep(now: datetime | None = None) -> str | None:
+    """The scheduled reads: take the due slot once. Returns it when taken."""
+    from app.platform.db.session import session_scope
+    from app.services import gex as gex_svc
+
+    slot = slot_due(now)
+    if slot is None:
+        return None
+    with session_scope() as db:
+        if slot in gex_svc.slots_taken(db):
+            return None
+        try:
+            refresh(db, slot=slot)
+            log.info("SPY GEX: scheduled %s CT read taken", slot)
+            return slot
+        except Exception as exc:                        # noqa: BLE001
+            log.warning("SPY GEX scheduled %s CT read failed: %s", slot, exc)
+            return None
 
 
 def fmt_gex(value: float | None) -> str:
@@ -211,8 +180,8 @@ def summary_line(ticker, regime, net_gex, flip, call_wall, put_wall, hi, lo) -> 
 # --- hourly history ---------------------------------------------------------
 #
 # The desk wants the day at a glance: +500M >> +420M >> ... one reading per
-# CST trading hour, 08:00 through 16:00. Snapshots arrive whenever a getgamma
-# tab pushes, so this buckets them by hour rather than storing every push.
+# CST trading hour, 08:00 through 16:00. Readings arrive at the scheduled
+# slots and on demand, so this buckets them by hour.
 
 TRADING_HOURS = tuple(range(8, 17))          # 08:00 .. 16:00 CST inclusive
 CST = ZoneInfo("America/Chicago")
@@ -234,18 +203,18 @@ def fmt_signed(value: float | None) -> str:
     return f"{sign}{n:.0f}"
 
 
-PUSH_EVERY_S = 60           # the pusher's own cadence
-STALE_AFTER_S = 3 * 60      # two missed ticks plus slack
+# Readings are a few a day, so "stale" means older than the gap between the
+# scheduled reads -- not a minute-cadence pusher missing ticks.
+STALE_AFTER_S = 3 * 60 * 60
 
 
 def staleness(fetched_at) -> dict:
     """How old the snapshot is, and whether that is a problem right now.
 
-    Age alone is not a fault — outside 08:00-15:15 CST nothing is pushing and
-    an hours-old chain is correct. Inside the window it means the pusher died,
-    and the desk has to SAY so: a card that only reads "updated 23m ago" looks
-    identical whether the feed is idle or broken, which is how a stall goes
-    unnoticed for half a session.
+    Age alone is not a fault: readings are taken at 08:45 and 11:19 CT and on
+    demand, so one a few hours old is normal. Inside the session one older
+    than STALE_AFTER_S means a scheduled read did not land, and the desk
+    says so.
     """
     out = {"age_seconds": None, "stale": False, "window_open": _window_open()}
     if not fetched_at:
@@ -361,72 +330,3 @@ def history_dates(db, limit: int = 60) -> list[str]:
         .all()
     )
     return [r[0] for r in rows]
-
-
-# --- pusher liveness --------------------------------------------------------
-#
-# Snapshot age answers "how old is the data". It cannot answer "is the pusher
-# alive", and those need different responses: a dead tab wants a re-click, a
-# blocked tab does not (re-clicking a tab the vendor is refusing changes
-# nothing and re-arms a loop that is already running). Heartbeats separate them.
-
-HEARTBEAT_KEEP_DAYS = 3
-DEAD_AFTER_S = 3 * PUSH_EVERY_S
-
-
-def record_heartbeat(db, session: str, seq: int, ok: bool, reason: str | None,
-                     wall_ms: int | None, mono_ms: int | None) -> None:
-    """Append one cycle. Deliberately touches no snapshot state.
-
-    It must never write a snapshot, an hour slot or a fetched_at: a cycle
-    happening is not the same event as data arriving, and conflating them
-    would make a stalled feed report itself fresh.
-    """
-    from app.models import PusherHeartbeat
-
-    db.add(PusherHeartbeat(
-        session=(session or "?")[:16],
-        seq=int(seq or 0),
-        ok=bool(ok),
-        reason=(reason or None) and str(reason)[:160],
-        wall_ms=wall_ms,
-        mono_ms=mono_ms,
-    ))
-    # bounded by age, not by count, so a chatty session cannot evict the
-    # history of a quiet one
-    cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=HEARTBEAT_KEEP_DAYS)
-    db.query(PusherHeartbeat).filter(PusherHeartbeat.received_at < cutoff).delete(
-        synchronize_session=False
-    )
-    db.commit()
-
-
-def pusher_state(db) -> dict:
-    """pushing / blocked / dead / unknown, from the heartbeat trail.
-
-    "blocked" is the state worth naming: heartbeats are arriving so the tab is
-    alive and the timer is running, but every cycle is being refused. That
-    looks identical to a dead pusher from snapshot age alone, and it calls for
-    a completely different fix.
-    """
-    from app.models import PusherHeartbeat
-
-    row = (db.query(PusherHeartbeat)
-             .order_by(PusherHeartbeat.id.desc()).first())
-    if row is None:
-        return {"pusher_state": "unknown", "pusher_age_seconds": None,
-                "pusher_reason": None, "pusher_seq": None}
-
-    received = row.received_at
-    if received.tzinfo is None:
-        received = received.replace(tzinfo=timezone.utc)
-    age = (datetime.now(timezone.utc) - received).total_seconds()
-
-    if age > DEAD_AFTER_S:
-        state = "dead" if _window_open() else "idle"
-    else:
-        state = "pushing" if row.ok else "blocked"
-    return {"pusher_state": state,
-            "pusher_age_seconds": round(age, 1),
-            "pusher_reason": row.reason,
-            "pusher_seq": row.seq}

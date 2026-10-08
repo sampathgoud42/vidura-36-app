@@ -756,6 +756,9 @@
   color: var(--tr-teal, #5eead4);
 }
 .tr-venue-btn:hover { background: rgba(45, 212, 191, 0.18); }
+/* SIP (SIM): amber -- paper, but not Tradier's */
+.tr-venue-btn.sim { border-color: rgba(251, 191, 36, 0.6); background: rgba(251, 191, 36, 0.1); color: #fbbf24; }
+.tr-venue-btn.sim:hover { background: rgba(251, 191, 36, 0.18); }
 .tr-venue-switch.on .tr-venue-btn,
 .tr-venue-btn.on {
   border-color: rgba(255, 107, 94, 0.65);
@@ -1571,3 +1574,25 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
   .tr-lite { gap: 12px; }
 }
 .tr-pairmins .tr-input.bad { border-color: var(--tr-amber); }
+
+/* The auto-trader's last refused entry, under its armed line: red, wrapping,
+   so a strike list that ran out is seen. The watcher has moved on already. */
+.tr-autoline .tr-autoerr {
+  display: block; margin-top: 4px; color: var(--tr-red, #f87171);
+  white-space: normal; overflow-wrap: anywhere; line-height: 1.35;
+}
+/* DELTA | OPEN INT strike-pick toggle, on the BUY tickets and the arm form. */
+.tr-pick-toggle { display: inline-flex; gap: 6px; flex-wrap: wrap; }
+.tr-pick-note { display: block; margin-top: 4px; line-height: 1.35; }
+
+/* Auto-trade: one line per armed strategy, each with its own ✕ disarm. */
+.tr-autolines { display: flex; flex-direction: column; }
+.tr-autolines .tr-autoline + .tr-autoline { margin-top: 2px; }
+.tr-autoline .tr-autodisarm {
+  margin-left: 8px; padding: 0 6px; min-width: 22px; min-height: 18px;
+  background: none; border: 1px solid currentColor; border-radius: 4px;
+  color: var(--tr-red, #f87171); font: inherit; line-height: 1.2; cursor: pointer;
+  vertical-align: middle;
+}
+.tr-autoline .tr-autodisarm:disabled { opacity: 0.5; cursor: default; }
+.tr-autoline.tr-autoctl { display: flex; gap: 6px; flex-wrap: wrap; color: inherit; }

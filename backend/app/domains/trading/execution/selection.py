@@ -84,6 +84,20 @@ class BuyPrice:
     discount_pct: float | None    # limit orders only
 
 
+# The widest bid-ask spread a buy is placed into, as a percent of the mark:
+# (ask - bid) / mid. Wider, and the order is skipped -- the fill would start
+# that far under water, and the exit pays the same spread again.
+MAX_SPREAD_PCT = 25.0
+
+
+def spread_pct(bid: float, ask: float) -> float | None:
+    """The quote's spread as a percent of its mark; None without two sides."""
+    mark = mark_price(bid, ask)
+    if mark is None or mark <= 0:
+        return None
+    return float((Decimal(str(ask)) - Decimal(str(bid))) / mark * 100)
+
+
 def buy_price(order_type: str, bid: float, ask: float,
               discount_pct: float = 0.0) -> BuyPrice:
     """How to bid on this quote. ValueError when the quote cannot carry the
@@ -95,6 +109,14 @@ def buy_price(order_type: str, bid: float, ask: float,
         raise ValueError(f"unknown order type {order_type!r}")
     if not ask or ask <= 0:
         raise ValueError("there is no offer to buy from")
+    # Every buy, every order type: a spread wider than MAX_SPREAD_PCT -- or no
+    # bid at all, which no exit can be sold into -- skips the order.
+    spread = spread_pct(bid, ask)
+    if spread is None:
+        raise ValueError(f"no bid under the {ask} ask -- skipped, nothing to sell back into")
+    if spread > MAX_SPREAD_PCT:
+        raise ValueError(f"bid {bid} / ask {ask} is a {spread:.0f}% spread, over the "
+                         f"{MAX_SPREAD_PCT:g}% limit -- skipped")
     mark = mark_price(bid, ask)
     if order_type == "market":
         return BuyPrice("market", None, round(float(ask), 2),
@@ -147,6 +169,77 @@ def pick_contract(chain: list[dict], side: str, delta_min: float,
     return picked
 
 
+# How the open-interest pick scores a strike -- for the order to FILL: what
+# the market holds (open interest), what it is trading today (volume), and how
+# tight the quote is against its own price (a wide spread is where a limit
+# sits unfilled). A strike held, active and tight ranks first; an old OI pile
+# nobody trades today, or a penny contract quoted 0.01 x 0.02, ranks lower.
+OI_WEIGHT = 0.4
+VOLUME_WEIGHT = 0.4
+SPREAD_WEIGHT = 0.2
+# The cheapest contract the open-interest pick will buy, by its mid. Below
+# this an option is a lottery ticket: a far strike with a big OI pile and a
+# quote of a few cents, which Buy % sizing turns into hundreds of contracts.
+MIN_PREMIUM = 0.20
+
+
+def rank_by_open_interest(chain: list[dict], side: str, spot: float) -> list[dict]:
+    """Contracts of one side, out of the money, best liquidity first.
+
+    The open-interest pick, which ignores delta: a CALL must have its strike
+    ABOVE the underlying's price and a PUT below it. Among those, each strike
+    is scored on open interest and today's volume, each as a share of the
+    largest on this side of this expiry, and on how tight its quote is:
+
+        score = OI_WEIGHT * oi / max_oi + VOLUME_WEIGHT * volume / max_volume
+              + SPREAD_WEIGHT * (1 - min(1, (ask - bid) / mid))
+
+    highest first; more open interest breaks a tie. A contract whose mid is
+    under MIN_PREMIUM is never ranked at all. ``_score`` rides on each
+    contract so a preview can show why it ranked where it did. A two-sided
+    quote is required here as it is in pick_contract: no bid, no exit, no
+    entry.
+    """
+    rows = []
+    for opt in chain:
+        if (opt.get("option_type") or "").lower() != side:
+            continue
+        try:
+            strike = float(opt.get("strike"))
+        except (TypeError, ValueError):
+            continue
+        if (side == "call" and strike <= spot) or (side == "put" and strike >= spot):
+            continue
+        bid = float(opt.get("bid") or 0)
+        ask = float(opt.get("ask") or 0)
+        if bid <= 0 or ask <= 0:
+            continue
+        if (bid + ask) / 2 < MIN_PREMIUM:
+            continue
+        rows.append((int(opt.get("open_interest") or 0), int(opt.get("volume") or 0),
+                     ask - bid, opt))
+    if not rows:
+        return []
+    max_oi = max(r[0] for r in rows) or 1
+    max_vol = max(r[1] for r in rows) or 1
+    scored = []
+    for oi, vol, spread, opt in rows:
+        mid = (float(opt["bid"]) + float(opt["ask"])) / 2
+        tight = 1 - min(1.0, spread / mid) if mid > 0 else 0.0
+        score = (OI_WEIGHT * oi / max_oi + VOLUME_WEIGHT * vol / max_vol
+                 + SPREAD_WEIGHT * tight)
+        scored.append((-score, -oi, spread, opt, score))
+    scored.sort(key=lambda r: r[:3])
+    out = []
+    for _, _, _, opt, score in scored:
+        picked = dict(opt)
+        delta = (opt.get("greeks") or {}).get("delta")
+        picked["_delta"] = float(delta) if delta is not None else None
+        picked["_score"] = round(score, 3)
+        out.append(picked)
+    return out
+
+
 @dataclass(frozen=True)
 class Sizing:
     contracts: int
@@ -155,11 +248,19 @@ class Sizing:
     band_high_usd: float
     per_contract_usd: float
     total_usd: float
+    # Buy % asked for more than MAX_CONTRACTS: ordered at the cap instead.
+    capped: bool = False
 
     def explain(self) -> str:
         return (f"{self.contracts} contract(s) at ${self.per_contract_usd:.2f} "
                 f"= ${self.total_usd:.2f}, against a ${self.budget_usd:.2f} "
-                f"budget (band ${self.band_low_usd:.2f}-${self.band_high_usd:.2f})")
+                f"budget (band ${self.band_low_usd:.2f}-${self.band_high_usd:.2f})"
+                + (f" -- capped at {MAX_CONTRACTS} contracts" if self.capped else ""))
+
+
+# The most contracts one order buys, whatever Buy % works out to: a cheap
+# contract on a large balance is placed at the cap, never refused for it.
+MAX_CONTRACTS = 200
 
 
 def size_contracts(buying_power: float, buy_pct: float, price: float, *,
@@ -198,6 +299,11 @@ def size_contracts(buying_power: float, buy_pct: float, price: float, *,
     if inside == 0 and min_contracts and min_contracts * per_contract <= band_high:
         inside, total = min_contracts, min_contracts * per_contract
 
+    capped = inside > MAX_CONTRACTS
+    if capped:
+        inside, total = MAX_CONTRACTS, MAX_CONTRACTS * per_contract
+
     return Sizing(contracts=int(inside), budget_usd=round(budget, 2),
                   band_low_usd=round(band_low, 2), band_high_usd=round(band_high, 2),
-                  per_contract_usd=round(per_contract, 2), total_usd=round(total, 2))
+                  per_contract_usd=round(per_contract, 2), total_usd=round(total, 2),
+                  capped=capped)

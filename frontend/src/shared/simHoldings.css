@@ -1,0 +1,39 @@
+/* The SIP (SIM) venue's holdings. Amber, the board's colour for paper
+   that is not Tradier's: never the green or red of a real account. */
+.sim-hold {
+  margin: 0 0 12px; padding: 10px 12px;
+  border: 1px solid rgba(251, 191, 36, 0.35); border-radius: 10px;
+  background: rgba(251, 191, 36, 0.05);
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace; font-size: 12px;
+  color: var(--tr-ink, #e3e6fa);
+}
+.sim-hd { display: flex; flex-wrap: wrap; align-items: baseline; margin-bottom: 8px; }
+.sim-hd > * { margin: 2px 12px 2px 0; }
+.sim-tag {
+  padding: 2px 8px; border-radius: 6px; font-size: 10.5px; font-weight: 800; letter-spacing: 0.12em;
+  color: #fbbf24; border: 1px solid rgba(251, 191, 36, 0.55);
+}
+.sim-sum { color: var(--tr-dim, #9aa3d0); }
+.sim-sum b { color: var(--tr-ink, #e3e6fa); }
+.sim-hold .up { color: var(--tr-green, #34d399); }
+.sim-hold .down { color: var(--tr-red, #f87171); }
+.sim-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.sim-table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.sim-table th {
+  padding: 4px 8px; text-align: right; font-size: 9.5px; font-weight: 600; letter-spacing: 0.12em;
+  text-transform: uppercase; color: var(--tr-faint, #6b739e); border-bottom: 1px solid rgba(251, 191, 36, 0.2);
+}
+.sim-table td { padding: 5px 8px; text-align: right; border-bottom: 1px solid rgba(255, 255, 255, 0.05); white-space: nowrap; }
+.sim-table .tk { text-align: left; }
+.sim-table .act { width: 1%; }
+.sim-sell {
+  position: relative; padding: 2px 10px; border-radius: 6px; cursor: pointer;
+  border: 1px solid rgba(248, 113, 113, 0.45); background: transparent; color: var(--tr-red, #f87171);
+  font: inherit; font-size: 11px;
+}
+.sim-sell:disabled { opacity: 0.4; cursor: default; }
+.sim-empty, .sim-note { margin: 4px 0 0; color: var(--tr-faint, #6b739e); font-size: 10.5px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+/* a phone: full-size taps */
+.sim-hold--touch .sim-sell { min-height: 44px; min-width: 56px; font-size: 13px; }
+.sim-hold--touch { font-size: 13px; }

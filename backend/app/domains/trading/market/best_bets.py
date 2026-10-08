@@ -23,6 +23,7 @@ shrinks reads as "nothing qualifies" when the truth is "nothing was asked".
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -59,16 +60,40 @@ def universe() -> list[str]:
     return list(dict.fromkeys(t.strip().upper() for t in raw.split(",") if t.strip()))
 
 
-def rules() -> ema_screen.Rules:
+def rules(*, bar_hours: int | None = None, span: int | None = None) -> ema_screen.Rules:
+    """The screen's rules: the settings', with the bar and the EMA period the
+    sheet's rescan picked (ValueError when either is out of range)."""
     from app.core.config import get_settings
 
     s = get_settings()
     return ema_screen.Rules(
-        span=s.tradier_best_bets_ema_span, deep_pct=s.tradier_best_bets_deep_pct,
+        span=span or s.tradier_best_bets_ema_span, deep_pct=s.tradier_best_bets_deep_pct,
         near_pct=s.tradier_best_bets_near_pct,
         cross_within=s.tradier_best_bets_cross_within,
         velocity_bars=s.tradier_best_bets_velocity_bars,
-        session=s.tradier_best_bets_session)
+        session=s.tradier_best_bets_session, bar_hours=bar_hours or 4)
+
+
+def stored_rules(venue: str) -> ema_screen.Rules:
+    """The bar and EMA period the venue's stored sheet was judged with, so the
+    day's own sweep keeps the operator's last choice."""
+    from app.domains.trading.market import scan_store
+
+    got = ((scan_store.best_bets(venue) or {}).get("meta") or {}).get("rules") or {}
+    try:
+        return rules(bar_hours=got.get("bar_hours"), span=got.get("span"))
+    except (TypeError, ValueError):
+        return rules()
+
+
+def history_days(screen_rules: ema_screen.Rules) -> int:
+    """Calendar days of 15-minute bars enough for the EMA to settle and its
+    velocity to be fitted -- the setting's, or more for a longer EMA."""
+    from app.core.config import get_settings
+
+    per_day = ema_screen.bars_per_day(screen_rules.session, screen_rules.bar_hours)
+    trading = math.ceil((screen_rules.min_bars + 5) / per_day)
+    return max(get_settings().tradier_best_bets_days, math.ceil(trading * 7 / 5) + 4)
 
 
 def _bars(symbol: str, *, cred, sandbox: bool, start: str, session: str) -> list[dict]:
@@ -119,18 +144,19 @@ def _order(rows: list[dict]) -> list[dict]:
     return tables["A"] + tables["B"] + rest + dead
 
 
-def sweep(cred, *, sandbox: bool) -> dict:
+def sweep(cred, *, sandbox: bool, screen_rules: ema_screen.Rules | None = None) -> dict:
     """Screen the whole universe now. Blocking; the endpoint never calls this
     on a request thread."""
     from app.core.config import get_settings
 
     settings = get_settings()
-    screen_rules = rules()
+    screen_rules = screen_rules or rules()
+    days = history_days(screen_rules)
     symbols = universe()
     started = time.time()
     as_of = ema_screen.now_eastern()
     # Tradier documents `start` as YYYY-MM-DD HH:MM, so that is what it gets.
-    start = (as_of - timedelta(days=settings.tradier_best_bets_days)).strftime("%Y-%m-%d 00:00")
+    start = (as_of - timedelta(days=days)).strftime("%Y-%m-%d 00:00")
 
     workers = max(1, min(settings.tradier_best_bets_workers, len(symbols) or 1))
     with ThreadPoolExecutor(max_workers=workers) as pool:
@@ -158,12 +184,13 @@ def sweep(cred, *, sandbox: bool) -> dict:
             "matched": {"A": sum(r.get("setup") == "A" for r in rows),
                         "B": sum(r.get("setup") == "B" for r in rows)},
             "rules": screen_rules.public(),
-            "timeframe": {"bar": "4h", "source_interval": "15min",
+            "timeframe": {"bar": f"{screen_rules.bar_hours}h", "source_interval": "15min",
                           "session": screen_rules.session,
                           "anchor": f"{spec['open']} ET",
-                          "bars_per_day": spec["bars_per_day"],
+                          "bars_per_day": ema_screen.bars_per_day(screen_rules.session,
+                                                                  screen_rules.bar_hours),
                           "hours_per_day": spec["hours_per_day"],
-                          "history_days": settings.tradier_best_bets_days},
+                          "history_days": days},
             "fundamentals": {"source": "yfinance",
                              "answered": sum(1 for s in readable if facts.get(s))},
             "as_of": as_of.isoformat(timespec="minutes"),
@@ -182,12 +209,13 @@ class NothingAnswered(RuntimeError):
     sheet of empty rows to store over the last good one."""
 
 
-def _run(venue: str, cred, *, sandbox: bool, trigger: str) -> None:
+def _run(venue: str, cred, *, sandbox: bool, trigger: str,
+         screen_rules: ema_screen.Rules | None = None) -> None:
     """One sweep, stored. The caller has claimed the venue."""
     from app.domains.trading.market import scan_store
 
     try:
-        got = sweep(cred, sandbox=sandbox)
+        got = sweep(cred, sandbox=sandbox, screen_rules=screen_rules or stored_rules(venue))
         meta = got["meta"]
         if meta["scanned"] and not meta["available"]:
             reasons = sorted({r["reason"] for r in got["rows"] if r.get("reason")})
@@ -231,7 +259,8 @@ def sweep_now(cred, *, sandbox: bool, trigger: str = "daily") -> bool:
     return True
 
 
-def _sweep_async(cred, *, sandbox: bool, trigger: str) -> None:
+def _sweep_async(cred, *, sandbox: bool, trigger: str,
+                 screen_rules: ema_screen.Rules | None = None) -> None:
     """One sweep at a time per venue, behind the answer."""
     venue = venue_of(sandbox)
     if not _claim(venue):
@@ -239,7 +268,7 @@ def _sweep_async(cred, *, sandbox: bool, trigger: str) -> None:
 
     def run() -> None:
         try:
-            _run(venue, cred, sandbox=sandbox, trigger=trigger)
+            _run(venue, cred, sandbox=sandbox, trigger=trigger, screen_rules=screen_rules)
         finally:
             with _LOCK:
                 _THREADS.discard(threading.current_thread())
@@ -250,14 +279,16 @@ def _sweep_async(cred, *, sandbox: bool, trigger: str) -> None:
     thread.start()
 
 
-def snapshot(cred, *, sandbox: bool = True, force: bool = False) -> dict:
+def snapshot(cred, *, sandbox: bool = True, force: bool = False,
+             bar_hours: int | None = None, span: int | None = None) -> dict:
     """The sheet: the venue's stored rows now, with when they were scanned.
 
     ``force`` (the refresh button) starts a sweep but does not wait for it:
     sixty venue calls can outlast the tunnel's request ceiling, and the sheet
     polls until `refreshing` clears. A venue never scanned starts its first
     sweep here; one that has rows is swept again only when asked, or by the
-    next day's first sign-in.
+    next day's first sign-in. ``bar_hours`` and ``span`` (the sheet's rescan)
+    re-judge with that bar and EMA period; left out, the stored sheet's own.
     """
     from app.domains.trading.market import scan_store
 
@@ -268,7 +299,10 @@ def snapshot(cred, *, sandbox: bool = True, force: bool = False) -> dict:
         error = dict(_ERRORS[venue]) if venue in _ERRORS else None
     first = stored is None and not (error and time.time() - error["at"] < RETRY_FIRST_AFTER_S)
     if (force or first) and not busy:
-        _sweep_async(cred, sandbox=sandbox, trigger="rescan" if stored else "first")
+        picked = (rules(bar_hours=bar_hours, span=span)
+                  if (bar_hours or span) and force else None)
+        _sweep_async(cred, sandbox=sandbox, trigger="rescan" if stored else "first",
+                     screen_rules=picked)
         busy = True
     # A failure older than the rows is history, not news.
     if error and stored and error["at"] <= stored["at"]:
@@ -278,7 +312,7 @@ def snapshot(cred, *, sandbox: bool = True, force: bool = False) -> dict:
         return {"rows": [], "refreshing": busy, "at": None, "age_s": None,
                 "last_error": error,
                 "meta": {"venue": venue, "scanned": len(universe()),
-                         "rules": rules().public(),
+                         "rules": stored_rules(venue).public(),
                          "note": ("the first sweep is running" if busy
                                   else "no sweep has landed for this venue yet")}}
     return {"rows": stored["rows"], "refreshing": busy, "at": stored["at"],

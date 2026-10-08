@@ -42,6 +42,23 @@ const SCOPE_KEY = 'superSignals.scope';
 const SCOPES = [['all', 'all'], ['open', 'open'], ['watch', '★ watchlist'],
   ['pairs', '\u{1F44D}\u{1F44D} best pairs', '\u{1F44D}\u{1F44D} pairs']];
 const THUMBS = '\u{1F44D}\u{1F44D}';
+// The channel's stars (super_telegram.py): the pair won more than 66% of its
+// decided trades over the last 7 sessions (3 stars -- only when the pair's
+// signal type's 30-session edge is above 59, else 2), else 3 (2), else the last one (1) --
+// 1 and 2 only when the signal type, across all tickers, also won over 66% then --
+// counted before the session on screen, so old signals carry the marks they
+// would have been posted with.
+const STAR = '⭐';
+function starText(rec) {
+  if (!rec) return '';
+  const span = rec.sessions === 1 ? 'last session' : `last ${rec.sessions} sessions`;
+  const pct = Math.round((100 * rec.wins) / Math.max(1, rec.wins + rec.losses));
+  const edge = rec.edge == null ? '' : ` · signal type's 30-session edge ${rec.edge.toFixed(1)}`;
+  const tw = rec.type_wins, tl = rec.type_losses;
+  const type = tw == null || !(tw + tl) ? ''
+    : ` · signal type, all tickers, ${tw}–${tl} (${Math.round((100 * tw) / (tw + tl))}%)`;
+  return `pair won ${rec.wins}–${rec.losses} (${pct}%) over the ${span}${type}${edge}`;
+}
 
 // A signal is "part of a best pair" when its signal type AND its ticker are a
 // pair on the daily report's best ticker + signal pairs -- keyed as the
@@ -71,6 +88,18 @@ const px = (v) => (v == null ? '—' : Number(v).toFixed(2));
 const rStr = (r) => (r == null ? '' : `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r).toFixed(2)}R`);
 const label = (s) => String(s || '').replace(/_/g, ' ').replace(/\+/g, ' + ');
 const md = (iso) => (iso ? iso.slice(5) : '');
+
+// The star filter: any of 1, 2, 3 stars, several at once; none picked is
+// every signal. Remembered per browser, like the scope.
+const STARS_KEY = 'superSignals.stars';
+const STAR_LEVELS = [1, 2, 3];
+function loadStars() {
+  try {
+    const v = JSON.parse(localStorage.getItem(STARS_KEY));
+    if (Array.isArray(v)) return new Set(v.filter((n) => STAR_LEVELS.includes(n)));
+  } catch { /* private mode, or nothing saved */ }
+  return new Set();
+}
 
 function loadScope() {
   try {
@@ -170,6 +199,17 @@ export default function SuperSignals({
   const [reports, setReports] = useState(null);
   const [scope, setScopeState] = useState(loadScope);
   const [agent, setAgent] = useState('');
+  const [stars, setStars] = useState(loadStars);
+  const toggleStar = (n) => {
+    setStars((was) => {
+      const next = new Set(was);
+      if (next.has(n)) next.delete(n); else next.add(n);
+      try { localStorage.setItem(STARS_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+    setShown(PAGE);
+  };
+  const starOk = useCallback((s) => !stars.size || stars.has(s.stars || 0), [stars]);
   const [openKey, setOpenKey] = useState(null);
   const [shown, setShown] = useState(PAGE);
   const [viewer, setViewer] = useState(null);     // report date on screen
@@ -312,22 +352,24 @@ export default function SuperSignals({
   const rows = useMemo(() => {
     if (!data) return [];
     if (scope === 'watch') return data.watchlist.map((w) => ({ ...w, key: w.id, rows: [w] }));
-    let list = data.signals;
+    let list = data.signals.filter(starOk);
     if (agent) list = list.filter((s) => s.agent === agent);
     if (scope === 'open') list = list.filter((s) => s.outcome === 'open');
     if (scope === 'pairs') list = list.filter((s) => pairOf(s));
     return groupSignals(list);
-  }, [data, scope, agent, pairOf]);
+  }, [data, scope, agent, pairOf, starOk]);
 
   const tally = useMemo(() => {
     if (!data) return null;
     if (scope === 'watch') return tallyOf(data.watchlist);
     if (scope === 'pairs') {
-      return tallyOf(data.signals.filter((s) => (!agent || s.agent === agent) && pairOf(s)));
+      return tallyOf(data.signals.filter((s) => (!agent || s.agent === agent) && pairOf(s)
+        && starOk(s)));
     }
+    if (stars.size) return tallyOf(data.signals.filter((s) => (!agent || s.agent === agent) && starOk(s)));
     if (agent) return (data.agents || []).find((a) => a.id === agent) || tallyOf([]);
     return data.totals;
-  }, [data, scope, agent, pairOf]);
+  }, [data, scope, agent, pairOf, stars, starOk]);
 
   const status = deskStatus(data);
   const titles = useMemo(
@@ -419,6 +461,24 @@ export default function SuperSignals({
             </div>
           )}
 
+          {scope !== 'watch' && (
+            <div className="ss-agents ss-starsel" role="group" aria-label="filter by stars">
+              {STAR_LEVELS.map((n) => {
+                const count = data.signals.filter((s) => (s.stars || 0) === n).length;
+                return (
+                  <button key={n} type="button"
+                    className={`ss-chip${stars.has(n) ? ' on' : ''}${count ? '' : ' zero'}`}
+                    aria-pressed={stars.has(n)} aria-label={`${n} star${n > 1 ? 's' : ''}`}
+                    title={`${stars.has(n) ? 'stop showing' : 'show'} ${n}-star signals`
+                      + (stars.size ? '' : ' (none picked shows every signal)')}
+                    onClick={() => toggleStar(n)}>
+                    <span className="ss-stars">{STAR.repeat(n)}</span><b>{count}</b>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
           {rows.length === 0 && (
             <div className="ss-empty">
               {scope === 'watch' ? (
@@ -451,6 +511,10 @@ export default function SuperSignals({
                 const isOpen = openKey === g.key;
                 const isFresh = g.rows.some((r) => fresh[r.id]);
                 const best = g.rows.map(pairOf).find(Boolean) || null;
+                // The channel's stars: the best any setup on this bar earned.
+                const starRow = g.rows.reduce((a, r) => ((r.stars || 0) > (a?.stars || 0) ? r : a), null);
+                const stars = starRow ? starRow.stars : 0;
+                const starWhy = stars ? starText(starRow.star_record) : '';
                 return (
                   <li key={g.key} className={`ss-sig${isFresh ? ' fresh' : ''}${isOpen ? ' x' : ''}`}>
                     <div className="ss-l1">
@@ -463,6 +527,10 @@ export default function SuperSignals({
                         <span className="ss-thumbs" role="img" aria-label="best pair"
                           title={`best pair #${best.rank} of ${best.total}: ${best.signal || best.type_key}`
                             + ` on ${best.ticker}`}>{THUMBS}</span>
+                      )}
+                      {stars > 0 && (
+                        <span className="ss-stars" role="img" aria-label={`${stars} star${stars > 1 ? 's' : ''}`}
+                          title={starWhy}>{STAR.repeat(stars)}</span>
                       )}
                       <button type="button" className="ss-what" aria-expanded={isOpen}
                         onClick={() => setOpenKey(isOpen ? null : g.key)}
@@ -506,6 +574,9 @@ export default function SuperSignals({
                         {g.rows.length > 1 && (
                           <p className="ss-setups">{g.rows.length} setups on this bar:{' '}
                             {g.rows.map((r) => label(r.setup)).join(' · ')}</p>
+                        )}
+                        {stars > 0 && (
+                          <p className="ss-note ss-starsnote">{STAR.repeat(stars)} {starWhy}</p>
                         )}
                         {best && (
                           <p className="ss-note ss-thumbsnote">
@@ -604,7 +675,16 @@ export default function SuperSignals({
 // private channel's invite link is not something a bot can post to, so the
 // sheet finds the channel's id from the bot's own updates once the bot is an
 // admin there. The token is typed once and never shown again.
+//
+// Two channels, one bot: "vidura" gets only the three-star best pairs (and,
+// each hour, every best pair fired today), "super" every signal. Each has its
+// own chat, switches and half-hourly tracker.
+const TG_CHANNELS = [
+  ['vidura', 'vidura', '⭐⭐⭐👍 signals only, a tracker of them every half hour, and every 👍 best pair fired today, each hour'],
+  ['super', 'super signals', 'every super signal, and a tracker of today\'s signals every half hour'],
+];
 function TelegramViewer({ accent, onClose }) {
+  const [channel, setChannel] = useState('vidura');
   const [st, setSt] = useState(null);
   const [busy, setBusy] = useState('load');
   const [err, setErr] = useState('');
@@ -636,10 +716,15 @@ function TelegramViewer({ accent, onClose }) {
     }
   };
   useEffect(() => {
-    run('load', async () => { const d = await vidura.superSignalsTelegram(); if (alive.current) adopt(d); });
-  }, []);                                              // eslint-disable-line react-hooks/exhaustive-deps
+    setSt(null); setChats(null);
+    run('load', async () => {
+      const d = await vidura.superSignalsTelegram(channel);
+      if (alive.current && d.channel === channel) adopt(d);
+    });
+  }, [channel]);                                       // eslint-disable-line react-hooks/exhaustive-deps
 
   const typed = () => ({
+    channel,
     ...(token.trim() ? { token: token.trim() } : {}),
     chat_id: chat.trim(), chat_title: title.trim(),
   });
@@ -653,7 +738,7 @@ function TelegramViewer({ accent, onClose }) {
     if (alive.current) setChats((d && d.chats) || []);
   });
   const test = () => run('test', async () => {
-    await vidura.testSuperSignalsTelegram();
+    await vidura.testSuperSignalsTelegram(channel);
     if (alive.current) setNote('sent — look in the chat');
   });
   const toggle = (on) => run('toggle', async () => {
@@ -661,6 +746,17 @@ function TelegramViewer({ accent, onClose }) {
     if (!alive.current) return;
     adopt(d); setToken('');
     setNote(on ? 'on — new signals from now on are posted' : 'off');
+  });
+  // The other posts, each its own switch on the same bot and chat.
+  const POSTS = {
+    post_hot: ['HOT boards', 'every half hour 09:00-15:00 CT, on 5m, 15m and 1H bars -- and /hot answered in the channel'],
+    post_superhot: ['SUPERHOT alerts', 'each ticker that joins the SUPERHOT list, as it does -- and /superhot answered in the channel'],
+  };
+  const flip = (name, on) => run(name, async () => {
+    const d = await vidura.setSuperSignalsTelegram({ ...typed(), [name]: on });
+    if (!alive.current) return;
+    adopt(d); setToken('');
+    setNote(`${POSTS[name][0]} ${on ? 'on' : 'off'}`);
   });
 
   const dirty = !!st && (token.trim() !== '' || chat.trim() !== (st.chat_id || ''));
@@ -679,6 +775,14 @@ function TelegramViewer({ accent, onClose }) {
             aria-label="close the Telegram feed" title="close">×</button>
         </div>
         <div className="ss-tg-body">
+          <div className="ss-tg-row ss-tg-channels" role="tablist" aria-label="channel">
+            {TG_CHANNELS.map(([id, label, why]) => (
+              <button key={id} type="button" role="tab" aria-selected={channel === id}
+                className={`ss-vbtn wide ${channel === id ? 'on' : ''}`} title={why}
+                disabled={!!busy} onClick={() => setChannel(id)}>{label}</button>
+            ))}
+          </div>
+          <p className="ss-tg-note">{(TG_CHANNELS.find(([id]) => id === channel) || [])[2]}</p>
           {st && (
             <p className={`ss-tg-state ${st.enabled ? 'on' : ''}`}>
               {st.enabled
@@ -741,6 +845,15 @@ function TelegramViewer({ accent, onClose }) {
                 onChange={(e) => toggle(e.target.checked)} />
               <span>post new signals</span>
             </label>
+          </div>
+          <div className="ss-tg-row ss-tg-more">
+            {Object.entries(POSTS).map(([name, [text, why]]) => (
+              <label key={name} className="ss-tg-switch" title={why}>
+                <input type="checkbox" checked={!!(st && st[name])} disabled={!!busy || !ready}
+                  onChange={(e) => flip(name, e.target.checked)} />
+                <span>post {text}</span>
+              </label>
+            ))}
           </div>
           {note && <p className="ss-tg-ok">{note}</p>}
           {err && <p className="ss-tg-err">⚠ {err}</p>}

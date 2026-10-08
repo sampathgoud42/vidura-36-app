@@ -404,47 +404,6 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # Chrome's Private Network Access: a PUBLIC https page fetching a LOOPBACK
-    # address gets an extra preflight carrying
-    # Access-Control-Request-Private-Network, which must be answered with the
-    # matching Allow header. Starlette's CORSMiddleware does not implement PNA
-    # and rejects that preflight outright with "400 Disallowed CORS
-    # private-network", which kills the getgamma 0DTE pusher SILENTLY — the
-    # POST never leaves the browser and the tab-side catch swallows it.
-    #
-    # Deliberately narrow. PNA is the only thing standing between allow_origins
-    # ["*"] and any site the user happens to visit POSTing to a local API that
-    # can start and stop trading bots. So it is granted for exactly the origin
-    # that needs it, on exactly the one endpoint that origin pushes to, and
-    # nowhere else.
-    PNA_ORIGINS = {"https://www.getgamma.io", "https://getgamma.io"}
-    PNA_PATHS = {
-        "/api/v1/super/gex0dte/refresh",
-        "/api/v1/super/gex0dte/heartbeat",
-    }
-
-    @app.middleware("http")
-    async def private_network_preflight(request: Request, call_next):
-        if (
-            request.method == "OPTIONS"
-            and request.headers.get("access-control-request-private-network") == "true"
-        ):
-            origin = request.headers.get("origin", "")
-            if origin in PNA_ORIGINS and request.url.path in PNA_PATHS:
-                return Response(
-                    status_code=200,
-                    headers={
-                        "Access-Control-Allow-Origin": origin,
-                        "Access-Control-Allow-Methods": "POST, OPTIONS",
-                        "Access-Control-Allow-Headers":
-                            request.headers.get("access-control-request-headers", "content-type"),
-                        "Access-Control-Allow-Private-Network": "true",
-                        "Access-Control-Max-Age": "600",
-                        "Vary": "Origin",
-                    },
-                )
-        return await call_next(request)
-
     # Reachable without any credential. Everything else under /api needs
     # one. Kept deliberately short: each entry is a hole, and the only
     # things that belong here are what a browser must fetch BEFORE it can
@@ -453,16 +412,6 @@ def create_app() -> FastAPI:
     OPEN_API_PATHS = {
         f"{settings.api_v1_prefix}/auth/login",
         f"{settings.api_v1_prefix}/auth/status",
-    }
-
-    # The 0DTE gamma feed is pushed in by a bookmarklet running on
-    # getgamma.io, which cannot log in and must not be handed a key that
-    # opens the whole API. TBOT_GEX_PUSH_TOKEN authorises these two paths
-    # and nothing else: worst case for a leaked push token is poisoned
-    # gamma data, not a placed order.
-    PUSH_ONLY_PATHS = {
-        f"{settings.api_v1_prefix}/super/gex0dte/refresh",
-        f"{settings.api_v1_prefix}/super/gex0dte/heartbeat",
     }
 
     @app.middleware("http")
@@ -488,13 +437,6 @@ def create_app() -> FastAPI:
 
         provided = request.headers.get("X-API-Key", "")
         import hmac as _hmac
-
-        # Least privilege first: a push token is accepted ONLY on the two
-        # ingest paths, so it can never stand in for a session anywhere else.
-        if current.gex_push_token and path in PUSH_ONLY_PATHS:
-            if _hmac.compare_digest(provided.encode(),
-                                    current.gex_push_token.encode()):
-                return await call_next(request)
 
         if current.api_key:
             if _hmac.compare_digest(provided.encode(), current.api_key.encode()):

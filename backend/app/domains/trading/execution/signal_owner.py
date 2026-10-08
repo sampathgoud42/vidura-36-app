@@ -45,7 +45,8 @@ TTL_S = 120
 # What the signal-desk traders label their positions, and so what the shared
 # cooldown counts. Manual buys and the level-cross watcher are not in it: they
 # are not "the same signal idea arriving again".
-SIGNAL_LABELS = ("Auto/super_signals", "Auto/best_pairs", "Auto/bot_best_pair")
+SIGNAL_LABELS = ("Auto/super_signals", "Auto/best_pairs", "Auto/best_picks", "Auto/star_signals",
+                 "Auto/bot_best_pair")
 
 
 @dataclass(frozen=True)
@@ -178,18 +179,23 @@ def recent_entries(tenant_id: str, tickers, *, within_s: int) -> dict[str, datet
     """When each ticker was last entered by a signal-desk trader -- the desk's
     watcher or the bot, paper or live -- inside the last ``within_s`` seconds,
     as desk-clock times ready for the cooldown to compare."""
-    wanted = sorted({str(t).upper() for t in tickers or () if t})
-    if not wanted:
+    from sqlalchemy import or_
+
+    # ``tickers`` None means every ticker -- best picks names none.
+    wanted = None if tickers is None else sorted({str(t).upper() for t in tickers if t})
+    if wanted == []:
         return {}
     db = session_factory()()
     try:
-        rows = db.execute(
-            select(Position.underlying, func.max(Position.opened_at))
-            .where(Position.tenant_id == tenant_id,
-                   Position.strategy.in_(SIGNAL_LABELS),
-                   Position.underlying.in_(wanted),
-                   Position.opened_at >= utcnow() - timedelta(seconds=within_s))
-            .group_by(Position.underlying)).all()
+        # By prefix: a position bought on a 7+ day expiry carries " +carry"
+        # after its label, and it is still that strategy's entry.
+        query = (select(Position.underlying, func.max(Position.opened_at))
+                 .where(Position.tenant_id == tenant_id,
+                        or_(*(Position.strategy.like(f"{label}%") for label in SIGNAL_LABELS)),
+                        Position.opened_at >= utcnow() - timedelta(seconds=within_s)))
+        if wanted is not None:
+            query = query.where(Position.underlying.in_(wanted))
+        rows = db.execute(query.group_by(Position.underlying)).all()
     finally:
         db.close()
     return {ticker: at.replace(tzinfo=UTC).astimezone(clock.DESK_TZ)

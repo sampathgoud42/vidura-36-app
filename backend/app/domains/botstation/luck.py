@@ -330,7 +330,7 @@ def _tennis_rule(favourites: dict[str, str]):
 
 
 def preview(cred, *, min_legs: int = 5, max_legs: int = 24,
-            min_leg_c: int = 60, max_leg_c: int = 98,
+            min_leg_c: int = 67, max_leg_c: int = 97,
             min_volume_usd: float = 0.0,
             max_spread_c: int | None = None,
             max_hours: int | None = None,

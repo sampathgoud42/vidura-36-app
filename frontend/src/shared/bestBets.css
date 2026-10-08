@@ -92,3 +92,18 @@
   .bb-tkr { min-height: 44px; min-width: 44px; text-align: left; }
   .bb-table .ind { max-width: 150px; }
 }
+
+/* the rescan's bar and EMA period, beside the button */
+.bb-tune { display: inline-flex; align-items: center; margin-left: auto; margin-right: 6px; }
+.bb-tunesel, .bb-tuneema {
+  height: 28px; border: 1px solid var(--tr-line, rgba(91, 106, 240, 0.3)); border-radius: 6px;
+  background: transparent; color: var(--tr-ink, #e3e6fa);
+  font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+}
+.bb-tunesel { padding: 0 4px; margin-right: 5px; }
+.bb-tunesel option { background: #0b0f1f; }
+.bb-tuneema { width: 42px; padding: 0 6px; text-align: right; }
+.bb-tuneema.bad { border-color: #f87171; }
+.bb-tunek { margin-left: 4px; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--tr-dim, #9aa3d0); }
+/* Safari zooms on inputs under 16px: a phone gets full-size controls */
+@media (pointer: coarse) { .bb-tunesel, .bb-tuneema { height: 44px; font-size: 16px; } .bb-tuneema { width: 56px; } }

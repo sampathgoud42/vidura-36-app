@@ -336,7 +336,7 @@ def preview(cred, *, asset: str, signal: str | None, confirms: bool = False) -> 
     side = SIDE_FOR.get(sig)
     if side is None:
         return {"ok": False, "valid_signal": False, "asset": asset,
-                "detail": "NOT a valid signal — 1m and 2m disagree (mixed), "
+                "detail": "NOT a valid signal — 2m, 5m and 15m do not all agree (mixed), "
                           "so there is no direction to trade."}
     spec = market_for(asset)
     if spec is None:
