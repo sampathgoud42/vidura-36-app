@@ -3944,25 +3944,29 @@ export default function TradierSite() {
   // the board's reload (defined below), for a paper-venue switch to call
   const refreshRef = useRef(null);
   const simOn = !!venueInfo?.sim?.active;
-  const setPaperVenue = async (sim) => {
-    if (!venueInfo?.sim?.configured || simOn === sim) return;
+  const setPaperVenue = async (info, sim) => {
+    if (!info?.sim?.configured || !!info.sim.active === sim) return;
     await vidura.setSimVenue(sim);
     setVenueInfo((v) => (v ? { ...v, sim: { ...v.sim, active: sim } } : v));
   };
   const toggleLive = async () => {
+    // Asked afresh on every switch, not only at load: a SIM account opened
+    // while the board is open is offered at once, Lightweight or Regular.
+    const info = await vidura.tradierVenue(user?.user_id).catch(() => venueInfo);
+    if (info) setVenueInfo(info);
     if (live) {                                   // stepping back to paper is free
-      try { await setPaperVenue(false); } catch (e) { pushErr('venue', e); }
+      try { await setPaperVenue(info, false); } catch (e) { pushErr('venue', e); }
       setLive(false);
       return;
     }
-    if (!simOn && venueInfo?.sim?.configured) {
+    if (!info?.sim?.active && info?.sim?.configured) {
       try {
-        await setPaperVenue(true);
+        await setPaperVenue(info, true);
         if (user) refreshRef.current?.(true);
       } catch (e) { pushErr('venue', e); }
       return;
     }
-    const acct = venueInfo?.live?.account_id;
+    const acct = info?.live?.account_id;
     const ok = await confirmDialog({
       title: 'Switch the desk to the LIVE account?',
       body: 'Every order placed while LIVE is on spends real money on the '

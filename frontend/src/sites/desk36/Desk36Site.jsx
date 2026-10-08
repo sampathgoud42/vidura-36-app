@@ -1444,7 +1444,11 @@ export default function Desk36Site() {
               of practising. Either way the switch is confirmed, never a
               stray tap. */}
           <button type="button" className={`d36-venue ${live ? 'live' : 'paper'}`}
-            onClick={() => setVenueAsk(true)}
+            onClick={() => {
+              setVenueAsk(true);
+              // asked afresh: a SIM account opened since load is offered at once
+              vidura.tradierVenue(user?.user_id).then(setVenues).catch(() => {});
+            }}
             aria-label={live ? 'live venue' : simOn ? 'LONG-TERM (SIM) venue' : 'paper venue'}
             title={live
               ? 'LIVE — orders from this board are real. Tap to switch.'
