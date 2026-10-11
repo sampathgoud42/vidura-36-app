@@ -136,13 +136,47 @@ def _post_super_signals() -> None:
     super_telegram.sweep_all_tenants()
 
 
+def _post_superhot() -> None:
+    from app.domains.notify import super_telegram, superhot_telegram
+
+    superhot_telegram.sweep_all_tenants()
+    # Each channel's half-hourly tracker, and the vidura channel's hourly best
+    # pairs, ride the same five-minute pass: they share the slots, not the scan.
+    super_telegram.sweep_tracker()
+    super_telegram.sweep_best_pairs()
+
+
+def _read_spy_gex() -> None:
+    from app.services import gex0dte
+
+    gex0dte.sweep()
+
+
+def _fetch_econ_calendar() -> None:
+    from app.domains.trading.market import econ_calendar
+
+    econ_calendar.sweep()
+
+
+def _record_rollovers() -> None:
+    from app.domains.trading.risk import rollover
+
+    rollover.sweep_all_tenants()
+
+
+def _answer_telegram_commands() -> None:
+    from app.domains.notify import telegram_commands
+
+    telegram_commands.sweep_all_tenants()
+
+
 _LOOPS: dict[str, _Loop] = {}
 
 
 def start_all() -> None:
     """Start every loop. Idempotent, so a reload does not double them up."""
     from app.domains.botstation import luck_schedule, signal_trade
-    from app.domains.notify import super_telegram
+    from app.domains.notify import super_telegram, superhot_telegram, telegram_commands
 
     if not _LOOPS:
         _LOOPS["risk-monitor"] = _Loop("risk-monitor", MONITOR_INTERVAL_S,
@@ -155,6 +189,25 @@ def start_all() -> None:
                                         _run_luck_schedule)
         _LOOPS["super-telegram"] = _Loop("super-telegram", super_telegram.POLL_S,
                                          _post_super_signals)
+        _LOOPS["superhot-telegram"] = _Loop("superhot-telegram",
+                                            superhot_telegram.POLL_S,
+                                            _post_superhot)
+        from app.domains.trading.risk import rollover
+
+        # After the close: the carried positions still open, recorded.
+        _LOOPS["rollover"] = _Loop("rollover", rollover.POLL_S, _record_rollovers)
+        from app.domains.trading.market import econ_calendar
+
+        # News & Events: the US economic calendar, daily at 08:15 CT.
+        _LOOPS["econ-calendar"] = _Loop("econ-calendar", econ_calendar.POLL_S,
+                                        _fetch_econ_calendar)
+        from app.services import gex0dte
+
+        # SPY gamma from flashAlpha at 08:45 and 11:19 CT (2 of 5 daily calls).
+        _LOOPS["spy-gex"] = _Loop("spy-gex", gex0dte.POLL_S, _read_spy_gex)
+        _LOOPS["telegram-commands"] = _Loop("telegram-commands",
+                                            telegram_commands.POLL_S,
+                                            _answer_telegram_commands)
     for loop in _LOOPS.values():
         loop.start()
 

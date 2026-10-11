@@ -141,37 +141,21 @@ def get_gex0dte(db: Session = Depends(get_db)) -> dict:
             detail="no 0DTE snapshot yet — press Update 0DTE to fetch one",
         )
     payload.update(gex0dte.staleness(payload.get("fetched_at")))
-    payload.update(gex0dte.pusher_state(db))
+    payload["budget"] = gex0dte.budget(db)
     return payload
 
 
-class Gex0dteRefresh(BaseModel):
-    """Give it a chain captured from a getgamma.io tab, or nothing to make the
-    server try the vendor directly. No credentials either way — the endpoint
-    needs none; its edge simply refuses non-browser clients."""
-
-    payload: dict | None = None
-    ticker: str = "SPY"
-    # per-cycle metadata from the browser pusher; declared because pydantic
-    # would otherwise drop it silently and the trail would vanish
-    client: dict | None = None
-
-
 @router.post("/gex0dte/refresh", operation_id="refreshGex0dte")
-def refresh_gex0dte(body: Gex0dteRefresh, db: Session = Depends(get_db)) -> dict:
-    raw = body.payload
-    if raw is None:
-        try:
-            raw = gex0dte.fetch_live(ticker=body.ticker)
-        except gex0dte.GammaError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
+def refresh_gex0dte(db: Session = Depends(get_db)) -> dict:
+    """Read SPY gamma from flashAlpha now (one of five daily calls)."""
+    from app.services import gex as gex_svc
+
     try:
-        view = gex0dte.compute(raw)
-    except gex0dte.GammaError as exc:
-        raise HTTPException(status_code=422, detail=str(exc)) from exc
-    svc.store_payload(db, "gex0dte", view, source="getgamma.io")
-    gex0dte.record_hour(db, view)      # and into this hour's history slot
-    return view
+        return gex0dte.refresh(db)["view"]
+    except gex_svc.QuotaExhausted as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    except (gex_svc.GexError, gex0dte.GammaError) as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/engine-pct", operation_id="getEnginePct")
@@ -248,32 +232,6 @@ def regenerate_status(db: Session = Depends(get_db)) -> dict:
     """Whether the last regenerate has finished — the launch itself is detached."""
     require_local_runtime("Reading regenerate status")
     return svc.regenerate_status(db)
-
-
-class HeartbeatIn(BaseModel):
-    """One push cycle reported by the browser pusher, successful or not."""
-
-    session: str = "?"
-    seq: int = 0
-    ok: bool = False
-    reason: str | None = None
-    wall: int | None = None
-    mono: int | None = None
-
-
-@router.post("/gex0dte/heartbeat", operation_id="gex0dtePusherHeartbeat")
-def gex0dte_heartbeat(body: HeartbeatIn, db: Session = Depends(get_db)) -> dict:
-    """Record that a push cycle happened, whatever its outcome.
-
-    Strictly separate from the data path: it never fetches the vendor, never
-    stores a snapshot and never fills an hour slot. Routing liveness through
-    /refresh would make the SERVER call getgamma on every failed cycle — the
-    one thing this design does not do — and would stamp a stalled feed as
-    fresh.
-    """
-    gex0dte.record_heartbeat(db, body.session, body.seq, body.ok, body.reason,
-                             body.wall, body.mono)
-    return {"ok": True}
 
 
 class AddTickerRequest(BaseModel):

@@ -25,7 +25,8 @@
   --bs-warn: #fab219;
   --bs-crit: #ff4d4d;
   --bs-mono: 'JetBrains Mono', ui-monospace, Consolas, monospace;
-  --bs-sans: 'Space Grotesk', 'Outfit', system-ui, sans-serif;
+  /* Inter: a modern, highly legible UI face; mono stays for figures. */
+  --bs-sans: 'Inter', 'Space Grotesk', system-ui, -apple-system, 'Segoe UI', sans-serif;
   min-height: 100vh;
   background:
     radial-gradient(1000px 480px at 50% -8%, rgba(255, 138, 43, 0.07), transparent 60%),
@@ -1182,3 +1183,279 @@
 .bs-runrow b { margin-left: auto; font-variant-numeric: tabular-nums; }
 .bs-runrow b.win { color: #2fd35b; }
 .bs-runrow b.loss { color: #ff6b6b; }
+
+/* ---- rain board ---------------------------------------------------------- */
+/* A dock like the luck parley's: a title bar closed, the city table open.
+   The refresh sits in the title bar so the board can be rebuilt without
+   opening it; its click must not also toggle the dock. */
+.bs-rain .bs-luck-hd { align-items: center; }
+.bs-rain .bs-rain-refresh { margin-left: auto; }
+.bs-rain-refresh .spin { display: inline-block; animation: bs-spin 0.8s linear infinite; }
+.bs-rain .bs-rain-refresh + .bs-luck-toggle { margin-left: 4px; }
+.bs-rain-table { max-height: 46vh; }
+.bs-rain-row { cursor: pointer; }
+.bs-rain-row:hover { background: rgba(79, 214, 230, 0.08) !important; }
+.bs-rain-true { color: var(--bs-good, #2fd35b); font-weight: 700; }
+.bs-rain-false { color: var(--bs-ink-2, #9aa3b5); font-weight: 700; }
+.bs-rain-conf { font-size: 10px; letter-spacing: 0.08em; color: var(--bs-ink-3); }
+.bs-rain-conf.settled { color: var(--bs-good, #2fd35b); }
+.bs-rain-conf.high { color: var(--bs-cyan, #4fd6e6); }
+.bs-rain-conf.low { color: var(--bs-sun, #fab219); }
+
+.bs-rain-sheet { width: min(760px, 100%); }
+.bs-rain-sheet .bs-modal-hd h2 { display: flex; gap: 6px; }
+.bs-rain-h {
+  margin: 14px 0 6px; font-family: var(--bs-sans); font-size: 11px;
+  font-weight: 700; letter-spacing: 0.14em; color: var(--bs-ink-3);
+}
+.bs-rain-why { margin: 0 0 10px; padding-left: 18px; font-size: 12px; line-height: 1.5; }
+.bs-rain-why li + li { margin-top: 4px; }
+.bs-rain-why li:first-child { color: var(--bs-ink); }
+.bs-rain-facts {
+  display: grid; grid-template-columns: 140px 1fr; gap: 6px 12px;
+  margin: 0 0 12px; font-size: 12px; line-height: 1.45;
+}
+.bs-rain-facts dt { color: var(--bs-ink-3); }
+.bs-rain-facts dd { margin: 0; }
+.bs-rain-sheet .bs-luck-legs { max-height: none; }
+
+/* NWS hourly PoP as a strip of bars, one per remaining local hour. */
+.bs-rain-pops {
+  display: flex; gap: 3px; align-items: flex-end; height: 56px;
+  margin: 8px 0 4px; font-size: 9px; color: var(--bs-ink-3);
+}
+.bs-rain-pops span {
+  flex: 1 1 0; display: flex; flex-direction: column; justify-content: flex-end;
+  align-items: center; height: 100%; gap: 2px;
+}
+.bs-rain-pops i {
+  display: block; width: 100%; max-height: calc(100% - 12px);
+  background: var(--bs-cyan, #4fd6e6); opacity: 0.7;
+}
+
+.bs-rain-trade { flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.bs-rain-trade label { display: flex; flex-direction: column; gap: 3px; font-size: 10px; color: var(--bs-ink-3); }
+.bs-rain-trade .bs-input { width: 84px; }
+.bs-rain-sides { display: flex; gap: 6px; }
+.bs-rain-side { opacity: 0.55; }
+.bs-rain-side.on { opacity: 1; }
+.bs-rain-side.yes.on { border-color: var(--bs-good, #2fd35b); color: var(--bs-good, #2fd35b); }
+.bs-rain-side.no.on { border-color: var(--bs-crit, #ff5a5a); color: var(--bs-crit, #ff5a5a); }
+.bs-rain-link {
+  background: none; border: 0; padding: 0; cursor: pointer;
+  color: var(--bs-cyan, #4fd6e6); font: inherit;
+}
+
+@media (max-width: 560px) {
+  .bs-rain-facts { grid-template-columns: 1fr; }
+  .bs-rain-facts dt { margin-top: 4px; }
+}
+
+/* ── compact station: phones, LITE, or by choice ─────────────────────────────
+   One readable column. Inter for text, JetBrains Mono only for figures, so a
+   number lines up and a sentence reads like a sentence. Cards with generous
+   padding and 44px+ targets; the desktop's own components inside, framed. */
+.bs-content--compact { padding: 0 0 calc(32px + env(safe-area-inset-bottom)); }
+.bsc {
+  max-width: 600px; margin: 0 auto; padding: 12px 14px 0;
+  display: flex; flex-direction: column; gap: 14px;
+  font-family: var(--bs-sans); font-size: 15px; line-height: 1.5;
+  -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility;
+}
+.bsc-eyebrow {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--bs-ink-3);
+}
+
+/* PV card: the one number that matters, then its two parts. */
+.bsc-pv {
+  border: 1px solid var(--bs-hair-2); border-radius: 18px;
+  background:
+    radial-gradient(420px 160px at 0% 0%, rgba(255, 179, 71, 0.12), transparent 70%),
+    linear-gradient(180deg, #141924, #0f131b);
+  padding: 18px 18px 16px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+.bsc-pv-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.bsc-pv-value {
+  margin: 6px 0 14px; font-size: clamp(34px, 11vw, 46px); font-weight: 700;
+  letter-spacing: -0.02em; line-height: 1.05; color: var(--bs-ink);
+  font-variant-numeric: tabular-nums;
+}
+.bsc-pv-split {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin: 0;
+}
+.bsc-clock {
+  margin-left: auto; font-family: var(--bs-mono); font-size: 12px; color: var(--bs-ink-3);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.bsc-pv-split > div {
+  background: rgba(255, 255, 255, 0.035); border: 1px solid var(--bs-hair);
+  border-radius: 12px; padding: 9px 10px; min-width: 0;
+}
+.bsc-pv-split dt { font-size: 11px; font-weight: 600; color: var(--bs-ink-3); letter-spacing: 0.04em; }
+.bsc-pv-split dd {
+  margin: 2px 0 0; font-family: var(--bs-mono); font-size: 17px; font-weight: 600;
+  color: var(--bs-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  font-variant-numeric: tabular-nums;
+}
+.bsc-status {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px;
+  border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em;
+  border: 1px solid var(--bs-hair-2); color: var(--bs-ink-2);
+}
+.bsc-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--bs-ink-4); }
+.bsc-status.live { color: var(--bs-good); border-color: rgba(47, 211, 91, 0.4); }
+.bsc-status.live i { background: var(--bs-good); box-shadow: 0 0 8px var(--bs-good); }
+.bsc-status.paper { color: var(--bs-cyan); border-color: rgba(79, 214, 230, 0.4); }
+.bsc-status.paper i { background: var(--bs-cyan); }
+
+/* Each desktop section, framed as a card. */
+.bsc-sec {
+  border: 1px solid var(--bs-hair-2); border-radius: 16px; overflow: hidden;
+  background: var(--bs-panel);
+}
+.bsc-sec .bs-commodities { border-top: 0; padding: 14px 14px 12px; }
+.bsc-sec .bs-commodities-hd .lbl { font-family: var(--bs-sans); font-size: 13px; }
+.bsc-sec .bs-luckdock, .bsc-sec .bs-rain { border: 0; background: transparent; }
+.bsc-sec .bs-luck-hd { min-height: 52px; padding: 12px 14px; }
+.bsc-sec .bs-luck-hd h3 { font-family: var(--bs-sans); font-size: 14px; letter-spacing: 0.08em; }
+.bsc-sec .bs-luckdock-body { padding: 0 14px 14px; }
+.bsc-sec .bs-luckdock.open .bs-luckdock-body { max-height: none; }
+.bsc-sec .bs-rain-table { max-height: none; }
+.bsc-sec .bs-rain-table td, .bsc-sec .bs-rain-table th { padding: 9px 8px; font-size: 13px; }
+.bsc-sec .bs-rain-row { height: 44px; }
+.bsc-sec .bs-refresh { min-width: 40px; min-height: 36px; }
+/* iOS zooms into any field under 16px; nothing here should make it. */
+.bsc input, .bsc select, .bsc textarea { font-size: 16px; }
+
+.bsc-sechd {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 8px;
+  padding: 14px 16px 6px;
+}
+.bsc-sechd h2 { margin: 0; font-size: 14px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
+.bsc-sechd span { font-size: 12px; color: var(--bs-ink-3); }
+
+/* Bot cores: a list of tappable rows, each opening its console. */
+.bsc-cores ul { list-style: none; margin: 0; padding: 4px 8px 8px; }
+.bsc-core {
+  display: grid; grid-template-columns: 12px minmax(0, 1fr) auto 14px; align-items: center;
+  gap: 12px; width: 100%; min-height: 56px; padding: 10px 10px;
+  background: none; border: 0; border-radius: 12px; color: inherit; font: inherit;
+  text-align: left; cursor: pointer;
+}
+.bsc-core:hover, .bsc-core:focus-visible { background: rgba(255, 255, 255, 0.04); outline: none; }
+.bsc-core:disabled { opacity: 0.5; cursor: default; }
+.bsc-cores li + li .bsc-core { border-top: 1px solid var(--bs-hair); border-radius: 0; }
+.bsc-core-dot { width: 10px; height: 10px; border-radius: 50%; }
+.bsc-core-name { display: flex; flex-direction: column; min-width: 0; }
+.bsc-core-name b { font-size: 15px; font-weight: 700; letter-spacing: 0.02em; }
+.bsc-core-name small {
+  font-size: 12px; color: var(--bs-ink-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.bsc-core-st {
+  display: flex; flex-direction: column; align-items: flex-end; gap: 1px;
+  font-family: var(--bs-mono); font-size: 12px; font-weight: 600;
+}
+.bsc-core-st small { font-size: 11px; color: var(--bs-ink-3); font-weight: 500; }
+.bsc-core-st small.up { color: var(--bs-good); }
+.bsc-core-st small.down { color: var(--bs-crit); }
+.bsc-chev { color: var(--bs-ink-4); font-size: 20px; line-height: 1; }
+
+/* Switching views: a clear secondary action at the foot of the column, and a
+   small chip at the top of the desktop board. */
+.bsc-switch {
+  align-self: center; margin: 4px 0 8px; min-height: 44px; padding: 0 22px;
+  border-radius: 999px; border: 1px solid var(--bs-hair-2);
+  background: rgba(255, 255, 255, 0.04); color: var(--bs-ink-2);
+  font: 600 14px/1 var(--bs-sans); letter-spacing: 0.02em; cursor: pointer;
+}
+.bsc-switch:hover { color: var(--bs-ink); border-color: var(--bs-sun); }
+.bs-viewswitch {
+  display: block; margin: 8px 0 0 auto; padding: 4px 12px; border-radius: 999px;
+  border: 1px solid var(--bs-hair-2); background: transparent; color: var(--bs-ink-3);
+  font: 600 11px/1.6 var(--bs-sans); letter-spacing: 0.04em; cursor: pointer;
+}
+.bs-viewswitch:hover { color: var(--bs-sun); border-color: var(--bs-sun); }
+
+/* Sheets opened from the compact board fill a phone screen properly. */
+@media (max-width: 760px) {
+  .bs-luck-sheet { width: 100%; max-height: calc(100vh - 32px); padding: 14px 14px 18px;
+    border-radius: 16px; -webkit-overflow-scrolling: touch; }
+  .bs-luck-scrim { padding: 12px; align-items: flex-end; }
+  .bs-rain-sheet .bs-luck-legs { overflow-x: auto; }
+}
+
+/* Crypto DMI on a phone: two lines per asset -- ticker, price and the
+   CALL / PUT trade link on top (the part a thumb is for), the four
+   timeframes beneath -- instead of one row running off the right edge. */
+.bsc .bs-commodities-hd { flex-wrap: wrap; row-gap: 6px; }
+.bsc .bs-commodities-hd .lbl { white-space: nowrap; }
+.bsc .bs-commodities-hd .note { font-size: 11px; }
+.bsc .bs-commodities-hd .bs-combo15-btn { margin-left: auto; min-height: 36px; }
+.bsc .bs-commodities-rows { display: flex; flex-direction: column; }
+.bsc .bs-commrow {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  column-gap: 6px; row-gap: 2px; padding: 10px 0;
+  border-top: 1px solid var(--bs-hair);
+}
+.bsc .bs-commrow:first-child { border-top: 0; }
+.bsc .bs-commrow .tkr { grid-column: 1; grid-row: 1; font-size: 15px; min-width: 0; }
+.bsc .bs-commrow .last {
+  grid-column: 2 / span 2; grid-row: 1; font-size: 15px; min-width: 0;
+  font-variant-numeric: tabular-nums;
+}
+.bsc .bs-commrow .sig-btn {
+  grid-column: 4; grid-row: 1; justify-self: end; margin: 0; padding: 6px 4px;
+  min-height: 40px; font-size: 14px;
+}
+.bsc .bs-commrow .tf { grid-row: 2; min-width: 0; font-size: 12px; white-space: nowrap; }
+.bsc .bs-commrow.err .note { grid-column: 2 / span 3; }
+/* Rain Today on a phone: city, call, confidence and the YES price -- the
+   columns a decision needs. So far / NWS / HRRR are one tap away, in the
+   city's own sheet, rather than a table to scroll sideways. */
+.bsc .bs-rain-table { overflow-x: visible; }
+.bsc .bs-rain-table th:nth-child(4), .bsc .bs-rain-table td:nth-child(4),
+.bsc .bs-rain-table th:nth-child(5), .bsc .bs-rain-table td:nth-child(5),
+.bsc .bs-rain-table th:nth-child(6), .bsc .bs-rain-table td:nth-child(6) { display: none; }
+.bsc .bs-rain-table td:first-child { white-space: normal; }
+/* Five timeframes now (2m 5m 10m 15m 30m): the phone's second line is five
+   columns, the first line spans them -- ticker, price, the trade link. */
+.bsc .bs-commrow { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.bsc .bs-commrow .last { grid-column: 2 / span 3; }
+.bsc .bs-commrow .sig-btn { grid-column: 5; }
+.bsc .bs-commrow .tf { font-size: 11.5px; }
+.bsc .bs-commrow.err .note { grid-column: 2 / span 4; }
+
+/* Sheets on a phone: the header -- title, ↻ and × -- stays pinned while the
+   body scrolls. The whole sheet used to scroll, so a long combo or leg list
+   carried the close button off the top with nothing left to tap: the sheet
+   fills the screen, so there is no backdrop to tap either. Height is the
+   VISIBLE viewport (dvh), so Safari's bars cannot hide the top of it. */
+@media (max-width: 760px) {
+  .bs-luck-scrim {
+    padding: max(10px, env(safe-area-inset-top)) 10px max(10px, env(safe-area-inset-bottom));
+  }
+  .bs-luck-sheet {
+    max-height: calc(100vh - 20px);
+    max-height: calc(100dvh - 20px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    padding-top: 0;
+    overscroll-behavior: contain;
+  }
+  .bs-luck-sheet > .bs-modal-hd {
+    position: sticky; top: 0; z-index: 3;
+    margin: 0 -14px 8px; padding: 10px 10px 10px 14px;
+    background: #0a0d13; border-bottom: 1px solid var(--bs-hair-2);
+  }
+  .bs-luck-sheet > .bs-modal-hd h2 {
+    flex: 1 1 auto; min-width: 0; font-size: 14px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .bs-luck-sheet > .bs-modal-hd .close {
+    flex: none; min-width: 44px; min-height: 44px; margin-left: 4px;
+    border: 1px solid var(--bs-hair-2); border-radius: 10px;
+    color: var(--bs-ink); font-size: 20px; line-height: 1;
+  }
+  .bs-luck-sheet > .bs-modal-hd .bs-refresh { flex: none; min-width: 44px; min-height: 44px; }
+}

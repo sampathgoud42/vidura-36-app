@@ -117,6 +117,12 @@ const LITE_PATHS = [
   '/super-signals/best-pairs',  // the best pair, and the arm form's pairs
   '/super-signals/rank',        // the arm form's signal types
   '/super-signals/desk/',       // the signal desk's start/stop switch (admins)
+  // The Bot Station's compact board, which LITE opens it in: the cores and
+  // their consoles, the crypto DMI strip and its trades, the luck parley
+  // (all under /bots), the Kalshi account's value, and the rain board.
+  '/bots',
+  '/portfolio',
+  '/climate/',
 ];
 
 function liteRefuses(path) {
@@ -131,6 +137,7 @@ const BOT_PATHS = [
                                 // signal trades, the luck parley, reconcile
   '/portfolio',                 // the Kalshi account's value and its history
   '/trade-history',             // the account's settled record
+  '/climate/',                  // the Rain Today board and its trades
 ];
 
 function botRefuses(path) {
@@ -173,6 +180,20 @@ async function req(method, path, { body, params, timeout = 30000,
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal: ctrl.signal,
     });
+  } catch (e) {
+    // Two different failures used to read the same -- "Backend unreachable"
+    // -- and they call for opposite responses. A TIMEOUT means the server
+    // was reached and is still working: an order may be going through, so
+    // retrying blindly is the wrong move. A network failure means nothing
+    // got there at all.
+    const err = e?.name === 'AbortError'
+      ? new ApiError(null, `No answer within ${Math.round(timeout / 1000)}s — the desk `
+        + 'may still be working on it. Check before trying again.')
+      : new ApiError(null, 'Cannot reach the desk — check your connection, '
+        + 'or the desk may be restarting.');
+    err.offline = true;
+    err.timeout = e?.name === 'AbortError';
+    throw err;
   } finally {
     clearTimeout(timer);
   }
@@ -336,9 +357,31 @@ export const vidura = {
   // One combo across the fifteen-minute markets, from the DMI boards: the
   // list with its default ticks, then the purchase, under the confirmation's
   // key so a retry is the same combo.
-  combo15Preview: () => api.post('/bots/combo15/preview', {}),
-  combo15Place: (body, key) => api.post('/bots/combo15/place', body,
+  // The daily rain board (climate.rain_forecast): read it, rebuild it
+  // (truncate and load, 20-60s), quote one city's market live, and buy YES or
+  // NO on it under the confirmation's key so a retry is the same order.
+  rainForecast: () => api.get('/climate/rain-forecast'),
+  rainForecastRefresh: () => api.post('/climate/rain-forecast/refresh', {}, { timeout: 180000 }),
+  rainQuote: (ticker) => api.get(`/climate/rain-forecast/quote?ticker=${encodeURIComponent(ticker)}`),
+  rainTrade: (body, key) => api.post('/climate/rain-forecast/trade', body,
     { idempotencyKey: key }),
+  combo15Preview: () => api.post('/bots/combo15/preview', {}),
+  // Placing STARTS a job and returns; the sheet then reads the answer, up
+  // to three minutes, so a slow RFQ can no longer be cut off by a timeout.
+  combo15Place: async (body, key, onTick) => {
+    let job = await api.post('/bots/combo15/place', body, { idempotencyKey: key });
+    const until = Date.now() + 180000;
+    while (job && job.status !== 'done' && Date.now() < until) {
+      onTick?.(job.elapsed_s);
+      await new Promise((r) => setTimeout(r, 1000));
+      job = await api.get(`/bots/combo15/place/${encodeURIComponent(key)}`);
+    }
+    if (!job || job.status !== 'done') {
+      throw new ApiError('timeout', 'the combo is still being placed after three minutes '
+        + '— check the account before placing it again');
+    }
+    return job.result;
+  },
   // Cash per Kalshi exchange shard, and moving it between them. The move
   // carries the confirmation's key: the exchange's transfer has none.
   kalshiShards: () => api.get('/bots/kalshi/shards'),
@@ -395,7 +438,8 @@ export const vidura = {
   // Kalshi, with the P&L of both. Not the ledger -- the ledger is what the
   // bots believed at entry, this is what the exchange has. Reaches back over
   // a thousand settlements, so it is slower than the panel it feeds.
-  tradeHistory: () => api.get('/trade-history', { timeout: 60000 }),
+  // Served from a two-minute cache; `fresh` (the panel's ↻) reads the exchange now.
+  tradeHistory: (fresh) => api.get('/trade-history', { params: { fresh: fresh || undefined }, timeout: 60000 }),
   // settle stale-open ledger rows from Kalshi fills+settlements (all bot
   // families). hours = staleness floor, NOT a lookback window; apply=false
   // previews. Kalshi lookups per row -> generous timeout.
@@ -416,13 +460,22 @@ export const vidura = {
   // Best Bets: a 21 EMA on 4-hour bars across a watchlist -- A, deep
   // retracements turning back up; B, fresh crosses. A snapshot like HOT: it
   // answers at once and says `refreshing` while a sweep runs behind it.
-  tradierBestBets: (live, refresh) => api.get('/tradier/best-bets', {
-    params: { live, refresh: refresh || undefined },
+  // `pick` {bar, ema}: the rescan's bar (1, 2 or 4 hours) and EMA period;
+  // left out, the stored sheet's own
+  tradierBestBets: (live, refresh, pick) => api.get('/tradier/best-bets', {
+    params: { live, refresh: refresh || undefined,
+      bar: (refresh && pick?.bar) || undefined, ema: (refresh && pick?.ema) || undefined },
   }),
   // tradier options executor
   // `live` is never persisted anywhere: every call states its venue, so a
   // reload always comes back on the sandbox.
   tradierVenue: (userId) => api.get('/tradier/venue', { params: {} }),
+  // The SIP (SIM) venue: an in-house simulated account. Its balances,
+  // holdings and orders; whether it is the board's paper venue; its shares.
+  simAccount: () => api.get('/tradier/sim'),
+  setSimVenue: (active) => api.put('/tradier/sim/venue', { active }),
+  simBuy: (symbol, quantity) => api.post('/tradier/sim/buy', { symbol, quantity }),
+  simSell: (symbol, quantity) => api.post('/tradier/sim/sell', { symbol, quantity }),
   // market-data-only session id for Tradier's WebSocket (production-only;
   // the account token stays on the server)
   tradierStreamSession: (userId) =>
@@ -477,13 +530,19 @@ export const vidura = {
     api.get('/tradier/quotes', { params: { symbols } }),
 
   // SPY/QQQ/SPX level-cross watcher (levels_watcher.py in the day-trade repo)
+  // News & Events: the US economic calendar (Apify, daily 08:15 CT); the
+  // refresh is a paid run, so it waits up to three minutes for the actor.
+  econCalendar: () => api.get('/tradier/econ-calendar'),
+  econCalendarRefresh: () => api.post('/tradier/econ-calendar/refresh', {}, { timeout: 200000 }),
   levelsStatus: () => api.get('/levels/status'),
   levelsStart: () => api.post('/levels/start'),
   levelsStop: () => api.post('/levels/stop'),
 
   // opening-range auto-trader (level cross -> confirmed -> managed 0DTE)
   autoTradeStart: (body) => api.post('/tradier/autotrade/start', body),
-  autoTradeStop: (userId) => api.post(`/tradier/autotrade/stop`),
+  // Strategies run side by side: name one to disarm it, none to disarm all.
+  autoTradeStop: (userId, strategy) => api.post(`/tradier/autotrade/stop`
+    + (strategy ? `?strategy=${encodeURIComponent(strategy)}` : '')),
   autoTradeStatus: (userId) => api.get('/tradier/autotrade/status', { params: {} }),
 
   // super research
@@ -513,7 +572,9 @@ export const vidura = {
   },
   superGexQuota: () => api.get('/super/gex/quota'),
   superEcon: () => api.get('/super/econ'),
-  // SPY 0DTE dealer gamma (getgamma.io). The read is a cheap DB snapshot.
+  // SPY dealer gamma from flashAlpha (all expiries -- the free plan has no
+  // 0DTE split): read at 08:45 and 11:19 CT, refreshed on demand. The read
+  // is a cheap DB snapshot; the refresh spends one of five daily calls.
   // Refresh takes no credentials — the vendor endpoint needs none.
   superGex0dte: () => api.get('/super/gex0dte'),
   superGex0dteRefresh: () => api.post('/super/gex0dte/refresh', {}, { timeout: 60000 }),
@@ -555,12 +616,16 @@ export const vidura = {
   // The signal desk's switch, admins only: start it as its 08:15 task does
   // (a missed morning, or after a stop), or end its day early -- the agents
   // finish their cycle and the day's report is written.
-  // New signals to the operator's Telegram chat. The token goes in, once, and
-  // never comes back: the feed says only whether one is saved.
-  superSignalsTelegram: () => api.get('/super-signals/telegram'),
+  // New signals to the operator's Telegram channels -- 'vidura' (only the
+  // three-star best pairs) or 'super' (every signal), one feed each. The
+  // token goes in, once, and never comes back: the feed says only whether
+  // one is saved.
+  superSignalsTelegram: (channel = 'vidura') =>
+    api.get('/super-signals/telegram', { params: { channel } }),
   setSuperSignalsTelegram: (body) => api.put('/super-signals/telegram', body),
   superSignalsTelegramChats: (body) => api.post('/super-signals/telegram/chats', body || {}),
-  testSuperSignalsTelegram: () => api.post('/super-signals/telegram/test', {}),
+  testSuperSignalsTelegram: (channel = 'vidura') =>
+    api.post('/super-signals/telegram/test', {}, { params: { channel } }),
   superSignalsDeskStart: () => api.post('/super-signals/desk/start', {}),
   superSignalsDeskStop: () => api.post('/super-signals/desk/stop', {}),
   superSignalsReports: () => api.get('/super-signals/reports'),

@@ -110,10 +110,11 @@ class Settings(BaseSettings):
     # is counted in the DB and refused past this cap. Lower it back to 3 if
     # you ever re-create that scheduled task.
     flashalpha_daily_cap: int = 5
-    # Daily 09:00 CST snapshot inside the API — the replacement for the
-    # FlashAlphaGEX_Daily Windows task. Disable if that task still exists,
-    # or both will spend quota.
-    gex_daily_enabled: bool = True
+    # The legacy app's 09:00 CST SPY+QQQ snapshot. OFF: the five daily calls
+    # now go to SPY at 08:45 and 11:19 CT (services/gex0dte.SLOTS, run by the
+    # v2 background loop) and three on-demand refreshes, so a 09:00 job would
+    # spend two of the on-demand three.
+    gex_daily_enabled: bool = False
     flashalpha_api_key: str = ""  # else read from <source_repo>/super_research/flashalpha.env
     gex_tickers: str = "spy,qqq"
 
@@ -349,12 +350,6 @@ class Settings(BaseSettings):
     # enough that a forgotten browser does not stay live all week. Sessions
     # are in-memory, so a restart ends all of them regardless.
     session_ttl_s: int = 43200
-
-    # Scoped credential for the getgamma.io 0DTE bookmarklet, which runs on
-    # someone else's page and so must never carry a key that could trade.
-    # Authorises POST /super/gex0dte/refresh and /heartbeat, nothing else.
-    # Empty = that feed cannot push while login is required.
-    gex_push_token: str = ""
 
     # By default user_root_folder must live under customers_root so the API
     # cannot be pointed at arbitrary filesystem folders holding secrets.

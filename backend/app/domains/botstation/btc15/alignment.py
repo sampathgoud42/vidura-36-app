@@ -80,7 +80,10 @@ def read_alignment(rows: list[dict]) -> Alignment:
     per_coin: dict[str, str | None] = {}
     for coin in COINS:
         row = by_key.get(coin) or {}
-        per_coin[coin] = None if row.get("error") else row.get("signal")
+        # v6 is frozen on the board's ORIGINAL headline, 1m and 2m agreeing;
+        # the board's own signal moved to 2m/5m/15m and is not v6's rule.
+        per_coin[coin] = None if row.get("error") else (
+            row["signal_1m2m"] if "signal_1m2m" in row else row.get("signal"))
 
     missing = [c for c, s in per_coin.items() if s is None]
     if missing:

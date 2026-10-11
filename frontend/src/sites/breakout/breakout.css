@@ -163,6 +163,13 @@
   margin-left: 6px; padding: 0 5px; border-radius: 5px; font-size: 10px;
   color: var(--br-amber); border: 1px solid rgba(251, 191, 36, 0.35);
 }
+/* the last 30 days: a ticker that broke out again is starred, and one no
+   longer passing is dimmed, with when it last did */
+.br-table td.tk .br-again { margin-left: 2px; font-size: 15px; font-weight: 800; color: var(--br-amber); cursor: help; }
+.br-table td.tk .age.past { color: var(--br-faint); border-color: var(--br-line); cursor: help; }
+.br-table tr.old td { opacity: 0.62; }
+.br-table tr.old td.tk, .br-table tr.old td.act { opacity: 1; }
+.br-table tr.old td.tk b { color: var(--br-dim); }
 .br-table td.tk .nm {
   display: block; max-width: 180px; overflow: hidden; text-overflow: ellipsis;
   font-size: 10px; color: var(--br-faint);
@@ -337,3 +344,9 @@
   .br-fieldrow input[type='range'] { height: 44px; }
   .br-rules { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* links to the other worlds' screens, under the scan bar */
+.br-links { display: flex; flex-wrap: wrap; align-items: center; margin: -4px 0 10px; }
+.br-links .bb-link { color: var(--br-em-hi); }
+.br-links .bb-link .d { color: var(--br-dim); }
+@media (pointer: coarse) { .br-links .bb-link { min-height: 44px; } }

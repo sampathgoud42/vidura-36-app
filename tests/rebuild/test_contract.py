@@ -57,6 +57,12 @@ CONTRACT: list[tuple[str, str]] = [
     ("POST", f"{V1}/tradier/positions/{{position_id}}/carryover"),
     ("GET", f"{V1}/tradier/balance"),
     ("GET", f"{V1}/tradier/venue"),
+    # the LONG-TERM (SIM) venue: an in-house simulated account
+    ("GET", f"{V1}/tradier/sim"),
+    ("PUT", f"{V1}/tradier/sim/venue"),
+    ("POST", f"{V1}/tradier/sim/seed"),
+    ("POST", f"{V1}/tradier/sim/buy"),
+    ("POST", f"{V1}/tradier/sim/sell"),
     ("GET", f"{V1}/tradier/quotes"),
     ("GET", f"{V1}/tradier/chain"),
     ("GET", f"{V1}/tradier/timesales"),

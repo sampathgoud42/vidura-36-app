@@ -27,6 +27,11 @@ class Position(Base, TenantOwned, Timestamped):
     # Paper and live must never be confusable. Sandbox is the default
     # everywhere, so reaching the real account is always a deliberate act.
     venue_sandbox: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # The SIP (SIM) venue: a paper position held by the in-house
+    # simulator (execution.sim), not by Tradier's sandbox. Always with
+    # venue_sandbox true -- it is never the real account.
+    simulated: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False,
+                                            server_default="0")
 
     underlying: Mapped[str] = mapped_column(String(16), nullable=False)
     occ_symbol: Mapped[str] = mapped_column(String(32), nullable=False)
@@ -210,3 +215,117 @@ class Signal(Base, Timestamped):
         # Feeds sort descending and cap; this is that query.
         Index("ix_signal_book_logged", "book", "logged_at"),
     )
+
+
+class PositionRollover(Base, TenantOwned, Timestamped):
+    """A position held over the close: one row per position per session.
+
+    Written at the close (risk.rollover) for every position marked to carry
+    -- bought on a 7+ day expiry, or carried by hand -- that is still open
+    with neither its target nor its stop hit. It is the record of what was
+    held overnight and in what state: the closing bid, the unrealised P&L,
+    and whether both exits were still resting at the venue to protect it.
+    """
+
+    __tablename__ = "position_rollover"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    position_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("position.id", ondelete="CASCADE"), nullable=False)
+    # The session it was held over, CST: 2026-10-05 means into 10-06.
+    rolled_on: Mapped[str] = mapped_column(String(10), nullable=False)
+    venue_sandbox: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    underlying: Mapped[str] = mapped_column(String(16), nullable=False)
+    occ_symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    option_type: Mapped[str] = mapped_column(String(4), nullable=False)
+    strike: Mapped[float] = mapped_column(Float, nullable=False)
+    expiration: Mapped[str] = mapped_column(String(10), nullable=False)
+    days_left: Mapped[int] = mapped_column(Integer, nullable=False)
+    contracts: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_price: Mapped[float | None] = mapped_column(Float)
+    close_bid: Mapped[float | None] = mapped_column(Float)
+    unrealised_usd: Mapped[float | None] = mapped_column(Float)
+    tp_price: Mapped[float | None] = mapped_column(Float)
+    sl_price: Mapped[float | None] = mapped_column(Float)
+    tp_order_id: Mapped[str | None] = mapped_column(String(64))
+    stop_order_id: Mapped[str | None] = mapped_column(String(64))
+    # The exits as the venue reported them at the close: open, filled, ...
+    tp_status: Mapped[str | None] = mapped_column(String(24))
+    stop_status: Mapped[str | None] = mapped_column(String(24))
+    stop_protection: Mapped[str] = mapped_column(String(16), nullable=False)
+    strategy: Mapped[str] = mapped_column(String(64), nullable=False)
+    note: Mapped[str | None] = mapped_column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "position_id", "rolled_on", name="one_roll_per_session"),
+        Index("ix_position_rollover_tenant_day", "tenant_id", "rolled_on"),
+    )
+
+
+# ---- the SIP (SIM) venue -----------------------------------------------
+# An in-house paper broker (execution.sim): an operator's simulated cash,
+# holdings and orders, filled against real Tradier quotes. Labelled
+# "SIP (SIM)" everywhere it shows -- it is never presented as a real
+# account.
+
+class SimAccount(Base, TenantOwned, Timestamped):
+    """One operator's simulated account, and whether it is the paper venue
+    their board trades (``active``) rather than Tradier's sandbox."""
+
+    __tablename__ = "sim_account"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    label: Mapped[str] = mapped_column(String(32), nullable=False, default="SIP (SIM)")
+    active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    cash: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    # what it was seeded with, and when -- the account's own history
+    seeded_equity: Mapped[float | None] = mapped_column(Float)
+    seeded_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (UniqueConstraint("tenant_id", name="one_sim_account_per_tenant"),)
+
+
+class SimHolding(Base, TenantOwned, Timestamped):
+    """A simulated holding: shares (asset "equity") or an option contract."""
+
+    __tablename__ = "sim_holding"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    asset: Mapped[str] = mapped_column(String(8), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)   # ticker or OCC
+    underlying: Mapped[str] = mapped_column(String(16), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    avg_price: Mapped[float] = mapped_column(Float, nullable=False)
+    opened_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (UniqueConstraint("tenant_id", "symbol", name="one_sim_holding_per_symbol"),)
+
+
+class SimOrder(Base, TenantOwned, Timestamped):
+    """A simulated order. Its id is the order id the desk sees."""
+
+    __tablename__ = "sim_order"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    asset: Mapped[str] = mapped_column(String(8), nullable=False)
+    symbol: Mapped[str] = mapped_column(String(32), nullable=False)
+    underlying: Mapped[str] = mapped_column(String(16), nullable=False)
+    side: Mapped[str] = mapped_column(String(16), nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
+    order_type: Mapped[str] = mapped_column(String(8), nullable=False)
+    price: Mapped[float | None] = mapped_column(Float)
+    stop_price: Mapped[float | None] = mapped_column(Float)
+    duration: Mapped[str] = mapped_column(String(4), nullable=False, default="day")
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="open")
+    avg_fill_price: Mapped[float | None] = mapped_column(Float)
+    exec_quantity: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    realized: Mapped[float | None] = mapped_column(Float)
+    reason: Mapped[str | None] = mapped_column(String(255))
+    filled_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (Index("ix_sim_order_tenant_status", "tenant_id", "status"),)
+

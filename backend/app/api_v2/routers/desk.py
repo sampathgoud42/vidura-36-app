@@ -38,9 +38,10 @@ MAX_DMI_SYMBOLS = 24
 
 
 def _credential(db: DbSession, tenant: Tenant, kr: Keyring, *, live: bool):
+    """Live, or the operator's paper venue: Tradier's sandbox or SIP (SIM)."""
     venue_name = "tradier" if live else "tradier_sandbox"
     try:
-        return tenants.load_credential(db, tenant.id, venue_name, kr)
+        return venue_mod.trading_credential(db, tenant.id, kr, live=live)
     except Exception as exc:                            # noqa: BLE001
         raise HTTPException(
             status_code=424,
@@ -189,6 +190,7 @@ def portfolio_history(days: int = Query(default=30, le=3650),
 @trades_router.get("/trade-history", operation_id="getKalshiTradeHistory")
 @deps.tenant_scoped
 def trade_history(limit: int = Query(default=500, ge=1, le=1000),
+                  fresh: bool = Query(default=False),
                   tenant: Tenant = Depends(deps.current_tenant),
                   db: DbSession = Depends(deps.get_db),
                   kr: Keyring = Depends(deps.keyring)) -> dict:
@@ -209,7 +211,173 @@ def trade_history(limit: int = Query(default=500, ge=1, le=1000),
         return {"available": False, "venue": "kalshi",
                 "detail": "no Kalshi credential for this operator",
                 "open": [], "history": [], "pnl": {}}
-    return history.trade_history(cred, limit=limit)
+    return _cached_history(tenant.id, cred, limit, fresh=fresh)
+
+
+# The exchange's record takes ~13 s to read -- every settlement, cursor-paged --
+# and it was read in full on every request, which on a phone connection was
+# close enough to the browser's 30 s to fail. Served from the newest copy
+# instead: a copy younger than HISTORY_TTL_S is returned as it is; an older one
+# is returned AT ONCE and refreshed behind the answer. Only the first read after
+# a restart waits for Kalshi. Settlements land minutes apart, so two minutes of
+# staleness is invisible and says so (`cached_age_s`).
+HISTORY_TTL_S = 120
+_HISTORY: dict[tuple[str, int], dict] = {}
+_HISTORY_LOCK = threading.Lock()
+
+
+def _cached_history(tenant_id: str, cred, limit: int, *, fresh: bool = False) -> dict:
+    from app.domains.botstation import history
+
+    key = (tenant_id, limit)
+    with _HISTORY_LOCK:
+        held = None if fresh else _HISTORY.get(key)
+        stale = held is None or time.time() - held["at"] > HISTORY_TTL_S
+        start = stale and held is not None and not held.get("refreshing")
+        if start:
+            held["refreshing"] = True
+    if held is None:
+        data = history.trade_history(cred, limit=limit)
+        with _HISTORY_LOCK:
+            _HISTORY[key] = {"at": time.time(), "data": data}
+        return {**data, "cached_age_s": 0}
+    if start:
+        def refresh() -> None:
+            try:
+                data = history.trade_history(cred, limit=limit)
+                with _HISTORY_LOCK:
+                    _HISTORY[key] = {"at": time.time(), "data": data}
+            except Exception as exc:                    # noqa: BLE001
+                logger.info("trade history refresh failed: %s", type(exc).__name__)
+                with _HISTORY_LOCK:
+                    held["refreshing"] = False
+        threading.Thread(target=refresh, name="trade-history", daemon=True).start()
+    return {**held["data"], "cached_age_s": round(time.time() - held["at"])}
+
+
+# ---- the SIP (SIM) venue ---------------------------------------------
+# An in-house simulated account (execution.sim): read it, make it the board's
+# paper venue, seed it, and trade its shares. Labelled SIP (SIM)
+# everywhere -- never presented as a real account.
+
+class SimVenueRequest(BaseModel):
+    active: bool
+
+
+class SimSeedRequest(BaseModel):
+    total: float = Field(gt=0, le=10_000_000)
+    cash: float = Field(ge=0, le=10_000_000)
+
+
+class SimTradeRequest(BaseModel):
+    symbol: str = Field(pattern=r"^[A-Za-z][A-Za-z.\-]{0,9}$")
+    quantity: float = Field(gt=0, le=1_000_000)
+    order_type: Literal["market", "limit"] = "market"
+    price: float | None = Field(default=None, gt=0)
+
+
+def _sim_client(db: DbSession, tenant: Tenant, kr: Keyring):
+    from app.domains.trading.execution import sim as sim_mod
+
+    if sim_mod.account(db, tenant.id) is None:
+        raise HTTPException(status_code=404, detail="there is no SIP (SIM) account yet")
+    cred = venue_mod.trading_credential(db, tenant.id, kr, live=False, sim=True)
+    return venue_mod._client(cred, sandbox=True)
+
+
+@market_router.get("/sim", operation_id="getSimAccount")
+@deps.tenant_scoped
+def sim_account(tenant: Tenant = Depends(deps.current_tenant),
+                db: DbSession = Depends(deps.get_db),
+                kr: Keyring = Depends(deps.keyring)) -> dict:
+    """The simulated account: its balances, holdings and recent orders."""
+    from app.domains.trading.execution import sim as sim_mod
+
+    acct = sim_mod.account(db, tenant.id)
+    if acct is None:
+        return {"configured": False, "label": sim_mod.LABEL}
+    active, label = acct.active, acct.label
+    seeded = {"equity": acct.seeded_equity,
+              "at": acct.seeded_at.isoformat() + "Z" if acct.seeded_at else None}
+    client = _sim_client(db, tenant, kr)
+    try:
+        return {"configured": True, "active": active, "label": label, "seeded": seeded,
+                "balances": client.balances(), "holdings": client.holdings(),
+                "orders": client.orders()[:50]}
+    finally:
+        client.close()
+
+
+@market_router.put("/sim/venue", operation_id="setSimVenue")
+@deps.tenant_scoped
+def sim_venue(payload: SimVenueRequest,
+              tenant: Tenant = Depends(deps.current_tenant),
+              db: DbSession = Depends(deps.get_db)) -> dict:
+    """Make SIP (SIM) the board's paper venue, or go back to Tradier's
+    sandbox. Positions stay where they were opened either way."""
+    from app.domains.trading.execution import sim as sim_mod
+
+    try:
+        sim_mod.set_active(db, tenant.id, payload.active)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    db.commit()
+    return {"active": sim_mod.is_active(db, tenant.id)}
+
+
+@market_router.post("/sim/seed", operation_id="seedSimAccount")
+@deps.tenant_scoped
+def sim_seed(payload: SimSeedRequest,
+             tenant: Tenant = Depends(deps.current_tenant),
+             db: DbSession = Depends(deps.get_db),
+             kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Open, or reset, the simulated account at ``total``: ``cash`` in cash and
+    the rest in a long-term mix of shares at current prices. Clears its
+    holdings and orders; simulated positions already on the board stay."""
+    from app.domains.trading.execution import sim as sim_mod
+
+    if payload.cash > payload.total:
+        raise HTTPException(status_code=422, detail="cash cannot exceed the total")
+    data = _credential(db, tenant, kr, live=False)
+    client = venue_mod._client(data, sandbox=True)
+    try:
+        data_client = client.data if venue_mod.is_simulated(data) else client
+        return sim_mod.seed(tenant.id, data_client, total=payload.total, cash=payload.cash)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    finally:
+        client.close()
+
+
+def _sim_trade(side: str, payload: SimTradeRequest, db, tenant, kr) -> dict:
+    from app.services.tradier_client import TradierError
+
+    client = _sim_client(db, tenant, kr)
+    try:
+        placed = client.place_equity_order(
+            symbol=payload.symbol.upper(), side=side, quantity=payload.quantity,
+            order_type=payload.order_type, price=payload.price)
+        return client.order_status(placed["id"])
+    except TradierError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    finally:
+        client.close()
+
+
+@market_router.post("/sim/buy", operation_id="buySimShares")
+@deps.tenant_scoped
+def sim_buy(payload: SimTradeRequest, tenant: Tenant = Depends(deps.current_tenant),
+            db: DbSession = Depends(deps.get_db), kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Buy shares in the simulated account (filled in the regular session)."""
+    return _sim_trade("buy", payload, db, tenant, kr)
+
+
+@market_router.post("/sim/sell", operation_id="sellSimShares")
+@deps.tenant_scoped
+def sim_sell(payload: SimTradeRequest, tenant: Tenant = Depends(deps.current_tenant),
+             db: DbSession = Depends(deps.get_db), kr: Keyring = Depends(deps.keyring)) -> dict:
+    """Sell shares from the simulated account (filled in the regular session)."""
+    return _sim_trade("sell", payload, db, tenant, kr)
 
 
 # ---- venue + market data --------------------------------------------------
@@ -245,11 +413,19 @@ def venue_info(live: bool = Query(default=False),
     # only about the current venue told it nothing: it read v.live.configured
     # off a payload that had no `live` key, got undefined, and forced itself
     # back to sandbox on every load -- with no way to ever go live.
+    from app.domains.trading.execution import sim as sim_mod
+
+    acct = sim_mod.account(db, tenant.id)
+    sim_on = bool(acct and acct.active)
     return {
-        "venue": "live" if live else "sandbox",
+        "venue": "live" if live else "sim" if sim_on else "sandbox",
         "paper_only_server": settings.paper_only,
         "sandbox": described("tradier_sandbox"),
         "live": described("tradier"),
+        # The SIP (SIM) venue: an in-house simulated account, the
+        # board's paper venue while ``active``.
+        "sim": {"configured": acct is not None, "active": sim_on,
+                "label": acct.label if acct else sim_mod.LABEL},
         # The original flat keys, kept so nothing else that reads them breaks.
         "paper_only": settings.paper_only,
         "has_credential": described(
@@ -265,7 +441,7 @@ def balance(live: bool = Query(default=False),
             kr: Keyring = Depends(deps.keyring)) -> dict:
     cred = _credential(db, tenant, kr, live=live)
     try:
-        return {"venue": "live" if live else "sandbox",
+        return {"venue": "live" if live else "sim" if venue_mod.is_simulated(cred) else "sandbox",
                 **(venue_mod.balance(cred=cred, sandbox=not live) or {})}
     except Exception:                                   # noqa: BLE001
         # Never pass the venue own text through: a 401 body can carry the
@@ -332,11 +508,17 @@ def chain(symbol: str = Query(...), side: str = Query(default="call"),
           delta_min: float = Query(default=0.25),
           delta_max: float = Query(default=0.50),
           zero_dte: bool = Query(default=False),
+          near_expiry: bool = Query(default=True),
           live: bool = Query(default=False),
+          pick: str = Query(default="delta", pattern="^(delta|open_interest)$"),
           tenant: Tenant = Depends(deps.current_tenant),
           db: DbSession = Depends(deps.get_db),
           kr: Keyring = Depends(deps.keyring)) -> dict:
     """What an entry WOULD pick, without placing anything.
+
+    ``pick=open_interest`` previews the open-interest pick instead of the
+    delta band's: the most-held out-of-the-money strike first, and in
+    ``ranked`` the ones an order would fall back to, in order.
 
     Shares selection with the order path rather than reimplementing it -- a
     preview that disagrees with the trade is worse than no preview.
@@ -365,13 +547,30 @@ def chain(symbol: str = Query(...), side: str = Query(default="call"),
                             detail=f"no listed expirations for {symbol}")
     from app.domains.trading.risk import clock
 
-    today = clock.today().isoformat()
-    chosen = expiration or next(
-        (e for e in sorted(listed) if e > today or (zero_dte and e == today)),
-        sorted(listed)[-1])
+    from app.domains.trading.execution import entry as entry_choice
+
+    # The order path's own choice, so the preview shows the expiry it buys.
+    chosen = expiration or entry_choice.choose_expiration(
+        listed, zero_dte=zero_dte, near_expiry=near_expiry)
     rows = venue_mod.option_chain(symbol, chosen, cred=cred, sandbox=sandbox)
-    picked = selection.pick_contract(rows, side, delta_min, delta_max)
     lo, hi = selection.delta_band(side, delta_min, delta_max)
+    if pick == "open_interest":
+        from app.domains.trading.execution import entry as entry_mod
+
+        quote = next(iter(venue_mod.quotes([symbol], cred=cred, sandbox=sandbox)), None) or {}
+        spot = float(quote.get("last") or quote.get("close") or 0)
+        ranked = selection.rank_by_open_interest(rows, side, spot) if spot > 0 else []
+        top = ranked[:entry_mod.OI_MAX_TRIES]
+        brief = [{"symbol": o["symbol"], "strike": o["strike"], "delta": o["_delta"],
+                  "bid": o["bid"], "ask": o["ask"],
+                  "open_interest": int(o.get("open_interest") or 0),
+                  "volume": int(o.get("volume") or 0),
+                  "score": o.get("_score")} for o in top]
+        return {"symbol": symbol, "side": side, "expiration": chosen, "pick": "open_interest",
+                "spot": spot, "delta_band": [lo, hi],
+                "picked": brief[0] if brief else None, "ranked": brief,
+                "candidates": len(rows)}
+    picked = selection.pick_contract(rows, side, delta_min, delta_max)
     return {"symbol": symbol, "side": side, "expiration": chosen,
             "delta_band": [lo, hi],
             "picked": {"symbol": picked["symbol"], "strike": picked["strike"],
@@ -756,6 +955,8 @@ def hot(live: bool = Query(default=False), interval: str = Query(default="5min")
 @market_router.get("/best-bets", operation_id="getTradierBestBets")
 @deps.tenant_scoped
 def best_bets(live: bool = Query(default=False), refresh: bool = Query(default=False),
+              bar: int | None = Query(default=None, ge=1, le=4),
+              ema: int | None = Query(default=None, ge=5, le=100),
               tenant: Tenant = Depends(deps.current_tenant),
               db: DbSession = Depends(deps.get_db),
               kr: Keyring = Depends(deps.keyring)) -> dict:
@@ -769,12 +970,17 @@ def best_bets(live: bool = Query(default=False), refresh: bool = Query(default=F
     (`at`, `scanned_at`, and what started it in `trigger`); `refresh` starts a
     sweep now and the answer says `refreshing` until it lands. The operator's
     own credential is still required: it is what a sweep reads through.
+    `bar` (1, 2 or 4 hours) and `ema` (its period) re-judge a refresh with
+    that bar and EMA; the day's own sweep then keeps them.
     """
     from app.domains.trading.market import best_bets as screen
 
+    if bar is not None and bar not in (1, 2, 4):
+        raise HTTPException(status_code=422, detail="bar must be 1, 2 or 4 hours")
     cred = _credential(db, tenant, kr, live=live)
     return {"kind": "best_bets",
-            **screen.snapshot(cred, sandbox=not live, force=refresh)}
+            **screen.snapshot(cred, sandbox=not live, force=refresh,
+                              bar_hours=bar, span=ema)}
 
 
 @market_router.get("/flow", operation_id="getTradierOptionsFlow")
@@ -930,11 +1136,19 @@ class AutoTradeStart(BaseModel):
     window_open: str | None = Field(default=None, max_length=5)
     window_close: str | None = Field(default=None, max_length=5)
     zero_dte: bool = False
+    # 0DTE off: the nearest expiry (on), or the first 7+ days out (off) --
+    # those positions are held over the close and recorded as rolled over.
+    near_expiry: bool = True
     # How its buys are priced, as on the BUY ticket: "smart", "market", or
     # "limit" -- the mark less discount_pct, withdrawn after 15 minutes
     # unfilled. Left out, a discount above 0 means limit and none means smart.
     order_type: Literal["smart", "market", "limit"] | None = None
     discount_pct: float = Field(default=0, ge=0, le=50)
+    # How strikes are chosen: the delta band or open interest. Left out,
+    # best_picks and star_signals pick by open interest, every other strategy by delta.
+    pick: Literal["delta", "open_interest"] | None = None
+    # star_signals: the star counts to trade, any of 1, 2, 3. Left out, 2 and 3.
+    stars: list[int] | None = Field(default=None, max_length=3)
 
 
 @market_router.get("/autotrade/status", operation_id="getTradierAutoTradeStatus")
@@ -970,19 +1184,22 @@ def autotrade_start(payload: AutoTradeStart,
             delta_max=payload.delta_max, signals=payload.signals,
             pairs=[p.model_dump() for p in payload.pairs],
             window_open=payload.window_open, window_close=payload.window_close,
-            zero_dte=payload.zero_dte,
+            zero_dte=payload.zero_dte, near_expiry=payload.near_expiry,
             order_type=payload.order_type or ("limit" if payload.discount_pct > 0 else "smart"),
-            discount_pct=payload.discount_pct)
+            discount_pct=payload.discount_pct, pick=payload.pick, stars=payload.stars)
     except autotrade.AutoTradeRefused as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from None
 
 
 @market_router.post("/autotrade/stop", operation_id="stopTradierAutoTrade")
 @deps.tenant_scoped
-def autotrade_stop(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+def autotrade_stop(strategy: str | None = Query(default=None, max_length=40),
+                   tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """Disarm one strategy (``strategy``), or every armed one when none is
+    named. Positions they opened stay managed by the desk."""
     from app.domains.trading.execution import autotrade
 
-    return autotrade.stop(tenant.id)
+    return autotrade.stop(tenant.id, strategy)
 
 
 # ---- the DMI board --------------------------------------------------------
@@ -1038,6 +1255,35 @@ def dmi(symbols: str = Query(...), live: bool = Query(default=False),
 # build them, so the first click produced a 405 -- which the contract test did
 # not catch, because it checks that declared paths ARE served and these were
 # declared under a name I never wired up.
+
+# ---- News & Events: the US economic calendar ---------------------------------
+
+@market_router.get("/econ-calendar", operation_id="getEconCalendar")
+@deps.tenant_scoped
+def econ_calendar(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """The stored US economic calendar -- CPI, jobs, GDP, PCE, FOMC, claims,
+    Treasury auctions -- yesterday through two weeks ahead, fetched daily at
+    08:15 CT and on demand. The same for every operator."""
+    from app.domains.trading.market import econ_calendar as cal
+
+    return cal.snapshot()
+
+
+@market_router.post("/econ-calendar/refresh", operation_id="refreshEconCalendar")
+@deps.tenant_scoped
+def econ_calendar_refresh(tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """Fetch the calendar now (a paid Apify run, a few cents). Refused while a
+    run is underway rather than queued."""
+    from app.domains.trading.market import econ_calendar as cal
+
+    try:
+        cal.refresh(trigger=f"refresh by {tenant.slug}")
+    except cal.RefreshBusy as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+    except cal.CalendarUnavailable as exc:
+        raise HTTPException(status_code=424, detail=str(exc)) from None
+    return cal.snapshot()
+
 
 levels_router = APIRouter(prefix="/levels", tags=["levels"])
 

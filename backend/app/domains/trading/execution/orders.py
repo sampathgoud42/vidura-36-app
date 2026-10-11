@@ -96,11 +96,12 @@ def require_watched_stops(tenant_id: str) -> str | None:
 # ---- guards 3 and 4 -------------------------------------------------------
 
 def _refuse_if_already_held(db: Session, tenant_id: str, occ_symbol: str,
-                            sandbox: bool) -> None:
+                            sandbox: bool, simulated: bool = False) -> None:
     existing = db.scalar(select(Position).where(
         Position.tenant_id == tenant_id,
         Position.occ_symbol == occ_symbol,
         Position.venue_sandbox == sandbox,
+        Position.simulated.is_(bool(simulated)),
         Position.status.in_(("pending", "open")),
     ))
     if existing is not None:
@@ -223,7 +224,8 @@ def open_position(db: Session, *, tenant_id: str, cred, symbol: str, side: str,
         # useless, because the working buy from the first order tripped guard
         # 4 and the deliberate add was refused anyway.
         if not allow_add:
-            _refuse_if_already_held(db, tenant_id, occ_symbol, sandbox)
+            _refuse_if_already_held(db, tenant_id, occ_symbol, sandbox,
+                                    venue_mod.is_simulated(cred))
             _refuse_if_working_at_venue(cred, occ_symbol, sandbox)
 
         placed = venue_mod.place_buy(
@@ -236,6 +238,7 @@ def open_position(db: Session, *, tenant_id: str, cred, symbol: str, side: str,
 
         pos = Position(
             tenant_id=tenant_id, venue_sandbox=sandbox,
+            simulated=venue_mod.is_simulated(cred),
             underlying=underlying, occ_symbol=occ_symbol, option_type=side,
             strike=strike, expiration=expiration, delta_at_entry=delta,
             contracts=contracts, buy_pct=buy_pct, tolerance_pct=tolerance_pct,

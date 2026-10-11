@@ -1,0 +1,82 @@
+/* News & Events — the US economic calendar. Shared by both desks, so it
+   carries its own palette rather than either desk's tokens. */
+.nev {
+  --nev-ink: #dfe4f5; --nev-dim: #8d95b5; --nev-faint: #5b6283;
+  --nev-line: rgba(140, 150, 200, 0.18); --nev-bg: rgba(12, 14, 26, 0.6);
+  --nev-high: #f87171; --nev-med: #fbbf24; --nev-ok: #34d399;
+  border: 1px solid var(--nev-line); border-radius: 8px; background: var(--nev-bg);
+  margin: 0 0 10px; color: var(--nev-ink);
+  font-family: ui-monospace, Consolas, monospace; font-size: 11px;
+}
+.nev-hd {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px;
+  cursor: pointer; user-select: none; min-width: 0;
+}
+.nev-tag { font-weight: 700; letter-spacing: 0.08em; white-space: nowrap; }
+.nev-next {
+  color: var(--nev-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  min-width: 0; display: inline-flex; align-items: center; gap: 5px;
+}
+.nev-sp { flex: 1; }
+.nev-refresh, .nev-x {
+  background: none; border: 1px solid var(--nev-line); border-radius: 6px;
+  color: var(--nev-dim); cursor: pointer; font: inherit; line-height: 1;
+  min-width: 26px; min-height: 24px;
+}
+.nev-refresh:hover:not(:disabled) { color: var(--nev-ink); }
+.nev-refresh:disabled { opacity: 0.5; cursor: default; }
+.nev-refresh .spin { display: inline-block; animation: nev-spin 0.8s linear infinite; }
+@keyframes nev-spin { to { transform: rotate(360deg); } }
+.nev-caret { color: var(--nev-dim); font-size: 14px; width: 12px; text-align: center; }
+
+.nev-bd { padding: 0 10px 8px; max-height: 360px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.nev-day { margin-top: 6px; }
+.nev-dayhd {
+  color: var(--nev-faint); font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+  border-bottom: 1px solid var(--nev-line); padding-bottom: 2px; margin-bottom: 2px;
+}
+.nev-dayhd.today { color: var(--nev-ok); }
+.nev-row {
+  display: grid; grid-template-columns: 40px 10px minmax(0, 1fr) auto auto;
+  align-items: center; gap: 6px; width: 100%; padding: 4px 2px;
+  background: none; border: 0; border-radius: 4px; color: inherit; font: inherit;
+  text-align: left; cursor: pointer;
+}
+.nev-row:hover { background: rgba(140, 150, 200, 0.08); }
+.nev-row.past { opacity: 0.5; }
+.nev-row .t { color: var(--nev-dim); }
+.nev-row .ev { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nev-row .ag { color: var(--nev-faint); font-size: 10px; }
+.nev-row .prev { color: var(--nev-faint); font-size: 10px; white-space: nowrap; }
+.nev-row .act { color: var(--nev-ok); white-space: nowrap; }
+.imp { display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  border: 1.5px solid var(--nev-med); flex: none; }
+.imp.high { background: var(--nev-high); border-color: var(--nev-high); }
+.nev-note { color: var(--nev-faint); margin: 6px 0 0; line-height: 1.4; }
+.nev-err { color: var(--nev-high); margin: 6px 0 0; }
+
+.nev-scrim {
+  position: fixed; inset: 0; z-index: 80; background: rgba(0, 0, 0, 0.6);
+  display: flex; align-items: center; justify-content: center; padding: 16px;
+}
+.nev-card {
+  width: min(460px, 100%); max-height: 85vh; overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  background: #0d1020; border: 1px solid rgba(140, 150, 200, 0.25); border-radius: 10px;
+  padding: 14px 16px 16px; color: #dfe4f5;
+  font-family: ui-monospace, Consolas, monospace; font-size: 12px;
+}
+.nev-cardhd { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.nev-cardhd h3 { margin: 0; font-size: 14px; flex: 1; font-family: inherit; }
+.nev-x { min-width: 32px; min-height: 32px; font-size: 16px; }
+.nev-fields { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 6px 12px; margin: 0; }
+.nev-fields dt { color: #8d95b5; }
+.nev-fields dd { margin: 0; overflow-wrap: anywhere; line-height: 1.4; }
+.nev-src { display: inline-block; margin-top: 12px; color: #7dd3fc; }
+
+/* 36 Trades on a phone: Apple's 44px targets, and no hover-only meaning. */
+.nev--touch .nev-hd { min-height: 44px; }
+.nev--touch .nev-refresh { min-width: 44px; min-height: 36px; }
+.nev--touch .nev-row { min-height: 40px; }
+.nev--touch .nev-x { min-width: 44px; min-height: 44px; }
+.nev--touch .nev-scrim { padding: 16px 16px max(16px, env(safe-area-inset-bottom)); }

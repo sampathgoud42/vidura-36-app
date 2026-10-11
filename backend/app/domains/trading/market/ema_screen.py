@@ -74,16 +74,32 @@ SESSIONS = {
 }
 
 
+# The bar sizes the screen can fold its 15-minute bars into, in hours.
+BAR_HOURS = (1, 2, 4)
+SPAN_RANGE = (5, 100)
+
+
+def bars_per_day(session: str, hours: int = 4) -> int:
+    """How many bars of `hours` one session day holds -- the last one short
+    when the session does not divide evenly (a regular day is 6.5 hours)."""
+    return math.ceil(SESSIONS[session]["hours_per_day"] / hours)
+
+
 @dataclass(frozen=True)
 class Rules:
-    span: int = 21              # EMA period, in 4-hour bars
+    span: int = 21              # EMA period, in bars of bar_hours
     deep_pct: float = 20.0      # A: a low more than this far below the EMA
     near_pct: float = 20.0      # B: now less than this far above it
     cross_within: int = 3       # B: crossed on one of the last N candles
     velocity_bars: int = 5      # closes the rate of change is fitted over
     session: str = "regular"
+    bar_hours: int = 4          # the bar the EMA is read on: 1, 2 or 4 hours
 
     def __post_init__(self):
+        if self.bar_hours not in BAR_HOURS:
+            raise ValueError(f"bar_hours must be one of {', '.join(map(str, BAR_HOURS))}")
+        if not SPAN_RANGE[0] <= self.span <= SPAN_RANGE[1]:
+            raise ValueError(f"the EMA period must be {SPAN_RANGE[0]} to {SPAN_RANGE[1]}")
         if self.session not in SESSIONS:
             raise ValueError(f"unknown session {self.session!r}; "
                              f"one of {', '.join(SESSIONS)}")
@@ -167,8 +183,8 @@ def frame(bars: list[dict], session: str = "regular") -> pd.DataFrame:
     return out.between_time(spec["open"], spec["close"], inclusive="left")
 
 
-def four_hour(bars: pd.DataFrame, session: str = "regular") -> pd.DataFrame:
-    """Fold finer bars into session-anchored 4-hour bars.
+def four_hour(bars: pd.DataFrame, session: str = "regular", hours: int = 4) -> pd.DataFrame:
+    """Fold finer bars into session-anchored bars of `hours` (4 by default).
 
     Grouped by clock time, not by position, so a missing 15-minute bar leaves a
     thinner 4-hour bar rather than shifting every later one. The newest bucket
@@ -178,7 +194,7 @@ def four_hour(bars: pd.DataFrame, session: str = "regular") -> pd.DataFrame:
     if bars.empty:
         return bars.assign(n=pd.Series(dtype="int64"))
     spec = SESSIONS[session]
-    grouped = bars.resample("4h", offset=spec["offset"], label="left", closed="left")
+    grouped = bars.resample(f"{hours}h", offset=spec["offset"], label="left", closed="left")
     out = grouped.agg({"open": "first", "high": "max", "low": "min",
                        "close": "last", "volume": "sum"})
     out["n"] = grouped["close"].count()
@@ -211,17 +227,18 @@ def bars_to_catch(gap: float, velocity: float, alpha: float) -> float | None:
     return math.log1p(gap / k) / -math.log1p(-alpha)
 
 
-def _bucket_end(start: pd.Timestamp, session: str) -> datetime:
+def _bucket_end(start: pd.Timestamp, session: str, hours: int = 4) -> datetime:
     close_h, close_m = map(int, SESSIONS[session]["close"].split(":"))
     session_close = start.normalize() + timedelta(hours=close_h, minutes=close_m)
-    return min(start + timedelta(hours=4), session_close).to_pydatetime()
+    return min(start + timedelta(hours=hours), session_close).to_pydatetime()
 
 
 def _r(value, places: int = 2):
     return None if value is None or not math.isfinite(value) else round(float(value), places)
 
 
-def thin_bars(fine: pd.DataFrame, four: pd.DataFrame, session: str = "regular") -> int:
+def thin_bars(fine: pd.DataFrame, four: pd.DataFrame, session: str = "regular",
+              hours: int = 4) -> int:
     """How many settled 4-hour bars were built from fewer bars than their
     window holds -- the venue's missing chunks, made countable.
 
@@ -239,7 +256,7 @@ def thin_bars(fine: pd.DataFrame, four: pd.DataFrame, session: str = "regular") 
     step = gaps.min()
     thin = 0
     for start, count in zip(four.index[:-1], four["n"].iloc[:-1]):
-        span = pd.Timestamp(_bucket_end(start, session)) - start
+        span = pd.Timestamp(_bucket_end(start, session, hours)) - start
         if count < round(span / step):
             thin += 1
     return thin
@@ -254,11 +271,11 @@ def screen(symbol: str, bars: list[dict], rules: Rules | None = None, *,
     the row says whether the newest 4-hour bar is still forming."""
     rules = rules or Rules()
     fine = frame(bars, rules.session)
-    four = four_hour(fine, rules.session)
+    four = four_hour(fine, rules.session, rules.bar_hours)
     base = {"symbol": symbol, "setup": None, "bars": int(len(four))}
     if len(four) < rules.min_bars:
         return {**base, "available": False,
-                "reason": f"{len(four)} four-hour bars; a {rules.span} EMA and a "
+                "reason": f"{len(four)} {rules.bar_hours}-hour bars; a {rules.span} EMA and a "
                           f"{rules.velocity_bars}-bar velocity need {rules.min_bars}"}
 
     four = four.assign(ema=ema(four["close"], rules.span))
@@ -298,7 +315,7 @@ def screen(symbol: str, bars: list[dict], rules: Rules | None = None, *,
 
     spec = SESSIONS[rules.session]
     catch = bars_to_catch(-gap, velocity, rules.alpha) if gap < 0 else None
-    days = None if catch is None else catch / spec["bars_per_day"]
+    days = None if catch is None else catch / bars_per_day(rules.session, rules.bar_hours)
     last_start = four.index[-1]
     return {
         **base,
@@ -317,11 +334,11 @@ def screen(symbol: str, bars: list[dict], rules: Rules | None = None, *,
         "days_to_catch": _r(days, 1),
         "hours_to_catch": _r(None if days is None else days * spec["hours_per_day"], 1),
         "trusted_bars": int(len(trusted)),
-        "thin_bars": thin_bars(fine, four, rules.session),
+        "thin_bars": thin_bars(fine, four, rules.session, rules.bar_hours),
         "window": {"from": four.index[0].isoformat(), "to": last_start.isoformat()},
         "as_of": bars_as_of(bars),
         "forming": (None if as_of is None
-                    else as_of < _bucket_end(last_start, rules.session)),
+                    else as_of < _bucket_end(last_start, rules.session, rules.bar_hours)),
     }
 
 

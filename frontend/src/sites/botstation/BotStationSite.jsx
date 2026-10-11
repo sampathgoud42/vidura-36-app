@@ -6,6 +6,7 @@ import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
 import LiveModeNotice, { useLiveLock } from '../../shared/LiveModeNotice.jsx';
 import { deskTime } from '../../shared/cst.js';
+import { useExperience } from '../../shared/experience.js';
 import '../../shared/worldHeader.css';
 import './botstation.css';
 
@@ -698,7 +699,9 @@ function HeliosCanvas({ bots, neon, operator, onPick, onLogs, onSunDblClick }) {
   return <div ref={hostRef} className="bs-stage" data-testid="bs-stage" />;
 }
 
-// ── DMI strip: one row per instrument, 1m/2m/5m/10m DI-dominance readout ──
+// ── DMI strip: one row per instrument, 2m/5m/10m/15m/30m DI-dominance ──
+// The signal is 2m, 5m and 15m agreeing; 30m agreeing too is the ✓. 10m is
+// context. 1m is still in the row (the V7/V8 bots read it) but not shown.
 // Shared by the commodities and crypto panels. They ask the same question of
 // different feeds and render the identical row, so this is written once —
 // two copies of a signal readout drift the first time either is touched, and
@@ -766,7 +769,7 @@ function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2, onSignal,
     <div className="bs-commodities">
       <div className="bs-commodities-hd">
         <span className="lbl">{icon} {title}</span>
-        <span className="note">1m/2m/5m/10m DMI{snap?.meta?.source ? ` · ${snap.meta.source}` : ''}{err && ' · ⚠'}</span>
+        <span className="note">2m/5m/10m/15m/30m DMI{snap?.meta?.source ? ` · ${snap.meta.source}` : ''}{err && ' · ⚠'}</span>
         {snap?.age_s != null && (
           <span className="note" title={`took ${snap.meta?.took_s ?? '—'}s · source ${snap.meta?.source ?? '—'}`}>
             {ago(snap.age_s)}
@@ -803,24 +806,23 @@ function DmiStrip({ title, icon, load: loader, labelFor, decimals = 2, onSignal,
             <div key={r.bot} className="bs-commrow">
               <span className="tkr" style={{ color: accent }}>{label}</span>
               <span className="last">{price(r.last)}</span>
-              {tf(r, 'm1', '1m')}
               {tf(r, 'm2', '2m')}
               {tf(r, 'm5', '5m')}
               {tf(r, 'm10', '10m')}
-              {/* The signal is 1m+2m agreement. 5m is shown beside it and
-                  marked when it agrees, rather than folded into the rule —
-                  widening what fires a trade is a trading change, not a
-                  display one. */}
+              {tf(r, 'm15', '15m')}
+              {tf(r, 'm30', '30m')}
+              {/* The signal is 2m, 5m and 15m agreeing; 30m agreeing too is
+                  the ✓ beside it. 10m is shown and decides nothing. */}
               {/* A link to trade it: CALL buys YES and PUT buys NO on the
                   asset's Kalshi 15-minute market, after a confirmation.
                   "mixed" opens the same form, to say why there is nothing. */}
               <button type="button" className="sig sig-btn" style={{ color: sideColor(r.signal) }}
                 onClick={() => onSignal?.(r, label, accent)}
                 title={`${r.signal
-                  ? `1m and 2m agree${r.m5_confirms ? '; 5m confirms' : '; 5m does not confirm'}`
-                  : '1m and 2m disagree — no clear signal'} — click to trade it on Kalshi`}>
+                  ? `2m, 5m and 15m agree${(r.confirms ?? r.m5_confirms) ? '; 30m confirms' : '; 30m does not confirm'}`
+                  : '2m, 5m and 15m do not all agree — no clear signal'} — click to trade it on Kalshi`}>
                 {r.signal ? sideLabel(r.signal) : 'mixed'}
-                {r.signal && r.m5_confirms && <span className="slope" title="5m confirms">✓</span>}
+                {r.signal && (r.confirms ?? r.m5_confirms) && <span className="slope" title="30m confirms">✓</span>}
               </button>
             </div>
           );
@@ -1064,7 +1066,7 @@ function LuckPanel() {
   const [busy, setBusy] = useState('');
   const [elapsed, setElapsed] = useState(0);
   const [form, setForm] = useState({
-    min_legs: '5', max_legs: '24', min_leg_c: '60', max_leg_c: '98',
+    min_legs: '5', max_legs: '24', min_leg_c: '67', max_leg_c: '97',
     min_volume_usd: '5000', min_usd: '5', max_usd: '7.5',
     // The engine's own gates, now the operator's. Seeded with what the
     // long shot used to inherit silently: 3c wide, closing within 72h.
@@ -1129,7 +1131,7 @@ function LuckPanel() {
   const ticketNow = () => ({
     min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
     min_usd: n(form.min_usd, 5), max_usd: n(form.max_usd, 7.5),
-    min_leg_c: n(form.min_leg_c, 60), max_leg_c: n(form.max_leg_c, 98),
+    min_leg_c: n(form.min_leg_c, 67), max_leg_c: n(form.max_leg_c, 97),
     min_volume_usd: n(form.min_volume_usd, 0), max_spread_c: n(form.max_spread_c, 3),
     max_hours: n(form.max_hours, 72), no_side_only: !!form.no_side,
     sports: sportsOff.size ? [...sportsOn].sort() : [],
@@ -1191,8 +1193,8 @@ function LuckPanel() {
     try {
       const job = await vidura.luckPreview({
         min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
-        min_leg_c: n(form.min_leg_c, 60),
-        max_leg_c: n(form.max_leg_c, 98),
+        min_leg_c: n(form.min_leg_c, 67),
+        max_leg_c: n(form.max_leg_c, 97),
         min_volume_usd: n(form.min_volume_usd, 0),
         max_spread_c: n(form.max_spread_c, 3),
         max_hours: n(form.max_hours, 72),
@@ -1613,6 +1615,328 @@ function LuckPanel() {
 const loadCommodityBoard = (force) => vidura.commodityDmiSignals(force);
 const loadCryptoBoard = (force) => vidura.cryptoDmiSignals(force);
 
+// ── rain board: will it rain today, per Kalshi KXRAIN city ─────────────────
+// climate.rain_forecast, one TRUE/FALSE per city from the last refresh.
+// REFRESH re-reads every source and truncates and loads the table (the old
+// rows go to rain_forecast_hist first, where each day later gets the outcome
+// weather.com/kalshi settled it on). A row opens the city: why the call is
+// what it is, how earlier calls went, and a YES/NO buy on its market.
+// weather.com's page for each city, by Kalshi's code -- the city's own page
+// rather than the airport's coordinates, which land on the suburb the airport
+// sits in (MSY is Kenner). Each was checked to resolve; a city Kalshi adds
+// later falls back to a search.
+const WEATHER_COM_CITY = {
+  ABQ: 'new-mexico/city/albuquerque',
+  ATL: 'georgia/city/atlanta',
+  AUS: 'texas/city/austin',
+  BOS: 'massachusetts/city/boston',
+  CHI: 'illinois/city/chicago',
+  CLL: 'texas/city/college-station',
+  CMH: 'ohio/city/columbus',
+  DAL: 'texas/city/dallas',
+  DC: 'district-of-columbia/city/washington',
+  DEN: 'colorado/city/denver',
+  EWR: 'new-jersey/city/newark',
+  HOU: 'texas/city/houston',
+  LAX: 'california/city/los-angeles',
+  LEX: 'kentucky/city/lexington',
+  LV: 'nevada/city/las-vegas',
+  MIA: 'florida/city/miami',
+  MIN: 'minnesota/city/minneapolis',
+  MKE: 'wisconsin/city/milwaukee',
+  NOLA: 'louisiana/city/new-orleans',
+  NYC: 'new-york/city/new-york-city',
+  OKC: 'oklahoma/city/oklahoma-city',
+  PHIL: 'pennsylvania/city/philadelphia',
+  PHX: 'arizona/city/phoenix',
+  PIT: 'pennsylvania/city/pittsburgh',
+  PVD: 'rhode-island/city/providence',
+  SATX: 'texas/city/san-antonio',
+  SEA: 'washington/city/seattle',
+  SFO: 'california/city/san-francisco',
+  SGF: 'missouri/city/springfield',
+  TTN: 'new-jersey/city/trenton',
+};
+const weatherComUrl = (row) => (WEATHER_COM_CITY[row.city_code]
+  ? `https://weather.com/us/${WEATHER_COM_CITY[row.city_code]}/today`
+  : `https://weather.com/search/enhancedlocalsearch?where=${encodeURIComponent(row.city)}`);
+const RAIN_CONF = { settled: 'SETTLED', high: 'HIGH', medium: 'MED', low: 'LOW' };
+const inch = (v) => (v == null ? '—' : `${Number(v).toFixed(2)}"`);
+const dollarsC = (v) => (v == null ? '—' : `${Math.round(Number(v) * 100)}c`);
+
+function RainPanel() {
+  const [open, setOpen] = useState(false);
+  const [board, setBoard] = useState(null);
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  const [pick, setPick] = useState(null);
+
+  const load = useCallback(async () => {
+    setBusy((b) => b || 'load'); setErr('');
+    try { setBoard(await vidura.rainForecast()); } catch (e) { setErr(errText(e)); }
+    finally { setBusy((b) => (b === 'load' ? '' : b)); }
+  }, []);
+  useEffect(() => { if (open && !board) load(); }, [open, board, load]);
+
+  const refresh = async (e) => {
+    if (e) e.stopPropagation();
+    setBusy('refresh'); setErr(''); setOpen(true);
+    try { setBoard(await vidura.rainForecastRefresh()); }
+    catch (ex) { setErr(errText(ex)); }
+    finally { setBusy(''); }
+  };
+
+  const rows = (board && board.rows) || [];
+  return (
+    <section className={`bs-luckdock bs-rain ${open ? 'open' : ''}`}>
+      <header className="bs-luck-hd" onClick={() => setOpen((v) => !v)}>
+        <h3>RAIN TODAY</h3>
+        <span className="sub">
+          {board && board.loaded_at
+            ? `${board.true_count}/${rows.length} TRUE · ${deskTime(board.loaded_at)} CST`
+            : 'Kalshi KXRAIN'}
+        </span>
+        <button type="button" className="bs-refresh bs-rain-refresh" onClick={refresh} disabled={!!busy}
+          aria-label="refresh the rain board"
+          title="read every source again and reload the board (20-60s)">
+          <span className={busy === 'refresh' ? 'spin' : ''} aria-hidden="true">↻</span>
+        </button>
+        <span className="bs-luck-toggle">{open ? '−' : '+'}</span>
+      </header>
+      {!open ? null : (
+        <div className="bs-luckdock-body">
+          {busy === 'refresh' ? <p className="bs-luck-note">reading Kalshi, NWS and the models for every city…</p> : null}
+          {err ? <p className="bs-luck-err">{err}</p> : null}
+          {board && !rows.length && !busy ? (
+            <p className="bs-luck-note">no forecast loaded yet — press ↻ to build one</p>
+          ) : null}
+          {rows.length ? (
+            <div className="bs-luck-legs bs-rain-table">
+              <table>
+                <thead>
+                  <tr><th>City</th><th>Call</th><th>Conf</th><th className="num">So far</th>
+                    <th className="num">NWS</th><th className="num">HRRR</th><th className="num">YES</th></tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.city_code} className="bs-rain-row" onClick={() => setPick(r)}
+                      title="open the city">
+                      <td>{r.city}</td>
+                      <td><b className={r.decision === 'TRUE' ? 'bs-rain-true' : 'bs-rain-false'}>{r.decision}</b></td>
+                      <td className={`bs-rain-conf ${r.confidence}`}>{RAIN_CONF[r.confidence] || r.confidence}</td>
+                      <td className="num">{r.observed_in ? inch(r.observed_in) : r.observed_trace ? 'T' : '—'}</td>
+                      <td className="num">{r.nws_max_pop == null ? '—' : `${r.nws_max_pop}%`}</td>
+                      <td className="num">{inch(r.hrrr_in)}</td>
+                      <td className="num">{dollarsC(r.kalshi_yes_ask)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </div>
+      )}
+      {pick && <RainCitySheet row={pick} onClose={() => setPick(null)} />}
+    </section>
+  );
+}
+
+function RainCitySheet({ row, onClose }) {
+  const [quote, setQuote] = useState(null);
+  const [qErr, setQErr] = useState('');
+  const [side, setSide] = useState(row.decision === 'TRUE' ? 'yes' : 'no');
+  const [contracts, setContracts] = useState('5');
+  const [price, setPrice] = useState('');
+  const [edited, setEdited] = useState(false);
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  const [result, setResult] = useState(null);
+  // One key per confirmation; a retry after a lost response is the same order.
+  const keyRef = useRef(newConfirmationKey());
+  const alive = useRef(true);
+  useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
+
+  const loadQuote = useCallback(async () => {
+    if (!row.market_ticker) return;
+    setQErr('');
+    try {
+      const q = await vidura.rainQuote(row.market_ticker);
+      if (alive.current) setQuote(q);
+    } catch (e) { if (alive.current) setQErr(errText(e)); }
+  }, [row.market_ticker]);
+  useEffect(() => { loadQuote(); }, [loadQuote]);
+
+  const askOf = (s) => (quote ? quote[s === 'yes' ? 'yes_ask' : 'no_ask'] : null);
+  // The limit starts at the side's ask and follows it until it is edited.
+  useEffect(() => {
+    const a = quote ? quote[side === 'yes' ? 'yes_ask' : 'no_ask'] : null;
+    if (!edited && a != null) setPrice(String(Math.round(a * 100)));
+  }, [quote, side, edited]);
+
+  const n = Number(contracts);
+  const p = Number(price);
+  const okN = Number.isInteger(n) && n >= 1 && n <= 500;
+  const okP = Number.isInteger(p) && p >= 1 && p <= 99;
+  const tradable = !!quote && ['active', 'open'].includes(quote.status);
+  const done = !!(result && result.placed);
+  const canBuy = !busy && !done && okN && okP && tradable;
+  const cost = okN && okP ? (n * p) / 100 : null;
+
+  const buy = async () => {
+    if (!canBuy) return;
+    const ok = await confirmDialog({
+      title: `Buy ${n} ${side.toUpperCase()} on ${row.city} rain for up to $${cost.toFixed(2)}?`,
+      body: `${row.market_ticker}: a limit order at ${p}c per ${side.toUpperCase()} contract. `
+        + `Each pays $1 if ${row.city} ${side === 'yes' ? 'gets' : 'does not get'} measurable `
+        + 'rain today (a trace counts as none). Real money on your Kalshi account.',
+      confirmText: `Buy for $${cost.toFixed(2)}`,
+      cancelText: 'Cancel',
+    });
+    if (!ok) return;
+    setBusy('buy'); setErr('');
+    try {
+      const out = await vidura.rainTrade(
+        { ticker: row.market_ticker, side, contracts: n, price_c: p }, keyRef.current);
+      if (!alive.current) return;
+      setResult(out);
+      if (!out || !out.placed) setErr((out && out.detail) || 'not placed');
+    } catch (e) { if (alive.current) setErr(errText(e)); }
+    finally { if (alive.current) setBusy(''); }
+  };
+
+  const pops = row.nws_pops || [];
+  const hist = row.history;
+  const order = (result && result.order) || {};
+  return createPortal(
+    <div className="bs-luck-scrim" onClick={() => { if (busy !== 'buy') onClose(); }}>
+      <div className="bs-luck-sheet bs-rain-sheet" role="dialog" aria-modal="true"
+        aria-label={`${row.city} rain`} onClick={(e) => e.stopPropagation()}>
+        <header className="bs-modal-hd">
+          <h2>
+            {row.city.toUpperCase()} ·{' '}
+            <span className={row.decision === 'TRUE' ? 'bs-rain-true' : 'bs-rain-false'}>{row.decision}</span>
+          </h2>
+          <span className={`bs-rain-conf ${row.confidence}`}>{RAIN_CONF[row.confidence] || row.confidence}</span>
+          <button type="button" className="close" disabled={busy === 'buy'} onClick={onClose}>×</button>
+        </header>
+        <p className="bs-luck-note">
+          {row.market_ticker} · settles on CLI{row.station} ({row.icao}) · {row.local_time}
+          {' · '}a trace counts as 0{' · '}
+          <a className="bs-rain-link" href={weatherComUrl(row)} target="_blank" rel="noopener noreferrer">
+            weather.com ↗
+          </a>
+        </p>
+
+        <h4 className="bs-rain-h">Why {row.decision}</h4>
+        <ul className="bs-rain-why">
+          {(row.reasons || []).map((t, i) => <li key={i}>{t}</li>)}
+        </ul>
+
+        <dl className="bs-rain-facts">
+          <dt>Historical context</dt><dd>{row.historical_context || '—'}</dd>
+          <dt>Current dynamics</dt><dd>{row.current_dynamics || '—'}</dd>
+          <dt>Model trend</dt><dd>{row.model_trend || '—'}</dd>
+          <dt>NWS forecast</dt><dd>{row.nws_forecast || '—'}</dd>
+        </dl>
+
+        <div className="bs-luck-legs">
+          <table>
+            <thead>
+              <tr><th>So far</th><th className="num">HRRR</th><th className="num">NAM</th>
+                <th className="num">GFS</th><th className="num">ECMWF</th><th className="num">NWS QPF</th>
+                <th className="num">NWS PoP</th><th className="num">HRRR PoP</th><th className="num">Pressure</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>{row.observed_in ? inch(row.observed_in) : row.observed_trace ? 'trace' : '0.00"'}</td>
+                <td className="num">{inch(row.hrrr_in)}</td>
+                <td className="num">{inch(row.nam_in)}</td>
+                <td className="num">{inch(row.gfs_in)}</td>
+                <td className="num">{inch(row.ecmwf_in)}</td>
+                <td className="num">{inch(row.nws_qpf_in)}</td>
+                <td className="num">{row.nws_max_pop == null ? '—' : `${row.nws_max_pop}%`}</td>
+                <td className="num">{row.hrrr_max_pop == null ? '—' : `${row.hrrr_max_pop}%`}</td>
+                <td className="num">
+                  {row.pressure_hpa ?? '—'}
+                  {row.pressure_tend_hpa != null
+                    ? ` (${row.pressure_tend_hpa > 0 ? '+' : ''}${row.pressure_tend_hpa}/3h)` : ''}
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        {pops.length ? (
+          <div className="bs-rain-pops" title="NWS hourly chance of rain for the rest of today, by local hour">
+            {pops.map(([h, v]) => (
+              <span key={h} title={`${h}:00 · ${v}%`}><i style={{ height: `${Math.max(2, v)}%` }} />{h}</span>
+            ))}
+          </div>
+        ) : null}
+        {row.error ? <p className="bs-luck-err">not read: {row.error}</p> : null}
+
+        {hist && hist.days && hist.days.length ? (
+          <p className="bs-luck-note">
+            Earlier calls: {hist.correct}/{hist.settled} right ·{' '}
+            {hist.days.slice(0, 7).map((d) => (
+              <span key={d.date}
+                className={d.actual == null ? '' : d.actual === d.decision ? 'bs-rain-true' : 'bs-rain-false'}>
+                {d.date.slice(5)} {d.decision[0]}{d.actual ? `→${d.actual[0]}` : '…'}{' '}
+              </span>
+            ))}
+          </p>
+        ) : null}
+
+        <h4 className="bs-rain-h">Trade on Kalshi</h4>
+        <p className="bs-luck-note">
+          {quote ? (
+            <>
+              YES {dollarsC(quote.yes_bid)} bid / {dollarsC(quote.yes_ask)} ask · NO {dollarsC(quote.no_bid)} bid
+              {' / '}{dollarsC(quote.no_ask)} ask · {quote.status}{' '}
+              <button type="button" className="bs-rain-link" onClick={loadQuote}>↻ quote</button>
+            </>
+          ) : (qErr || 'reading the market…')}
+        </p>
+        <div className="bs-luck-actions bs-rain-trade">
+          <div className="bs-rain-sides" role="group" aria-label="side">
+            {['yes', 'no'].map((s) => (
+              <button key={s} type="button" disabled={!!busy || done}
+                className={`bs-btn bs-rain-side ${s} ${side === s ? 'on' : ''}`}
+                onClick={() => { setSide(s); setEdited(false); }}>
+                {s.toUpperCase()} {dollarsC(askOf(s))}
+              </button>
+            ))}
+          </div>
+          <label>
+            Contracts
+            <input className="bs-input" type="number" min="1" max="500" step="1" value={contracts}
+              onChange={(e) => setContracts(e.target.value)} disabled={!!busy || done} />
+          </label>
+          <label>
+            Limit ¢
+            <input className="bs-input" type="number" min="1" max="99" step="1" value={price}
+              onChange={(e) => { setPrice(e.target.value); setEdited(true); }} disabled={!!busy || done} />
+          </label>
+          <button type="button" className="bs-btn live" onClick={buy} disabled={!canBuy}>
+            {busy === 'buy' ? 'BUYING…' : `BUY ${side.toUpperCase()}${cost != null ? ` · $${cost.toFixed(2)}` : ''}`}
+          </button>
+        </div>
+        {!okN ? <p className="bs-luck-err">contracts: a whole number, 1-500</p> : null}
+        {!okP ? <p className="bs-luck-err">limit: a whole number of cents, 1-99</p> : null}
+        {quote && !tradable ? <p className="bs-luck-err">this market is {quote.status} — it cannot be traded</p> : null}
+        {err ? <p className="bs-luck-err">{err}</p> : null}
+        {done ? (
+          <p className="bs-luck-ok">
+            ORDER SENT — {n} {side.toUpperCase()} @ {p}c
+            {order.status ? ` · ${order.status}` : ''}
+            {order.order_id ? ` · ${order.order_id}` : ''}
+          </p>
+        ) : null}
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function CommoditiesStrip({ onSignal }) {
   return (
     <DmiStrip
@@ -1876,6 +2200,7 @@ function Combo15Sheet({ onClose }) {
   const [keep, setKeep] = useState(() => new Set());
   const [stake, setStake] = useState('5');
   const [result, setResult] = useState(null);
+  const [placingS, setPlacingS] = useState(0);     // seconds the job has run
   // One key per confirmation; a fresh build is a fresh confirmation.
   const keyRef = useRef(newConfirmationKey());
   const alive = useRef(true);
@@ -1933,7 +2258,7 @@ function Combo15Sheet({ onClose }) {
       const out = await vidura.combo15Place({
         legs: chosen.map((l) => ({ ticker: l.ticker, side: l.side })),
         stake_usd: Math.round(stakeN * 100) / 100,
-      }, keyRef.current);
+      }, keyRef.current, (s) => { if (alive.current) setPlacingS(s); });
       if (!alive.current) return;
       setResult(out);
       if (!out || !out.placed) setErr((out && out.detail) || 'not placed');
@@ -1975,7 +2300,9 @@ function Combo15Sheet({ onClose }) {
               aria-label="maximum investment in dollars" />
           </label>
           <button type="button" className="bs-btn live" onClick={place} disabled={!canPlace}>
-            {busy === 'place' ? 'PLACING…' : `PLACE COMBO — ${chosen.length} LEGS`}
+            {busy === 'place'
+              ? `PLACING… ${placingS ? `${Math.round(placingS)}s` : ''}`
+              : `PLACE COMBO — ${chosen.length} LEGS`}
           </button>
         </div>
         {!stakeOk ? <p className="bs-luck-err">max investment is above $0 and at most ${maxStake}</p> : null}
@@ -2161,7 +2488,7 @@ function SignalTradeSheet({ row, label, accent, onClose, onPlaced }) {
 
         {!signal ? (
           <p className="bs-luck-err bs-sig-invalid">
-            NOT a valid signal — 1m and 2m disagree (mixed), so there is no direction to trade.
+            NOT a valid signal — 2m, 5m and 15m do not all agree (mixed), so there is no direction to trade.
           </p>
         ) : null}
 
@@ -3558,8 +3885,137 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
 }
 
 // ── the world ──────────────────────────────────────────────────────────────
+// ── compact station: phones, LITE mode, or by choice ────────────────────────
+// One column, in the order the operator asked for and nothing else:
+//   PV (cash · positions) → Crypto DMI → Luck Parley → Rain Today → Bot cores
+// Every section is the desktop's own component, whole, so a strip, a sheet or
+// a trade behaves exactly as it does on the big board; only the frame around
+// them changes. "Desktop version" switches to the full board and the choice
+// sticks per browser (VIEW_KEY), as does "compact view" from the desktop.
+const VIEW_KEY = 'vidura.botstation.view';     // 'compact' | 'desktop' | absent
+
+function readViewPref() {
+  try {
+    const v = localStorage.getItem(VIEW_KEY);
+    return v === 'compact' || v === 'desktop' ? v : null;
+  } catch { return null; }
+}
+
+function useNarrow(query = '(max-width: 760px)') {
+  const get = () => (typeof window !== 'undefined' && window.matchMedia
+    ? window.matchMedia(query).matches : false);
+  const [narrow, setNarrow] = useState(get);
+  useEffect(() => {
+    if (!window.matchMedia) return undefined;
+    const mq = window.matchMedia(query);
+    const on = () => setNarrow(mq.matches);
+    on();
+    mq.addEventListener ? mq.addEventListener('change', on) : mq.addListener(on);
+    return () => (mq.removeEventListener ? mq.removeEventListener('change', on) : mq.removeListener(on));
+  }, [query]);
+  return narrow;
+}
+
+function CompactCrypto() {
+  const [open, setOpen] = useState(null);           // { row, label, accent }
+  const [combo, setCombo] = useState(false);
+  const onSignal = useCallback((row, label, accent) => setOpen({ row, label, accent }), []);
+  const onCombo = useCallback(() => setCombo(true), []);
+  return (
+    <>
+      <CryptoStrip onSignal={onSignal} onCombo={onCombo} />
+      {open && <SignalTradeSheet {...open} onClose={() => setOpen(null)} onPlaced={() => {}} />}
+      {combo && <Combo15Sheet onClose={() => setCombo(false)} />}
+    </>
+  );
+}
+
+function CompactStation({ user, pv, pvTotal, botStates, clock, anyLive, runningCount,
+  onCore, onDesktop }) {
+  const status = anyLive ? 'LIVE' : runningCount ? 'PAPER OPS' : 'IDLE';
+  return (
+    <main className="bsc" aria-label="Bot Station, compact">
+      <section className="bsc-pv" aria-label="portfolio value">
+        <div className="bsc-pv-top">
+          <span className="bsc-eyebrow">Portfolio value</span>
+          <span className="bsc-clock">{clock.toLocaleTimeString('en-US', {
+            timeZone: 'America/Chicago', hour: 'numeric', minute: '2-digit' })} CST</span>
+          <span className={`bsc-status ${anyLive ? 'live' : runningCount ? 'paper' : 'idle'}`}>
+            <i aria-hidden="true" />{status}
+          </span>
+        </div>
+        <div className="bsc-pv-value">{pvTotal !== null ? usd(pvTotal) : '—'}</div>
+        <dl className="bsc-pv-split">
+          <div><dt>Cash</dt><dd>{pv ? usd(pv.cash_usd) : '—'}</dd></div>
+          <div><dt>Positions</dt><dd>{pv ? usd(pv.positions_usd) : '—'}</dd></div>
+        </dl>
+      </section>
+
+      <section className="bsc-sec" aria-label="crypto DMI">
+        <CompactCrypto />
+      </section>
+
+      <section className="bsc-sec" aria-label="luck parley">
+        <LuckPanel />
+      </section>
+
+      <section className="bsc-sec" aria-label="rain today">
+        <RainPanel />
+      </section>
+
+      <section className="bsc-sec bsc-cores" aria-label="bot cores">
+        <header className="bsc-sechd">
+          <h2>Helios · Bot cores</h2>
+          <span>{runningCount}/{botStates.length} running</span>
+        </header>
+        <ul>
+          {botStates.map((b) => (
+            <li key={b.key}>
+              <button type="button" className="bsc-core" onClick={() => onCore(b.key)}
+                disabled={!user} aria-label={`${b.label} ${b.status} — open its console`}>
+                <span className={`bsc-core-dot bs-dot-${b.status}`} aria-hidden="true" />
+                <span className="bsc-core-name">
+                  <b style={{ color: b.accent }}>{b.label}</b>
+                  <small>{b.sub}</small>
+                </span>
+                <span className="bsc-core-st">
+                  <span className={`bs-st-${b.status}`}>{b.status}</span>
+                  {b.pct !== null && b.pct !== undefined && (
+                    <small className={b.pct >= 0 ? 'up' : 'down'}>
+                      {b.pct >= 0 ? '+' : ''}{Number(b.pct).toFixed(2)}%
+                    </small>
+                  )}
+                  {(b.status === 'LIVE' || b.status === 'PAPER') && b.startedAt && (
+                    <small>⏱ {fmtElapsed(b.startedAt, clock.getTime())}</small>
+                  )}
+                </span>
+                <span className="bsc-chev" aria-hidden="true">›</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <button type="button" className="bsc-switch" onClick={onDesktop}>
+        Desktop version
+      </button>
+    </main>
+  );
+}
+
 export default function BotStationSite() {
   const [user, setUser] = useState(null);
+  // Compact on a phone or in LITE mode, unless "Desktop version" was chosen
+  // in this browser -- and on any screen once "compact view" was.
+  const { lite } = useExperience();
+  const narrow = useNarrow();
+  const [viewPref, setViewPref] = useState(readViewPref);
+  const compact = viewPref === 'compact' || (viewPref !== 'desktop' && (lite || narrow));
+  const chooseView = useCallback((v) => {
+    setViewPref(v);
+    try { localStorage.setItem(VIEW_KEY, v); } catch { /* this load only */ }
+    window.scrollTo(0, 0);
+  }, []);
   const [userErr, setUserErr] = useState(false);
   const [statuses, setStatuses] = useState({});   // key -> BotStatusOut
   const [pv, setPv] = useState(null);
@@ -3710,11 +4166,11 @@ export default function BotStationSite() {
     }
   }, [user, feedSync.busy, loadFeed]);
 
-  const loadHist = useCallback(async () => {
+  const loadHist = useCallback(async (fresh = false) => {
     if (!user) return;
     setHistBusy(true);
     try {
-      const out = await vidura.tradeHistory();
+      const out = await vidura.tradeHistory(fresh === true);
       setHist(out);
       setHistErr(out && out.available === false ? (out.detail || 'unavailable') : '');
     } catch (e) {
@@ -3735,6 +4191,15 @@ export default function BotStationSite() {
     if (!user) return undefined;
     vidura.bots().then(setBots).catch(() => {});
     loadStatuses();
+    if (compact) {
+      // The compact board shows the cores and PV and nothing of the feeds:
+      // it asks for those two only (PV without its daily history).
+      const pvOnly = () => vidura.portfolio(user.user_id).then(setPv).catch(() => {});
+      pvOnly();
+      const c1 = setInterval(() => { if (!document.hidden) loadStatuses(); }, 10_000);
+      const c2 = setInterval(() => { if (!document.hidden) pvOnly(); }, 60_000);
+      return () => { clearInterval(c1); clearInterval(c2); };
+    }
     loadFeed();
     loadPv();
     loadHist();
@@ -3749,7 +4214,7 @@ export default function BotStationSite() {
     return () => {
       clearInterval(t1); clearInterval(t2); clearInterval(t3); clearInterval(t4);
     };
-  }, [user, loadStatuses, loadFeed, loadPv, loadHist]);
+  }, [user, compact, loadStatuses, loadFeed, loadPv, loadHist]);
 
   useEffect(() => {
     const t = setInterval(() => setClock(new Date()), 1000);
@@ -3938,7 +4403,17 @@ export default function BotStationSite() {
             {user ? user.username.charAt(0).toUpperCase() + user.username.slice(1) : 'NO OPERATOR'}
           </span>
         )} />
-      <div className="bs-content">
+      <div className={`bs-content ${compact ? 'bs-content--compact' : ''}`}>
+        {compact ? (
+          <CompactStation user={user} pv={pv} pvTotal={pvTotal} botStates={botStates}
+            clock={clock} anyLive={anyLive} runningCount={runningCount}
+            onCore={setConsole} onDesktop={() => chooseView('desktop')} />
+        ) : (
+        <>
+        <button type="button" className="bs-viewswitch" onClick={() => chooseView('compact')}
+          title="one column: PV, Crypto DMI, Luck Parley, Rain Today and the bot cores">
+          Compact view
+        </button>
 
         {/* status strip */}
         <div className="bs-bar">
@@ -4111,13 +4586,18 @@ export default function BotStationSite() {
 
           {/* right: what the account did, then what the bots did */}
           <div className="bs-col">
-            {/* FIRST on this column. The ACCOUNT's record, not the bots' --
+            {/* The two docks lead the column: each is a title bar until
+                opened, so they cost two lines above the trade log. */}
+            <LuckPanel />
+            <RainPanel />
+
+            {/* NEXT on this column. The ACCOUNT's record, not the bots' --
                 the ledger feed still loads (the per-bot 7d record is computed
                 from it), but a row a bot wrote at entry cannot know how the
                 market resolved, and where the two disagree this is the one
                 that is right. It leads because it is the money. */}
             <TradeHistoryPanel data={hist} busy={histBusy} error={histErr}
-              onRefresh={loadHist} disabled={!user}
+              onRefresh={() => loadHist(true)} disabled={!user}
               ledgerSync={feedSync} onLedgerSync={syncFeed} />
 
             <div className="bs-panel">
@@ -4161,7 +4641,6 @@ export default function BotStationSite() {
               </div>
             </div>
 
-            <LuckPanel />
 
           </div>
         </div>
@@ -4217,6 +4696,8 @@ export default function BotStationSite() {
             ))}
           </div>
         </div>
+        </>
+        )}
 
         {logsFor && user && (
           <BotLogsOverlay botKey={logsFor} user={user} onClose={() => setLogsFor(null)} />

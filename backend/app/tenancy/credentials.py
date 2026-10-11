@@ -29,6 +29,10 @@ class VenueCredential:
     label: str = "default"
     # Kalshi signs requests with a private key rather than a bearer token.
     private_key_pem: str | None = field(default=None, repr=False)
+    # The SIP (SIM) venue: the operator whose simulated account this
+    # credential trades (execution.sim). The token is the real one, used only
+    # for market data; orders never leave this server.
+    sim_account: str | None = None
 
     # ---- printing: the part that stops the accidental leak ----------------
 

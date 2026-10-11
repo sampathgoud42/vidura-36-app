@@ -92,8 +92,8 @@ def quota_state(db: Session) -> dict:
         "used_by_api": used,
         "cap": cap,
         "remaining": max(0, cap - used),
-        "plan_note": "flashAlpha FREE = 5 requests/day; this API is the only fetcher "
-        "(the 09:00 CST Windows task was replaced by the in-process daily loop)",
+        "plan_note": "flashAlpha FREE = 5 requests/day: SPY at 08:45 and 11:19 CT "
+        "on a schedule, the rest on demand",
     }
 
 
@@ -108,7 +108,21 @@ def latest_gex_date(db: Session) -> str | None:
     return row.snapshot_date if row else None
 
 
-def _record_calls(db: Session, n: int, tickers: list[str]) -> None:
+def _calls_today(db: Session) -> list[dict]:
+    row = db.scalar(
+        select(DailySnapshot).where(
+            DailySnapshot.kind == QUOTA_KIND, DailySnapshot.snapshot_date == _today_cst()
+        )
+    )
+    return list(((row.payload or {}) if row else {}).get("calls") or [])
+
+
+def slots_taken(db: Session) -> set[str]:
+    """Today's scheduled SPY reads already spent ("08:45", "11:19")."""
+    return {c["slot"] for c in _calls_today(db) if c.get("slot")}
+
+
+def _record_calls(db: Session, n: int, tickers: list[str], slot: str | None = None) -> None:
     day = _today_cst()
     row = db.scalar(
         select(DailySnapshot).where(
@@ -121,7 +135,8 @@ def _record_calls(db: Session, n: int, tickers: list[str]) -> None:
             DailySnapshot(
                 kind=QUOTA_KIND,
                 snapshot_date=day,
-                payload={"count": n, "calls": [{"at": stamp, "tickers": tickers}]},
+                payload={"count": n, "calls": [{"at": stamp, "tickers": tickers,
+                                                 **({"slot": slot} if slot else {})}]},
                 source_file="api:refreshGex",
             )
         )
@@ -129,7 +144,7 @@ def _record_calls(db: Session, n: int, tickers: list[str]) -> None:
         payload = dict(row.payload or {})
         payload["count"] = int(payload.get("count", 0)) + n
         calls = list(payload.get("calls") or [])
-        calls.append({"at": stamp, "tickers": tickers})
+        calls.append({"at": stamp, "tickers": tickers, **({"slot": slot} if slot else {})})
         payload["calls"] = calls[-50:]
         row.payload = payload
         row.fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
@@ -191,7 +206,8 @@ def _macro(p: dict) -> dict | None:
 
 # --- the job ---------------------------------------------------------------
 
-def refresh(db: Session, tickers: list[str] | None = None, *, persist: bool = True) -> dict:
+def refresh(db: Session, tickers: list[str] | None = None, *, persist: bool = True,
+            slot: str | None = None) -> dict:
     """Live-fetch GEX for *tickers* (default spy,qqq), quota-guarded.
 
     Returns {gex, calls_made, quota, errors}. Never raises for a per-ticker
@@ -209,12 +225,20 @@ def refresh(db: Session, tickers: list[str] | None = None, *, persist: bool = Tr
         raise GexError("no tickers requested")
 
     quota = quota_state(db)
-    if len(tickers) > quota["remaining"]:
+    # An on-demand call must leave today's scheduled SPY reads (08:45, 11:19
+    # CT, gex0dte.SLOTS) their calls; a scheduled read needs only its own.
+    reserve = 0
+    if slot is None:
+        from app.services import gex0dte
+
+        reserve = len(gex0dte.pending_slots(taken=slots_taken(db)))
+    if len(tickers) + reserve > quota["remaining"]:
+        held = f", and {reserve} held for today's scheduled reads" if reserve else ""
         raise QuotaExhausted(
             f"needs {len(tickers)} request(s) but only {quota['remaining']} of the "
-            f"{quota['cap']} daily API calls remain (flashAlpha FREE = 5/day and the "
-            "09:00 CST job spends 2). Use the free ↻ reload, or raise "
-            "TBOT_FLASHALPHA_DAILY_CAP if you know the budget allows it."
+            f"{quota['cap']} daily flashAlpha calls remain{held} (FREE = 5/day: "
+            "08:45 and 11:19 CT scheduled, the rest on demand). It resets at "
+            "midnight CT."
         )
 
     key = api_key()
@@ -232,11 +256,13 @@ def refresh(db: Session, tickers: list[str] | None = None, *, persist: bool = Tr
 
     archive_dir = settings.super_dir / "gex"
     errors: dict[str, str] = {}
+    raw: dict[str, dict] = {}
     calls = 0
     for t in tickers:
         try:
             payload = fetch_summary(t, key)
             calls += 1
+            raw[t] = payload
             day = (payload.get("as_of") or out["fetched_at"])[:10]
             out["tickers"][t.upper()] = extract(payload)
             macro = _macro(payload)
@@ -267,7 +293,7 @@ def refresh(db: Session, tickers: list[str] | None = None, *, persist: bool = Tr
 
     out["stale"] = bool(errors)
     if calls:
-        _record_calls(db, calls, tickers)
+        _record_calls(db, calls, tickers, slot)
 
     if persist:
         # the DB snapshot is what /super/gex and the desk banner serve
@@ -292,6 +318,7 @@ def refresh(db: Session, tickers: list[str] | None = None, *, persist: bool = Tr
         "gex": out,
         "calls_made": calls,
         "errors": errors,
+        "raw": raw,
         "quota": quota_state(db),
     }
 

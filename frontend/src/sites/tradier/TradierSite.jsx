@@ -4,9 +4,11 @@ import { ApiError, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
 import SiteFooter from '../../shared/SiteFooter.jsx';
 import SuperSignals, { BestPair } from '../../shared/SuperSignals.jsx';
+import NewsEvents from '../../shared/NewsEvents.jsx';
 import BestBetsLink from '../../shared/BestBets.jsx';
 import WorldHeader from '../../shared/WorldHeader.jsx';
 import { confirmDialog } from '../../shared/Dialog.jsx';
+import SimHoldings from '../../shared/SimHoldings.jsx';
 import { deskDateTime, deskStamp, deskTime, wallClock, wallToDesk } from '../../shared/cst.js';
 import { useExperience } from '../../shared/experience.js';
 import '../../shared/worldHeader.css';
@@ -166,7 +168,11 @@ const STATUS_FILTERS = [
   ['sl_sold', 'SL STOPS'], ['closed', 'CLOSED'],
 ];
 
-const VENUE_FILTERS = [['all', 'ALL'], ['sandbox', 'SANDBOX'], ['live', 'LIVE']];
+const VENUE_FILTERS = [['all', 'ALL'], ['sandbox', 'PAPER'], ['live', 'LIVE']];
+// A position's venue as the server names it: live, Tradier's sandbox, or the
+// SIP (SIM) simulator.
+const VENUE_TAG = { live: ['live', 'LIVE'], sandbox: ['sbx', 'SANDBOX'], sim: ['sbx', 'SIM'] };
+const venueTag = (p) => VENUE_TAG[p.venue] || VENUE_TAG.sandbox;
 
 // chart granularity — a display preference, so unlike the LIVE venue it is
 // safe to remember across reloads
@@ -1339,10 +1345,13 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
   const named = !!open?.occ_symbol;
   const [side, setSide] = useState(open?.side === 'put' ? 'put' : 'call');
   const [zeroDte, setZeroDte] = useState(false);
+  const [nearExpiry, setNearExpiry] = useState(true);
   const [manualSym, setManualSym] = useState('');
   // SMART first: it is what every buy was before there was a choice.
   const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
+  // How the strike is chosen: the delta band, or open interest (STRIKE_PICKS).
+  const [pick, setPick] = useState('delta');
   const [midDayWarn, setMidDayWarn] = useState(false);
   useEffect(() => {
     setSide(open?.side === 'put' ? 'put' : 'call');
@@ -1375,8 +1384,10 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
     occ_symbol: open.occ_symbol,
     side,
     zero_dte: zeroDte,
+    near_expiry: zeroDte || nearExpiry,
     order_type: otype,
     discount_pct: otype === 'limit' ? discount : 0,
+    pick,
     ...desk,
   });
 
@@ -1431,10 +1442,29 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
                 + 'Contracts are indivisible, so Buy % is a target: at 50% of $100 '
                 + 'with ±25% the window is $37.50–$62.50. 0 makes it a hard cap.'} /></div>
           {!named && (
+            <div><span className="tr-label">Strike pick</span>
+              <div className="tr-pick-toggle" role="group" aria-label="strike pick">
+                {STRIKE_PICKS.map(([id, text]) => (
+                  <button key={id} type="button" aria-pressed={pick === id}
+                    className={`tr-chip ${pick === id ? 'on' : ''}`}
+                    onClick={() => { onErr?.(null); setPick(id); }}>{text}</button>
+                ))}
+              </div>
+              {pick === 'open_interest' && (
+                <span className="tr-note tr-pick-note">
+                  best open interest + volume + tight quote, $0.20 min, {side === 'put' ? 'below' : 'above'} the price, on the{' '}
+                  {!zeroDte && !nearExpiry ? 'first expiry 7+ days out' : 'nearest expiry'}{' '}
+                  — the next one if refused, up to 6
+                </span>
+              )}</div>
+          )}
+          {!named && (
             <div><span className="tr-label">Delta range</span>
               <input className="tr-input" value={desk.delta} placeholder="0.25-0.45"
                 onChange={set('delta')}
-                title={'Typed as a magnitude and searched signed — a CALL runs 0..+1 '
+                disabled={pick === 'open_interest'}
+                style={pick === 'open_interest' ? { opacity: 0.45 } : undefined}
+                title={pick === 'open_interest' ? 'not used: the strike is picked by open interest' : 'Typed as a magnitude and searched signed — a CALL runs 0..+1 '
                   + `and a PUT runs 0..-1, so this ${side.toUpperCase()} searches `
                   + `${signedBandLabel(side, desk.delta)}.`} /></div>
           )}
@@ -1498,6 +1528,9 @@ function BuyTicket({ open, desk, onDesk, live, bal, busy, err, onErr, onPlace, o
                 : 'same-day expiries skipped — the nearest expiry after today'}>
               0DTE {zeroDte ? 'ON' : 'OFF'}
             </button>
+          )}
+          {!named && (
+            <NearExpiryChip zeroDte={zeroDte} value={nearExpiry} onChange={setNearExpiry} />
           )}
           <span className="tr-note">
             {named
@@ -2500,7 +2533,32 @@ function TargetCell({ pos, busy, onSave }) {
 // Exported with the rest, so another board arms the auto-trader through
 // the SAME form and the same knobs rather than a second one that drifts.
 const AUTO_DISCOUNT_OPTIONS = [10, 20, 40];
-const STRATEGY_LABELS = { super_signals: 'super signals', best_pairs: 'best pairs' };
+const STRATEGY_LABELS = {
+  super_signals: 'super signals', best_pairs: 'best pairs', best_picks: 'best picks today',
+  star_signals: 'star signals', superhot_dmi: 'super hot DMI',
+};
+// How a strike is chosen, everywhere a contract is picked: the delta band, or
+// the nearest expiry's most-held out-of-the-money strike (the next most-held
+// when that order is refused, up to six).
+export const STRIKE_PICKS = [['delta', 'DELTA'], ['open_interest', 'OI + VOL']];
+
+/* Near Expiry: only when 0DTE is off. ON buys the nearest expiry after today;
+   OFF buys the first one 7+ days out, and that position is held over the
+   close and recorded as rolled over. Every buy form shows this same chip. */
+export function NearExpiryChip({ zeroDte, value, onChange, className = 'tr-chip tr-0dte' }) {
+  const off = !!zeroDte;
+  return (
+    <button type="button" className={`${className} ${!off && value ? 'on' : ''}`}
+      aria-pressed={!off && value} disabled={off}
+      style={off ? { opacity: 0.4 } : undefined}
+      onClick={() => onChange(!value)}
+      title={off ? 'with 0DTE on, today’s expiry is the nearest — turn 0DTE off to choose'
+        : value ? 'the nearest expiry after today'
+          : 'the first expiry 7+ days out — held over the close, recorded as rolled over'}>
+      NEAR EXP {off ? '—' : value ? 'ON' : 'OFF · 7+ DAYS'}
+    </button>
+  );
+}
 const SIGNALS_SHOWN = 8;
 
 const signedR = (r) => (r == null ? '—' : `${r > 0 ? '+' : r < 0 ? '−' : ''}${Math.abs(r).toFixed(2)}R`);
@@ -2762,9 +2820,13 @@ export function deskOwnerNote(owner) {
     : `${owner.describe} holds the signal desk`;
 }
 
-export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, deskOwner }) {
+export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, deskOwner,
+  armed = [] }) {
+  // Strategies already running cannot be armed twice; open on the first free one.
+  const firstFree = (defaults?.strategies || []).find((s) => !armed.includes(s));
   const [f, setF] = useState({
-    strategy: defaults?.strategy || '10min_intraday_move',
+    strategy: (!armed.includes(defaults?.strategy) && defaults?.strategy)
+      || firstFree || '10min_intraday_move',
     tickers: defaults?.tickers || 'SPY,QQQ,SPX',
     window_open: defaults?.window_open || '08:30',
     window_close: defaults?.window_close || '09:30',
@@ -2785,13 +2847,30 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
   const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
   const [zeroDte, setZeroDte] = useState(true);
+  const [nearExpiry, setNearExpiry] = useState(true);
+  // How strikes are picked: the delta band, or open interest (STRIKE_PICKS).
+  const [pick, setPick] = useState('delta');
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
   const isHot = f.strategy === 'hot_tickers';
   const isSuperHot = f.strategy === 'super_hot_tickers';
   const isAutoScan = isHot || isSuperHot;
   const isSuper = f.strategy === 'super_signals';
   const isPairs = f.strategy === 'best_pairs';
-  const onDesk = isSuper || isPairs;        // trades the signal desk's live signals
+  // best picks today: any ticker's live signal with ⭐⭐⭐ and 👍 -- what the vidura channel posts
+  const isBestPicks = f.strategy === 'best_picks';
+  // star signals: any ticker's live signal with any star (⭐, ⭐⭐ or ⭐⭐⭐)
+  const isStars = f.strategy === 'star_signals';
+  // both pick by the channel's marks, on any ticker, with the same knobs
+  const isPicks = isBestPicks || isStars;
+  // super hot DMI: any ticker that joins the SUPERHOT list, CALL for UP / PUT for DOWN
+  const isShDmi = f.strategy === 'superhot_dmi';
+  const starPick = f.stars || [2, 3];             // star signals: 2 and 3 unless changed
+  const onDesk = isSuper || isPairs || isPicks;   // trades the signal desk's live signals
+  // the signal strategies buy at the desk's smart limit -- all but the two
+  // mark strategies, which offer every order type the BUY ticket has
+  const smartOnly = onDesk && !isPicks;
+  // the strategies that take any ticker: what picks them is not the form
+  const anyTicker = isPicks || isShDmi;
   // the server refuses a second trader on the signal desk; say so before it has to
   const deskTaken = onDesk && !!deskOwner;
   const confirmS = defaults?.confirm_s ?? 300;
@@ -2807,7 +2886,19 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
     }
     // Each strategy opens on its own window: the level cross is an opening-
     // range play, the desk's signals fire all session.
-    if (onDesk) {
+    if (isPicks) {
+      // best picks and star signals: their own window, the strike by open interest, and same-day
+      // contracts off -- each changeable before arming.
+      setF((p) => ({ ...p,
+        window_open: defaults?.picks_window_open || '09:15',
+        window_close: defaults?.picks_window_close || '13:15' }));
+      setPick('open_interest');
+      setZeroDte(false);
+    } else if (isShDmi) {
+      setF((p) => ({ ...p,
+        window_open: defaults?.super_window_open || '08:30',
+        window_close: defaults?.super_window_close || '14:30' }));
+    } else if (onDesk) {
       setF((p) => ({ ...p,
         tickers: p.tickers && !p.tickers.startsWith('(') ? p.tickers : (defaults?.tickers || 'SPY,QQQ,SPX'),
         window_open: defaults?.super_window_open || '08:30',
@@ -2829,10 +2920,12 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
     <div className="tr-modal-backdrop" onClick={onClose} role="dialog" aria-modal="true"
       aria-label="arm auto-trade">
       <div className="tr-modal tr-panel" onClick={(e) => e.stopPropagation()}>
-        <span className="tr-eyebrow mb-3" style={{ display: 'block' }}>arm auto trade</span>
+        <span className="tr-eyebrow mb-3" style={{ display: 'block' }}>
+          {armed.length ? `arm another strategy · ${armed.length} running` : 'arm auto trade'}
+        </span>
         {deskOwner && (
           <p className="tr-deskowner" role="status">
-            🤖 {deskOwnerNote(deskOwner)}. While it runs, super signals and best pairs cannot
+            🤖 {deskOwnerNote(deskOwner)}. While it runs, the signal-desk strategies (super signals, best pairs, best picks, star signals) cannot
             be armed here &mdash; one trader per signal desk, so no signal is bought twice. The
             level-cross strategy is unaffected. Stop the bot (Ctrl-C in its window) to arm here.
           </p>
@@ -2841,15 +2934,21 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           <div><span className="tr-label">Strategy</span>
             <select className="tr-select" value={f.strategy} onChange={set('strategy')}>
               {(defaults?.strategies || [f.strategy]).map((s) => (
-                <option key={s} value={s}>{STRATEGY_LABELS[s] || s}</option>
+                <option key={s} value={s} disabled={armed.includes(s)}>
+                  {STRATEGY_LABELS[s] || s}{armed.includes(s) ? ' — armed' : ''}
+                </option>
               ))}
             </select></div>
           <div><span className="tr-label">Tickers</span>
             <input className="tr-input"
               value={isHot ? '(auto from HOT scan)' : isSuperHot ? '(auto from SUPERHOT scan)'
-                : isPairs ? '(each pair’s own ticker)' : f.tickers}
+                : isPairs ? '(each pair’s own ticker)'
+                : isBestPicks ? '(any ticker with ⭐⭐⭐ and 👍)'
+                : isStars ? '(any ticker with ⭐, ⭐⭐ or ⭐⭐⭐)'
+                : isShDmi ? '(any ticker joining SUPERHOT)' : f.tickers}
               onChange={set('tickers')} placeholder="SPY,QQQ,SPX"
-              disabled={isAutoScan || isPairs} style={isAutoScan || isPairs ? { opacity: 0.45 } : undefined}
+              disabled={isAutoScan || isPairs || anyTicker}
+              style={isAutoScan || isPairs || anyTicker ? { opacity: 0.45 } : undefined}
               title={isHot ? 'HOT tickers strategy auto-picks from 5min+15min scan intersection'
                 : isSuperHot ? 'SUPERHOT strategy auto-picks top N from the superhot scan'
                 : isPairs ? 'a best pair is a signal type on one ticker, so the pairs name the tickers'
@@ -2875,10 +2974,48 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
           {isPairs && (
             <PairPicker value={f.pairs} onChange={(v) => setF((p) => ({ ...p, pairs: v }))} />
           )}
+          {isStars && (
+            <div><span className="tr-label">Stars</span>
+              <div className="tr-pick-toggle" role="group" aria-label="star counts to trade">
+                {[1, 2, 3].map((n) => {
+                  const on = starPick.includes(n);
+                  return (
+                    <button key={n} type="button" aria-pressed={on}
+                      className={`tr-chip ${on ? 'on' : ''}`}
+                      title={`${on ? 'stop trading' : 'trade'} ${n}-star signals`}
+                      onClick={() => setF((p) => {
+                        const was = p.stars || [2, 3];
+                        const next = was.includes(n) ? was.filter((x) => x !== n) : [...was, n].sort();
+                        return { ...p, stars: next };
+                      })}>{'⭐'.repeat(n)}</button>
+                  );
+                })}
+              </div>
+              <span className="tr-note tr-pick-note">
+                {starPick.length ? `trades ${starPick.map((n) => '⭐'.repeat(n)).join(' / ')} signals`
+                  : 'pick at least one'}
+              </span></div>
+          )}
+          <div><span className="tr-label">Strike pick</span>
+            <div className="tr-pick-toggle" role="group" aria-label="strike pick">
+              {STRIKE_PICKS.map(([id, text]) => (
+                <button key={id} type="button" aria-pressed={pick === id}
+                  className={`tr-chip ${pick === id ? 'on' : ''}`}
+                  onClick={() => setPick(id)}>{text}</button>
+              ))}
+            </div>
+            <span className="tr-note tr-pick-note">
+              {pick === 'open_interest'
+                ? `best open interest + volume + tight quote, $0.20 minimum, out of the money (CALL above / PUT below the price), on the ${!zeroDte && !nearExpiry ? 'first expiry 7+ days out' : 'nearest expiry'} — the next one if refused, up to 6`
+                : 'the contract closest to the middle of the delta band'}
+            </span></div>
           <div><span className="tr-label">Delta range</span>
             <input className="tr-input" value={f.delta}
               onChange={set('delta')} placeholder="0.12-0.30"
-              title="delta band for contract selection, e.g. 0.12-0.30" /></div>
+              disabled={pick === 'open_interest'}
+              style={pick === 'open_interest' ? { opacity: 0.45 } : undefined}
+              title={pick === 'open_interest' ? 'not used: the strike is picked by open interest'
+                : 'delta band for contract selection, e.g. 0.12-0.30'} /></div>
           <div><span className="tr-label">Buy % of balance</span>
             <input className="tr-input" type="number" min="1" max="100" value={f.buy_pct}
               onWheel={(e) => e.currentTarget.blur()} onChange={set('buy_pct')}
@@ -2897,7 +3034,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
             <input className="tr-input" type="number" min="1" max="1000" value={f.min_contracts}
               onWheel={(e) => e.currentTarget.blur()} onChange={set('min_contracts')}
               title="the Buy % sizing must reach this many contracts, or the trade is skipped" /></div>
-          {onDesk ? (
+          {smartOnly ? (
             // The watcher buys through the desk's own BUY, which bids a smart
             // limit; a MKT / discount toggle here would promise what it ignores.
             <div><span className="tr-label">Order type</span>
@@ -2940,10 +3077,63 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
                   : "same-day expiries skipped — the nearest expiry after today"}>
               0DTE {zeroDte ? 'ON' : 'OFF'}
             </button>
+            <NearExpiryChip zeroDte={zeroDte} value={nearExpiry} onChange={setNearExpiry} />
+            {!zeroDte && !nearExpiry && (
+              <span className="tr-note tr-pick-note">
+                7+ day expiry — positions with no TP or SL hit by the close are held over and
+                recorded as rolled over
+              </span>
+            )}
           </div>
         </div>
         <p className="tr-note mt-3">
-          {isPairs ? (
+          {isShDmi ? (
+            <>
+              Super hot DMI: watches the HOT board&rsquo;s SUPERHOT list, and any ticker that joins
+              it buys a CALL for DMI UP and a PUT for DMI DOWN &mdash; each ticker once per side per
+              day, as the SUPERHOT alert posts it; the names already on the list when it arms are
+              left alone. Only inside {f.window_open}–{f.window_close} CST, and at most one entry per
+              ticker per {defaults?.super_cooldown_min ?? 60} min. The list is re-read every minute
+              and rescanned every five.{' '}
+              {pick === 'open_interest'
+                ? `The strike is the ${!zeroDte && !nearExpiry ? 'first 7+ day expiry’s' : 'nearest expiry’s'} best-filling out-of-the-money one (open interest, volume, tight quote, at least $0.20), whatever its delta; when that order is refused the next best is tried, up to 6.`
+                : `The strike is picked by delta ${f.delta}.`}{' '}
+              {zeroDte
+                ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
+                : nearExpiry ? 'The nearest expiry after today.' : 'The first expiry 7+ days out, held over the close.'}{' '}
+              Bought {orderTag(otype, discount)}, sized by Buy % (TP {f.tp_pct}% / SL {f.sl_pct}%).
+              Disarms itself at the 15:00 close.
+            </>
+          ) : isPicks ? (
+            <>
+              {isStars ? (
+                <>
+                  Star signals: watches the signal desk live, and any ticker&rsquo;s new signal
+                  carrying {starPick.map((n) => '⭐'.repeat(n)).join(' or ') || 'a picked star count'}
+                  {' '}&mdash; the same stars the Super Signals panel and the Telegram feeds show &mdash;
+                  buys a CALL for a LONG and a PUT for a SHORT. Only signals{' '}
+                </>
+              ) : (
+                <>
+                  Best picks today: watches the signal desk live, and any ticker&rsquo;s new signal
+                  marked both ⭐⭐⭐ (its pair won over 66% across the last 7 sessions and its signal
+                  type&rsquo;s 30-session edge is above 59) and 👍 (one of the report&rsquo;s best pairs) &mdash;
+                  exactly what the @vidura38 channel posts &mdash; buys a CALL for a LONG and a PUT for a SHORT. Only signals{' '}
+                </>
+              )}
+              fired live inside {f.window_open}–{f.window_close} CST, at most{' '}
+              {defaults?.super_max_age_min ?? 6} min old and still open, and at most one entry per
+              ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}
+              {pick === 'open_interest'
+                ? `The strike is the ${!zeroDte && !nearExpiry ? 'first 7+ day expiry’s' : 'nearest expiry’s'} best-filling out-of-the-money one (open interest, volume, tight quote, at least $0.20), whatever its delta; when that order is refused the next best is tried, up to 6 — then the error shows here and the next signal is taken.`
+                : `The strike is picked by delta ${f.delta}.`}{' '}
+              {zeroDte
+                ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
+                : nearExpiry ? 'The nearest expiry after today.' : 'The first expiry 7+ days out, held over the close.'}{' '}
+              Bought {orderTag(otype, discount)}, sized by Buy % (TP {f.tp_pct}% / SL {f.sl_pct}%).
+              Disarms itself at the 15:00 close.
+            </>
+          ) : isPairs ? (
             <>
               Watches the signal desk live: a new signal that is one of the picked best pairs —
               that signal type on that ticker — buys a CALL for a LONG and a PUT for a SHORT. Only
@@ -2952,7 +3142,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}
               {zeroDte
                 ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
-                : 'The nearest expiry after today.'}{' '}
+                : nearExpiry ? 'The nearest expiry after today.' : 'The first expiry 7+ days out, held over the close.'}{' '}
               Sized by Buy % through the desk&rsquo;s own BUY (delta {f.delta}, TP {f.tp_pct}% / SL{' '}
               {f.sl_pct}%); below min contracts the trade is skipped. Disarms itself at the 15:00
               close — today&rsquo;s report re-ranks the pairs.
@@ -2966,7 +3156,7 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               ticker per {defaults?.super_cooldown_min ?? 60} min.{' '}
               {zeroDte
                 ? `Same-day contracts until ${defaults?.zero_dte_cutoff || '11:50'} CST, then the next expiry.`
-                : 'The nearest expiry after today.'}{' '}
+                : nearExpiry ? 'The nearest expiry after today.' : 'The first expiry 7+ days out, held over the close.'}{' '}
               Sized by Buy % through the desk&rsquo;s own BUY (delta {f.delta}, TP {f.tp_pct}% / SL{' '}
               {f.sl_pct}%); below min contracts the trade is skipped. Disarms itself at the 15:00
               close — the list is today&rsquo;s.
@@ -3005,11 +3195,14 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <button type="button" className="tr-btn sm auto"
-            disabled={busy || deskTaken || (isSuper && f.signals.length === 0)
-              || (isPairs && f.pairs.length === 0)}
+            disabled={busy || deskTaken || armed.includes(f.strategy)
+              || (isSuper && f.signals.length === 0)
+              || (isPairs && f.pairs.length === 0)
+              || (isStars && starPick.length === 0)}
             title={deskTaken ? deskOwnerNote(deskOwner)
               : isSuper && f.signals.length === 0 ? 'pick at least one signal type to trade'
-              : isPairs && f.pairs.length === 0 ? 'pick at least one best pair to trade' : undefined}
+              : isPairs && f.pairs.length === 0 ? 'pick at least one best pair to trade'
+              : isStars && starPick.length === 0 ? 'pick at least one star count to trade' : undefined}
             onClick={() => {
               // delta_min/max ride along so a board that forwards the form as it
               // stands (36 Trades) arms with the band on screen, not the default
@@ -3017,9 +3210,11 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
               // The signal strategies buy at the smart limit, as the form
               // says for them; a LIMIT left chosen on another strategy must
               // not ride along into theirs.
-              onArm({ ...f, order_type: onDesk ? 'smart' : otype,
-                discount_pct: !onDesk && otype === 'limit' ? discount : 0,
-                zero_dte: zeroDte, delta_min: dMin, delta_max: dMax });
+              onArm({ ...f, order_type: smartOnly ? 'smart' : otype,
+                discount_pct: !smartOnly && otype === 'limit' ? discount : 0,
+                zero_dte: zeroDte, near_expiry: zeroDte || nearExpiry,
+                delta_min: dMin, delta_max: dMax, pick,
+                ...(isStars ? { stars: starPick } : {}) });
             }}>{busy ? '…' : '🤖 Arm auto-trade'}</button>
           <button type="button" className="tr-btn sm" onClick={onClose}>Cancel</button>
         </div>
@@ -3081,6 +3276,8 @@ function loadGexMins() {
 export function GexInline() {
   const [slots, setSlots] = useState(null);
   const [live, setLive] = useState(null);
+  const [gexBusy, setGexBusy] = useState(false);
+  const [gexErr, setGexErr] = useState('');
   const [mins, setMins] = useState(loadGexMins);
   const [showHistory, setShowHistory] = useState(false);
 
@@ -3130,8 +3327,20 @@ export function GexInline() {
     return () => { alive = false; clearInterval(t); };
   }, []);
 
-  if (!slots || slots.length === 0) return null;
-  const liveText = fmtNet(live?.net_gex) ?? slots[slots.length - 1].text;
+  // One of flashAlpha's five daily calls: the server refuses it (429) when it
+  // would leave the 08:45 / 11:19 CT reads without theirs, and says why.
+  const budget = live?.budget;
+  const left = budget?.on_demand_left;
+  const refreshGex = async () => {
+    if (gexBusy) return;
+    setGexBusy(true); setGexErr('');
+    try { setLive(await vidura.superGex0dteRefresh()); }
+    catch (e) { setGexErr(errText(e)); }
+    finally { setGexBusy(false); }
+  };
+
+  if ((!slots || slots.length === 0) && !live) return null;
+  const liveText = fmtNet(live?.net_gex) ?? (slots && slots.length ? slots[slots.length - 1].text : '—');
   const liveNeg = liveText.startsWith('-');
   const age = gexAge(live?.age_seconds);
   return (
@@ -3139,17 +3348,26 @@ export function GexInline() {
       <div className="k">
         SPY 0DTE GEX
         <button type="button" className="tr-gex-toggle"
+          onClick={refreshGex} disabled={gexBusy || left === 0}
+          title={`read SPY gamma from flashAlpha now — ${left ?? '?'} on-demand call${left === 1 ? '' : 's'} left today`
+            + ` (08:45 ${budget?.scheduled?.[0]?.taken ? '✓' : '·'} and 11:19 ${budget?.scheduled?.[1]?.taken ? '✓' : '·'} CT are scheduled).`
+            + ' All expiries: the free plan has no 0DTE split.'}>
+          {gexBusy ? '…' : `↻${left ?? ''}`}
+        </button>
+        <button type="button" className="tr-gex-toggle"
           onClick={() => setShowHistory((v) => !v)}
           title={showHistory ? 'hide GEX history' : 'show GEX history'}>
           {showHistory ? '▾' : '▸'}
         </button>
       </div>
       <div className="v tr-mono" style={{ color: liveNeg ? 'var(--tr-red)' : 'var(--tr-green)' }}
-        title={live ? `${live.regime || '—'} · spot ${live.spot ?? '—'} · flip ${live.flip ?? '—'}` : ''}>
+        title={live ? `${live.note || `${live.regime || '—'} · spot ${live.spot ?? '—'} · flip ${live.flip ?? '—'}`}`
+          + ' — flashAlpha, all expiries' : ''}>
         {liveText}
         {age && <span className="tr-gex-age" style={{ fontSize: '0.65em', marginLeft: 4 }}>({age})</span>}
       </div>
-      {showHistory && (
+      {gexErr && <div className="tr-note" style={{ color: 'var(--tr-red)' }}>{gexErr}</div>}
+      {showHistory && slots && (
         <div className="tr-gex-hist tr-mono">
           <div className="tr-gex-list">
             {[...slots].reverse().map((s, i) => (
@@ -3163,7 +3381,7 @@ export function GexInline() {
             ))}
           </div>
           {mins.length > 0 && (
-            <div className="tr-gex-mins" title="minute-by-minute pushes">
+            <div className="tr-gex-mins" title="the latest readings, newest first">
               {mins.map((m, i) => (
                 <span key={m.at} className="row">
                   {i > 0 && <span className="sep">&raquo;</span>}
@@ -3359,8 +3577,41 @@ export function LiteChart({ isBlocked, blocked, ...props }) {
 // What the auto-trader is doing, in words: the AUTO button's colour says it
 // is armed, and this says what for -- strategy, scope, window, entries so far
 // -- rather than leaving that to a tooltip on a board this pared down.
-export function AutoStatus({ st, className = '' }) {
-  if (st?.active) {
+/* Every armed strategy, one line each -- they run side by side -- with its
+   own ✕ to disarm it, and "＋ arm another" to add one. Without onDisarm /
+   onArmAnother it is the read-only line it always was. */
+export function AutoStatus({ st, className = '', onDisarm, onArmAnother, busy = false }) {
+  const armed = st?.active ? (st.watchers?.length ? st.watchers : [st]) : [];
+  if (armed.length) {
+    return (
+      <div className={`tr-autolines ${className}`}>
+        {armed.map((w) => (
+          <AutoStatusLine key={w.strategy} st={w} className={className}
+            onDisarm={onDisarm} busy={busy} />
+        ))}
+        {(onArmAnother || (onDisarm && armed.length > 1)) && (
+          <p className={`tr-autoline tr-autoctl ${className}`}>
+            {onArmAnother && (
+              <button type="button" className="tr-chip" onClick={onArmAnother} disabled={busy}
+                title="arm another strategy to run alongside">＋ arm another</button>
+            )}
+            {onDisarm && armed.length > 1 && (
+              <button type="button" className="tr-chip" onClick={() => onDisarm(null)}
+                disabled={busy} title="disarm every armed strategy">✕ disarm all</button>
+            )}
+          </p>
+        )}
+      </div>
+    );
+  }
+  if (st?.signal_desk_owner) {
+    return <p className={`tr-autoline ${className}`}>{deskOwnerNote(st.signal_desk_owner)}</p>;
+  }
+  return null;
+}
+
+function AutoStatusLine({ st, className = '', onDisarm, busy }) {
+  {
     const what = STRATEGY_LABELS[st.strategy] || String(st.strategy || '').replace(/_/g, ' ');
     const pairs = (st.pairs || []).length;
     const scope = st.strategy === 'best_pairs'
@@ -3368,18 +3619,28 @@ export function AutoStatus({ st, className = '' }) {
     return (
       <p className={`tr-autoline on ${className}`}>
         <span className="dot" aria-hidden="true" />
-        auto-trader armed on {st.live ? 'LIVE' : 'SANDBOX'} · {what}
+        armed on {st.live ? 'LIVE' : st.sim ? 'SIP (SIM)' : 'SANDBOX'} · {what}
         {scope ? ` · ${scope}` : ''}
         {st.window ? ` · ${st.window} CST` : ''}
         {st.order_type && st.order_type !== 'smart' ? ` · ${orderTag(st.order_type, st.discount_pct)}` : ''}
+        {st.pick === 'open_interest' ? ' · strike by OI' : ''}
         {st.placed ? ` · ${st.placed} placed` : ''}
+        {st.last_error && (
+          // The last refusal, in red, so a strike list that ran out is seen;
+          // the watcher has already moved on to the next signal.
+          <span className="tr-autoerr" role="alert"
+            title={`${st.errors || 1} refused or failed since arming`}>
+            ⚠ {st.last_error.at} {st.last_error.message}
+          </span>
+        )}
+        {onDisarm && (
+          <button type="button" className="tr-autodisarm" onClick={() => onDisarm(st.strategy)}
+            disabled={busy} title={`disarm ${what} — the other strategies keep running`}
+            aria-label={`disarm ${what}`}>✕</button>
+        )}
       </p>
     );
   }
-  if (st?.signal_desk_owner) {
-    return <p className={`tr-autoline ${className}`}>{deskOwnerNote(st.signal_desk_owner)}</p>;
-  }
-  return null;
 }
 
 /* The desk's positions table, cut to what an OPEN position needs: the
@@ -3421,8 +3682,8 @@ function LitePositions({ items, loaded, targetBusy, onSweep, onClose, onTarget }
                 <tr key={p.id}>
                   <td className="tr-mono" title={p.note || ''}>{p.occ_symbol}</td>
                   <td>
-                    <span className={`tr-venue ${p.sandbox ? 'sbx' : 'live'}`}>
-                      {p.sandbox ? 'SANDBOX' : 'LIVE'}
+                    <span className={`tr-venue ${venueTag(p)[0]}`}>
+                      {venueTag(p)[1]}
                     </span>
                   </td>
                   <td>{p.contracts}</td>
@@ -3588,20 +3849,26 @@ export default function TradierSite() {
     // liteKey: Lightweight's ↻ asks again at once (and restarts the timer)
   }, [user, marketOffline, liteKey]);
 
-  const toggleAutoTrade = async () => {
+  // AUTO opens the arm form: with strategies already running it arms another
+  // beside them. Each one is disarmed from its own line (AutoStatus).
+  const toggleAutoTrade = () => {
     if (!user || autoBusy) return;
     setOpenErr(null);
-    if (!autoST?.active) { setAutoFormOpen(true); return; }
+    setAutoFormOpen(true);
+  };
+  const disarmAuto = async (strategy) => {
+    if (!user || autoBusy) return;
+    const name = strategy ? (STRATEGY_LABELS[strategy] || strategy.replace(/_/g, ' ')) : null;
     setAutoBusy(true);
     try {
       const ok = await confirmDialog({
-        title: 'Disarm the auto-trader?',
-        body: 'Stops watching for new signals, and abandons any contract whose '
-          + 'bid it is still observing. Positions it already opened stay managed '
-          + 'by the desk (TP/SL) as usual.',
+        title: name ? `Disarm ${name}?` : 'Disarm every strategy?',
+        body: (name ? 'Stops this strategy watching for new signals; the others keep running. '
+          : 'Stops every armed strategy. ')
+          + 'Positions already opened stay managed by the desk (TP/SL) as usual.',
         confirmText: 'Disarm', cancelText: 'Keep armed',
       });
-      if (ok) setAutoST(await vidura.autoTradeStop(user.user_id));
+      if (ok) setAutoST(await vidura.autoTradeStop(user.user_id, strategy || undefined));
     } catch (e) { setOpenErr(errText(e)); pushErr('auto-trade', e); }
     setAutoBusy(false);
   };
@@ -3630,6 +3897,9 @@ export default function TradierSite() {
         cooldown_min: parseInt(f.cooldown_min, 10),
         order_type: f.order_type || 'smart',
         discount_pct: parseFloat(f.discount_pct) || 0,
+        pick: f.pick || 'delta',
+        ...(f.strategy === 'star_signals' ? { stars: f.stars || [2, 3] } : {}),
+        near_expiry: f.near_expiry !== false,
         top_n: parseInt(f.top_n, 10) || 3,
         zero_dte: f.zero_dte !== false,
         signals: f.signals || [],
@@ -3668,9 +3938,35 @@ export default function TradierSite() {
     }).catch(() => setVenueInfo(null));
   }, [user]);
 
+  // The venue switch cycles SANDBOX -> SIP (SIM) -> LIVE -> SANDBOX.
+  // SIM is the operator's other paper venue (an in-house simulated account),
+  // offered once it exists; LIVE is confirmed, as it always was.
+  // the board's reload (defined below), for a paper-venue switch to call
+  const refreshRef = useRef(null);
+  const simOn = !!venueInfo?.sim?.active;
+  const setPaperVenue = async (info, sim) => {
+    if (!info?.sim?.configured || !!info.sim.active === sim) return;
+    await vidura.setSimVenue(sim);
+    setVenueInfo((v) => (v ? { ...v, sim: { ...v.sim, active: sim } } : v));
+  };
   const toggleLive = async () => {
-    if (live) { setLive(false); return; }        // stepping back to paper is free
-    const acct = venueInfo?.live?.account_id;
+    // Asked afresh on every switch, not only at load: a SIM account opened
+    // while the board is open is offered at once, Lightweight or Regular.
+    const info = await vidura.tradierVenue(user?.user_id).catch(() => venueInfo);
+    if (info) setVenueInfo(info);
+    if (live) {                                   // stepping back to paper is free
+      try { await setPaperVenue(info, false); } catch (e) { pushErr('venue', e); }
+      setLive(false);
+      return;
+    }
+    if (!info?.sim?.active && info?.sim?.configured) {
+      try {
+        await setPaperVenue(info, true);
+        if (user) refreshRef.current?.(true);
+      } catch (e) { pushErr('venue', e); }
+      return;
+    }
+    const acct = info?.live?.account_id;
     const ok = await confirmDialog({
       title: 'Switch the desk to the LIVE account?',
       body: 'Every order placed while LIVE is on spends real money on the '
@@ -3755,6 +4051,7 @@ export default function TradierSite() {
     loadPositions(user.user_id, filters.current.filter, filters.current.venueFilter);
   }, [user, live, loadBalance, loadPositions]);
 
+  refreshRef.current = refresh;
   useEffect(() => { refresh(true); }, [refresh]);
   useEffect(() => {
     if (user) loadPositions(user.user_id, filter, venueFilter);
@@ -3833,7 +4130,9 @@ export default function TradierSite() {
           ...common,
           symbol: t.symbol, side: t.side,
           zero_dte: t.zero_dte,
+          near_expiry: t.near_expiry !== false,
           delta_min: dMin, delta_max: dMax,
+          pick: t.pick || 'delta',
         });
       }
       setTicket(null);
@@ -4046,24 +4345,28 @@ export default function TradierSite() {
                     );
                   })()}
                 </div>
-                {/* a minute-by-minute gamma feed: not on the Lightweight board */}
-                {!lite && <GexInline />}
+                {/* the SPY gamma reading: on both boards, Lightweight included */}
+                <GexInline />
                 <div className="tr-stat">
                   <div className="tr-venuectl">
                     <button type="button"
-                      className={`tr-venue-btn ${live ? 'on' : ''}`}
+                      className={`tr-venue-btn ${live ? 'on' : ''}${!live && bal.simulated ? ' sim' : ''}`}
                       onClick={toggleLive} aria-pressed={live}
                       title={live
                         ? 'Trading the PRODUCTION account — click to return to sandbox'
-                        : 'Mock orders on the Tradier sandbox — click to arm the live account'}>
+                        : bal.simulated
+                          ? 'SIP (SIM): a simulated account, filled against real quotes — click to arm the live account'
+                          : venueInfo?.sim?.configured
+                            ? 'Mock orders on the Tradier sandbox — click for SIP (SIM)'
+                            : 'Mock orders on the Tradier sandbox — click to arm the live account'}>
                       <span className="tr-venue-dot" />
-                      {bal.sandbox ? 'SANDBOX' : 'LIVE'}
+                      {!bal.sandbox ? 'LIVE' : bal.simulated ? (bal.venue_label || 'SIP (SIM)') : 'SANDBOX'}
                     </button>
                     <button type="button"
                       className={`tr-autobtn ${autoST?.active ? 'on' : ''}`}
                       onClick={toggleAutoTrade} disabled={autoBusy}
                       title={autoST?.active
-                        ? 'auto-trader ARMED on this venue — click to open its form'
+                        ? `${(autoST.armed_strategies || []).length || 1} strategy(s) ARMED — click to arm another`
                         : autoST?.signal_desk_owner
                           ? `${deskOwnerNote(autoST.signal_desk_owner)} — click to open the form`
                           : 'arm the auto-trader on this venue'}>
@@ -4091,7 +4394,8 @@ export default function TradierSite() {
                 )}
               </div>
             )}
-            {lite && <AutoStatus st={autoST} />}
+            <AutoStatus st={autoST} onDisarm={disarmAuto} busy={autoBusy}
+              onArmAnother={autoST?.active ? toggleAutoTrade : undefined} />
           </div>
         </header>
 
@@ -4104,6 +4408,9 @@ export default function TradierSite() {
               <LiteChart user={user} live={live} reloadKey={liteKey}
                 onError={pushErr} onBuy={(s) => openTicket({ symbol: s })}
                 isBlocked={isBlocked} />
+              {!live && simOn && (
+                <SimHoldings reloadKey={liteKey} onError={(e) => pushErr('sim', e)} />
+              )}
               <LitePositions items={items} loaded={!!positions} targetBusy={targetBusy}
                 onSweep={refresh} onClose={doClose} onTarget={saveTarget} />
             </div>
@@ -4187,6 +4494,10 @@ export default function TradierSite() {
               )}
             </div>
           )}
+          {/* SIP (SIM): the simulated account's shares, while it is the venue */}
+          {!live && simOn && (
+            <SimHoldings reloadKey={positions?.total ?? 0} onError={(e) => pushErr('sim', e)} />
+          )}
           <div className="tr-tablewrap">
             <table className="tr-table">
               <thead><tr>
@@ -4204,8 +4515,8 @@ export default function TradierSite() {
                   <tr key={p.id}>
                     <td>{p.id}</td>
                     <td>
-                      <span className={`tr-venue ${p.sandbox ? 'sbx' : 'live'}`}>
-                        {p.sandbox ? 'SANDBOX' : 'LIVE'}
+                      <span className={`tr-venue ${venueTag(p)[0]}`}>
+                        {venueTag(p)[1]}
                       </span>
                     </td>
                     <td className="tr-mono" title={p.note || ''}>{p.occ_symbol}</td>
@@ -4342,6 +4653,8 @@ export default function TradierSite() {
         <div className="tr-resize-handle" onMouseDown={(e) => colResize.onMouseDown('right', e)} />
         <aside className="tr-col side"
           style={colResize.right > 232 ? { fontSize: `${Math.min(12, 9 * (colResize.right / 232))}px` } : undefined}>
+          {/* the US economic calendar -- collapsed to its next release */}
+          <NewsEvents />
           <LevelCrosses maxPerTicker={3} />
           {railOrder.order.map((sid) => {
             if (sid === 'signals') return (
@@ -4389,6 +4702,7 @@ export default function TradierSite() {
             paper={bal ? bal.sandbox : autoST?.paper}
             busy={autoBusy}
             onArm={armAutoTrade}
+            armed={autoST?.active ? (autoST.armed_strategies || [autoST.strategy]) : []}
             onClose={() => setAutoFormOpen(false)}
             deskOwner={autoST?.signal_desk_owner}
           />

@@ -52,8 +52,12 @@ def _parse(ts: str | int | float) -> datetime | None:
         return None
 
 
-def aggregate(bars: list[dict], factor: int) -> list[dict]:
-    """Fold N bars into one.
+def aggregate(bars: list[dict], factor: int, *, bar_minutes: int = 1) -> list[dict]:
+    """Fold bars into ``factor``-MINUTE buckets.
+
+    ``factor`` is the bucket width in minutes, whatever the input; with
+    5-minute input pass ``bar_minutes=5``, so a full 15-minute bucket is three
+    bars rather than fifteen.
 
     Grouped by the bar's own timestamp rather than by position in the list, so
     a gap in the feed does not silently shift every later bucket by one. A
@@ -92,7 +96,7 @@ def aggregate(bars: list[dict], factor: int) -> list[dict]:
         #
         # An interior bucket missing a minute is still the right time window.
         # Its high, low and close are all real; there is just less inside it.
-        if len(group) < factor and key == ordered[-1]:
+        if len(group) < factor // max(1, bar_minutes) and key == ordered[-1]:
             continue
         out.append({
             "time": group[0].get("time") or group[0].get("timestamp"),

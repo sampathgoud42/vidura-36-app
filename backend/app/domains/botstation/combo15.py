@@ -268,5 +268,61 @@ def _place(cred, *, legs: list[dict], stake_usd: float, key: str,
     return {**outcome, "legs_used": len(chosen)}
 
 
+# ---- placing in the background ---------------------------------------------
+# A combo is several Kalshi round trips -- each leg re-read, the collection,
+# the combo market, an RFQ that waits up to six seconds for a maker, the
+# accept, the fill read back -- and on a slow afternoon that ran past the
+# browser's 30 seconds. The phone then gave up and said the API was down
+# while the order was still being worked. So the request only STARTS the
+# job and returns; the sheet asks for the answer until it is there. The
+# job is keyed by the confirmation's key, so a second tap or a retry finds
+# the job already running instead of starting another.
+_JOBS: dict[tuple[str, str], dict] = {}
+_JOBS_LOCK = threading.Lock()
+JOB_KEEP_S = 30 * 60
+
+
+def _public(job: dict) -> dict:
+    out = {"job": job["key"], "status": job["status"],
+           "elapsed_s": round((job.get("ended") or time.time()) - job["started"], 1)}
+    if job["status"] == "done":
+        out["result"] = job["result"]
+    return out
+
+
+def start_place(cred, *, legs: list[dict], stake_usd: float, key: str, owner: str,
+                tenant_slug: str = "") -> dict:
+    """Start placing the combo and return at once: {job, status, ...}."""
+    now = time.time()
+    with _JOBS_LOCK:
+        for k in [k for k, j in _JOBS.items() if now - j["started"] > JOB_KEEP_S]:
+            _JOBS.pop(k, None)
+        job = _JOBS.get((owner, key))
+        if job is not None:
+            return _public(job)
+        job = {"key": key, "status": "running", "started": now, "result": None}
+        _JOBS[(owner, key)] = job
+
+    def run() -> None:
+        try:
+            result = place(cred, legs=legs, stake_usd=stake_usd, key=key,
+                           owner=owner, tenant_slug=tenant_slug)
+        except Exception as exc:                        # noqa: BLE001
+            logger.warning("combo15 job failed: %s: %s", type(exc).__name__, exc)
+            result = {"placed": False, "detail": f"the combo could not be placed: {exc}"[:300]}
+        with _JOBS_LOCK:
+            job.update(status="done", result=result, ended=time.time())
+
+    threading.Thread(target=run, name=f"combo15-{key[:8]}", daemon=True).start()
+    return _public(job)
+
+
+def job_status(owner: str, key: str) -> dict | None:
+    with _JOBS_LOCK:
+        job = _JOBS.get((owner, key))
+        return _public(job) if job is not None else None
+
+
 def reset_for_tests() -> None:
     _ANSWERS.clear()
+    _JOBS.clear()

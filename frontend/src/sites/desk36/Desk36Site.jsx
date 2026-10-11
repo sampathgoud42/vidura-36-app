@@ -5,13 +5,16 @@ import { Link } from 'react-router-dom';
 import { api, auth, ensureUser, vidura } from '../../shared/viduraApi.js';
 import QuotePopup from '../../shared/QuotePopup.jsx';
 import SuperSignals, { BestPair } from '../../shared/SuperSignals.jsx';
+import SimHoldings from '../../shared/SimHoldings.jsx';
+import NewsEvents from '../../shared/NewsEvents.jsx';
 import BestBetsLink from '../../shared/BestBets.jsx';
 import { useExperience } from '../../shared/experience.js';
 import { ExperienceSwitch } from '../../shared/ExperienceControls.jsx';
 import { READING_GUIDE_URL } from '../../config.js';
 import {
-  AutoStatus, AutoTradeForm, CommoditiesPanel, deskOwnerNote, fmtMark, HotScan, LiteChart,
-  MiniChart, OptionsFlow, ORDER_TYPES, orderNote, orderPrice, useMovers,
+  AutoStatus, AutoTradeForm, CommoditiesPanel, deskOwnerNote, fmtMark, GexInline, HotScan, LiteChart,
+  MiniChart, NearExpiryChip, OptionsFlow, ORDER_TYPES, orderNote, orderPrice, STRIKE_PICKS,
+  useMovers,
 } from '../tradier/TradierSite.jsx';
 import '../../shared/quotePopup.css';
 import './desk36.css';
@@ -350,7 +353,7 @@ function useGexSeries(enabled = true) {
         let stale = false;
 
         // Nothing today yet. That is the normal state before the market
-        // opens, and every day until the getgamma pusher has run — showing
+        // opens and until the 08:45 CT flashAlpha read has run — showing
         // an empty space then reads as a bug rather than as "no data yet",
         // so the last session with data is shown instead, labelled.
         if (rows.length === 0) {
@@ -383,16 +386,16 @@ function GexStrip({ series, date, stale }) {
   if (!series.length) {
     return (
       <span className="d36-gexstrip"
-        title="No 0DTE gamma captured yet. Run the getgamma bookmarklet to push today's.">
+        title="No SPY gamma read yet today — flashAlpha is read at 08:45 and 11:19 CT, or refresh it on the Tradier desk.">
         <span className="d36-gexnone">gex — no data yet</span>
       </span>
     );
   }
   return (
     <span className="d36-gexstrip"
-      title={`SPY 0DTE net gamma, newest first, one value per hour (CST)`
+      title={`SPY net gamma (flashAlpha, all expiries), newest first, one value per hour read (CST)`
         + (date ? ` · ${date}` : '')
-        + (stale ? ' · last session, nothing pushed today yet' : '')}>
+        + (stale ? ' · last session, nothing read today yet' : '')}>
       {stale && <span className="d36-gexstale">{date?.slice(5)}</span>}
       {series.map((h, i) => (
         <React.Fragment key={h.hour_cst}>
@@ -482,6 +485,9 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
   // false on both /tradier/chain and POST /tradier/positions, so this asks
   // for them rather than being the only thing preventing them.
   const [zeroDte, setZeroDte] = useState(false);
+  // 0DTE off: the nearest expiry (on) or the first 7+ days out (off), which
+  // is held over the close and recorded as rolled over.
+  const [nearExpiry, setNearExpiry] = useState(true);
   // MKT, LIMIT or SMART -- the desk ticket's three (TradierSite ORDER_TYPES).
   // LIMIT bids the mark less the chosen discount, to the cent, and the server
   // cancels it if it has not filled in fifteen minutes. SMART, the mid on a
@@ -491,6 +497,11 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
   const [otype, setOtype] = useState('smart');
   const [discount, setDiscount] = useState(10);
   const [midDayWarn, setMidDayWarn] = useState(false);
+  // How the strike is chosen: the delta band, or open interest (STRIKE_PICKS)
+  // -- the nearest expiry's most-held out-of-the-money strike, the next one
+  // if that order is refused.
+  const [strikePick, setStrikePick] = useState('delta');
+  const byOI = strikePick === 'open_interest';
 
   // Prefill from the desk's own configured defaults rather than hard-coding a
   // second set that could drift from the one the auto-traders use.
@@ -529,7 +540,7 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
   // Which contract this would actually buy, before it is bought.
   useEffect(() => {
     if (!symbol) { setPick(null); return undefined; }
-    if (!bandInput) {
+    if (!byOI && !bandInput) {
       setPick(null);
       setErr('delta band must be between 0 and 1, lower value first');
       return undefined;
@@ -539,13 +550,17 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
     // Debounced, so a four-character delta is one request rather than four.
     const id = setTimeout(() => {
       vidura.tradierChain(user.user_id, {
-        symbol, side, delta_min: bandInput.lo, delta_max: bandInput.hi, live,
-        zero_dte: zeroDte,
+        symbol, side, live, zero_dte: zeroDte, pick: strikePick,
+        near_expiry: zeroDte || nearExpiry,
+        ...(bandInput ? { delta_min: bandInput.lo, delta_max: bandInput.hi } : {}),
       }).then((r) => { if (!dead) setPick(r); })
-        .catch((e) => { if (!dead) setErr(errMsg(e) || 'no contract in that delta band'); });
+        .catch((e) => {
+          if (!dead) setErr(errMsg(e) || (byOI ? 'no out-of-the-money contract with a quote'
+            : 'no contract in that delta band'));
+        });
     }, 350);
     return () => { dead = true; clearTimeout(id); };
-  }, [user.user_id, symbol, side, bandInput, live, zeroDte]);
+  }, [user.user_id, symbol, side, bandInput, live, zeroDte, strikePick, nearExpiry]);
 
   // iOS keeps scrolling the page behind a fixed overlay; freezing the body is
   // the only reliable way to stop it there.
@@ -573,10 +588,12 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
     try {
       const row = await vidura.tradierOpen({
         user_id: user.user_id, symbol, side, live, zero_dte: zeroDte,
+        near_expiry: zeroDte || nearExpiry,
         order_type: otype,
         discount_pct: otype === 'limit' ? discount : 0,
         buy_pct: Number(f.buy_pct),
-        delta_min: bandInput.lo, delta_max: bandInput.hi,
+        pick: strikePick,
+        ...(bandInput ? { delta_min: bandInput.lo, delta_max: bandInput.hi } : {}),
         tp_pct: Number(f.tp_pct), sl_pct: Number(f.sl_pct),
       });
       onDone(`${side.toUpperCase()} ${symbol} · ${row.contracts ?? ''} contract(s) · ${row.status}`);
@@ -597,10 +614,13 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
   // /tradier/chain returns `pick` as the chosen OCC symbol and `band` as the
   // candidates it was chosen from; the strike, delta and quote live on the
   // band row, not at the top level.
-  const chosen = useMemo(
-    () => (pick?.band || []).find((c) => c.occ_symbol === pick.pick) || null,
-    [pick],
-  );
+  // /tradier/chain answers with `picked` -- the contract an order would buy
+  // -- and, for an open-interest pick, `ranked`: the ones it falls back to.
+  const chosen = useMemo(() => {
+    const p = pick?.picked;
+    return p ? { ...p, occ_symbol: p.symbol } : null;
+  }, [pick]);
+  const fallbacks = (pick?.ranked || []).slice(1);
   // What the order type would bid on the contract shown -- the server prices
   // it again from the quote it reads as the order goes in.
   const preview = chosen ? orderPrice(otype, chosen.bid, chosen.ask, discount) : null;
@@ -640,21 +660,38 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
           {err && !chosen ? <span style={{ color: '#ffc9d2' }}>{err}</span>
             : pick ? (
               <>
-                <b>{pick.pick || '—'}</b><br />
+                <b>{chosen?.occ_symbol || '—'}</b>
+                {byOI && <span> · best OI + volume</span>}<br />
                 strike <b>{chosen?.strike ?? '—'}</b> · exp <b>{pick.expiration ?? '—'}</b><br />
                 delta <b>{chosen?.delta != null ? chosen.delta.toFixed(3) : '—'}</b>
                 {' · '}bid <b>{chosen?.bid ?? '—'}</b> · ask <b>{chosen?.ask ?? '—'}</b>
                 {chosen?.open_interest != null && <><br />OI <b>{chosen.open_interest.toLocaleString()}</b> · vol <b>{chosen.volume?.toLocaleString() ?? '—'}</b></>}
+                {byOI && fallbacks.length > 0 && (
+                  <><br />if refused: {fallbacks.map((c) => `${c.strike} (OI ${c.open_interest.toLocaleString()})`).join(' → ')}</>
+                )}
               </>
-            ) : 'finding a contract in the delta band…'}
+            ) : byOI ? 'finding the most-held strike…' : 'finding a contract in the delta band…'}
+        </div>
+
+        <div className="d36-chiprow" role="group" aria-label="strike pick">
+          {STRIKE_PICKS.map(([id, text]) => (
+            <button key={id} type="button" className={`d36-chip ${strikePick === id ? 'on' : ''}`}
+              aria-pressed={strikePick === id}
+              onClick={() => { setErr(''); setStrikePick(id); }}>{text}</button>
+          ))}
         </div>
 
         <button type="button" className={`d36-dte ${zeroDte ? 'on' : ''}`}
           aria-pressed={zeroDte} onClick={() => setZeroDte((v) => !v)}>
           <span className="d36-dtebox" aria-hidden="true">{zeroDte ? '\u2713' : ''}</span>
           <span>0DTE {zeroDte ? 'on \u00b7 today\u2019s expiry allowed'
-            : 'off \u00b7 nearest expiry after today'}</span>
+            : nearExpiry ? 'off \u00b7 nearest expiry after today'
+              : 'off \u00b7 first expiry 7+ days out'}</span>
         </button>
+        <div className="d36-chiprow">
+          <NearExpiryChip zeroDte={zeroDte} value={nearExpiry} onChange={setNearExpiry}
+            className="d36-chip" />
+        </div>
 
         <div className="d36-otype">
           <div className="d36-chiprow" role="group" aria-label="order type">
@@ -690,8 +727,8 @@ function BuySheet({ user, symbol: initialSymbol, side: initialSide, live, onClos
         <div className="d36-grid">
           {num('buy_pct', '% of buying power', '1')}
           {num('tp_pct', 'take profit %', '1')}
-          {num('delta_min', 'delta min', '0.05')}
-          {num('delta_max', 'delta max', '0.05')}
+          {!byOI && num('delta_min', 'delta min', '0.05')}
+          {!byOI && num('delta_max', 'delta max', '0.05')}
           {num('sl_pct', 'stop loss %', '1')}
         </div>
 
@@ -1016,6 +1053,21 @@ export default function Desk36Site() {
   // named the sandbox account in a dialog about going live — precisely the
   // number that has to be right.
   const [venues, setVenues] = useState(null);
+  // SIP (SIM): the operator's other paper venue, an in-house simulated
+  // account, chosen on the venue sheet beside the sandbox and live.
+  const simOn = !live && !!venues?.sim?.active;
+  const venueWord = live ? 'live venue' : simOn ? 'SIP (SIM)' : 'sandbox venue';
+  const chooseVenue = async (to) => {
+    try {
+      if (to !== 'live' && venues?.sim?.configured && (to === 'sim') !== !!venues?.sim?.active) {
+        await vidura.setSimVenue(to === 'sim');
+        setVenues((v) => (v ? { ...v, sim: { ...v.sim, active: to === 'sim' } } : v));
+      }
+      setLive(to === 'live');
+      setOrderKey((k) => k + 1);                  // balance and positions, again
+    } catch (e) { failNow(e); }
+    setVenueAsk(false);
+  };
   const [autoOpen, setAutoOpen] = useState(false);
   const [autoST, setAutoST] = useState(null);
   const [autoBusy, setAutoBusy] = useState(false);
@@ -1392,13 +1444,20 @@ export default function Desk36Site() {
               of practising. Either way the switch is confirmed, never a
               stray tap. */}
           <button type="button" className={`d36-venue ${live ? 'live' : 'paper'}`}
-            onClick={() => setVenueAsk(true)}
-            aria-label={live ? 'live venue' : 'paper venue'}
+            onClick={() => {
+              setVenueAsk(true);
+              // asked afresh: a SIM account opened since load is offered at once
+              vidura.tradierVenue(user?.user_id).then(setVenues).catch(() => {});
+            }}
+            aria-label={live ? 'live venue' : simOn ? 'SIP (SIM) venue' : 'paper venue'}
             title={live
               ? 'LIVE — orders from this board are real. Tap to switch.'
+              : simOn ? 'SIP (SIM) — a simulated account, filled against real quotes. Tap to switch.'
               : 'Paper — orders go to the Tradier sandbox. Tap to switch.'}>
             {live ? (
               <span className="d36-venue-live" aria-hidden="true">●<span> live</span></span>
+            ) : simOn ? (
+              <span className="d36-venue-sim" aria-hidden="true">SIM</span>
             ) : (
               <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"
                 fill="none" stroke="currentColor" strokeWidth="1.7"
@@ -1460,6 +1519,14 @@ export default function Desk36Site() {
               )}
             </b>
           </span>
+
+          {/* SPY 0DTE GEX on the Lightweight board: the Tradier world's own
+              reading (GexInline), so the two boards never disagree. */}
+          {lite && (
+            <span className="d36-stat d36-litegex">
+              <GexInline />
+            </span>
+          )}
 
           {/* Lightweight keeps itself current like the full board; this asks
               every panel again right now, without waiting for its timer. */}
@@ -1536,6 +1603,9 @@ export default function Desk36Site() {
 
           Otherwise: order and visibility both come from SECTIONS, so the
           tabs, the running order and what is rendered can never disagree. */}
+      {/* News & Events: the US economic calendar, on both views of the board */}
+      <div className="d36-news"><NewsEvents touch /></div>
+
       {lite ? (
         <>
           <AutoStatus st={autoST} className="d36-autoline" />
@@ -1556,9 +1626,10 @@ export default function Desk36Site() {
           <div className="d36-secthd">
             <span className="d36-sectlabel">positions</span>
             <span className="d36-charthint">
-              {live ? 'live venue' : 'sandbox venue'} · open only
+              {venueWord} · open only
             </span>
           </div>
+          {user && simOn && <SimHoldings touch reloadKey={liteKey + orderKey} onError={onPanelErr} />}
           {user && (
             <PositionsPanel user={user} live={live} lite reloadKey={liteKey + orderKey}
               blocked={busy} onError={onPanelErr} onOk={onPanelOk} />
@@ -1631,8 +1702,9 @@ export default function Desk36Site() {
                 onClick={() => setPosOpen((v) => !v)}>
                 {posOpen ? '▾' : '▸'} positions
               </button>
-              <span className="d36-charthint">{live ? 'live venue' : 'sandbox venue'}</span>
+              <span className="d36-charthint">{venueWord}</span>
             </div>
+            {posOpen && user && simOn && <SimHoldings touch reloadKey={orderKey} onError={onPanelErr} />}
             {posOpen && user && (
               <PositionsPanel user={user} live={live} blocked={busy}
                 onError={onPanelErr} onOk={onPanelOk} />
@@ -1842,8 +1914,20 @@ export default function Desk36Site() {
               )}
             </p>
 
+            {venues?.sim?.configured && (
+              <div className="d36-venuepick" role="group" aria-label="paper venue">
+                <button type="button" className={`d36-go ${!live && !simOn ? 'on' : ''}`}
+                  disabled={!live && !simOn} onClick={() => chooseVenue('sandbox')}>
+                  sandbox
+                </button>
+                <button type="button" className={`d36-go sim ${simOn ? 'on' : ''}`}
+                  disabled={simOn} onClick={() => chooseVenue('sim')}>
+                  SIP (SIM)
+                </button>
+              </div>
+            )}
             <button type="button" className={`d36-go ${live ? 'call' : 'put'}`}
-              onClick={() => { setLive((v) => !v); setVenueAsk(false); }}>
+              onClick={() => chooseVenue(live ? (venues?.sim?.active ? 'sim' : 'sandbox') : 'live')}>
               {live ? 'switch to paper' : 'switch to live'}
             </button>
           </div>
@@ -1912,6 +1996,7 @@ export default function Desk36Site() {
               }}
               paper={!live} busy={autoBusy}
               deskOwner={autoST.signal_desk_owner}
+              armed={autoOn ? (autoST.armed_strategies || [autoST.strategy]) : []}
               onClose={() => setAutoOpen(false)}
               onArm={async (body) => {
                 setAutoBusy(true);
@@ -1926,21 +2011,19 @@ export default function Desk36Site() {
                 finally { setAutoBusy(false); }
               }} />
             )}
+            {/* Every armed strategy, each with its own disarm -- they run side
+                by side, and disarming one leaves the others running. */}
             {autoOn && (
-              <button type="button" className="d36-go put"
-                disabled={autoBusy}
-                onClick={async () => {
+              <AutoStatus st={autoST} className="d36-autoline" busy={autoBusy}
+                onDisarm={async (strategy) => {
                   setAutoBusy(true);
                   try {
-                    await vidura.autoTradeStop(user.user_id);
-                    setToast('auto-trader disarmed');
+                    await vidura.autoTradeStop(user.user_id, strategy || undefined);
+                    setToast(strategy ? `${strategy.replace(/_/g, ' ')} disarmed` : 'every strategy disarmed');
                     setAutoST(await vidura.autoTradeStatus(user.user_id));
-                    setAutoOpen(false);
                   } catch (e) { failNow(e); }
                   finally { setAutoBusy(false); }
-                }}>
-                disarm
-              </button>
+                }} />
             )}
           </div>
         </div>

@@ -50,7 +50,7 @@ PICK_SHARE = 0.75
 
 CONFIG_DEFAULTS = {
     "min_legs": 5, "max_legs": 24, "min_usd": 5.0, "max_usd": 7.5,
-    "min_leg_c": 60, "max_leg_c": 98, "min_volume_usd": 5000.0,
+    "min_leg_c": 67, "max_leg_c": 97, "min_volume_usd": 5000.0,
     "max_spread_c": 3, "max_hours": 72, "no_side_only": False, "sports": [],
 }
 
