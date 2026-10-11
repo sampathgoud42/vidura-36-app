@@ -250,7 +250,7 @@ def _place(cred, *, legs: list[dict], stake_usd: float, key: str,
             # At the market, within the stake: the RFQ is sized in dollars,
             # so the price decides how many contracts the stake buys.
             slippage_c=engine.MAX_COMBO_PRICE_C,
-            idempotency_key=f"c15-{key}"[:64])
+            idempotency_key=f"c15-{key}"[:64], team_bot=BOT_KEY)
     except Exception as exc:                            # noqa: BLE001
         logger.warning("combo15 refused: %s", exc)
         return {"placed": False, "detail": f"Kalshi did not take the combo: {exc}"[:300]}

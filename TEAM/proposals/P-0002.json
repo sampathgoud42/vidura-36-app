@@ -1,0 +1,118 @@
+{
+  "id": "P-0002",
+  "created_at": "2026-10-11T18:28:44+00:00",
+  "status": "proposed",
+  "history": [
+    {
+      "at": "2026-10-11T18:28:44+00:00",
+      "event": "reviewed",
+      "verdict": "PASS"
+    },
+    {
+      "at": "2026-10-11T18:28:50+00:00",
+      "event": "reviewed",
+      "verdict": "PASS"
+    },
+    {
+      "at": "2026-10-11T18:29:16+00:00",
+      "event": "reviewed",
+      "verdict": "PASS"
+    }
+  ],
+  "bot": "parley",
+  "type": "block_price_band",
+  "params": {
+    "min_c": 80,
+    "max_c": 90
+  },
+  "persona": "quant_strategist",
+  "evidence": {
+    "n": 18,
+    "win_rate": 0.778,
+    "implied": 0.83,
+    "pnl": -4.23
+  },
+  "rationale": "80-90c realised win rate below the price paid, and lost money",
+  "backtest": {
+    "train": {
+      "baseline": {
+        "n": 73,
+        "wins": 52,
+        "win_rate": 0.712,
+        "implied": 0.694,
+        "breakeven": 0.742,
+        "pnl": -31.1,
+        "max_dd": -104.92
+      },
+      "with_rules": {
+        "n": 55,
+        "wins": 38,
+        "win_rate": 0.691,
+        "implied": 0.649,
+        "breakeven": 0.722,
+        "pnl": -26.87,
+        "max_dd": -104.92
+      },
+      "touched": 18,
+      "blocked": 18,
+      "blocked_pnl": -4.23,
+      "winners_blocked": 14,
+      "delta_pnl": 4.23
+    },
+    "test": {
+      "baseline": {
+        "n": 32,
+        "wins": 17,
+        "win_rate": 0.531,
+        "implied": 0.723,
+        "breakeven": 0.81,
+        "pnl": -86.48,
+        "max_dd": -89.3
+      },
+      "with_rules": {
+        "n": 25,
+        "wins": 13,
+        "win_rate": 0.52,
+        "implied": 0.692,
+        "breakeven": 0.798,
+        "pnl": -73.26,
+        "max_dd": -76.08
+      },
+      "touched": 7,
+      "blocked": 7,
+      "blocked_pnl": -13.22,
+      "winners_blocked": 4,
+      "delta_pnl": 13.22
+    },
+    "all": {
+      "baseline": {
+        "n": 105,
+        "wins": 69,
+        "win_rate": 0.657,
+        "implied": 0.703,
+        "breakeven": 0.746,
+        "pnl": -117.58,
+        "max_dd": -156.99
+      },
+      "with_rules": {
+        "n": 80,
+        "wins": 51,
+        "win_rate": 0.637,
+        "implied": 0.663,
+        "breakeven": 0.728,
+        "pnl": -100.13,
+        "max_dd": -136.44
+      },
+      "touched": 25,
+      "blocked": 25,
+      "blocked_pnl": -17.45,
+      "winners_blocked": 18,
+      "delta_pnl": 17.45
+    }
+  },
+  "verdict": "PASS",
+  "reviewed_at": "2026-10-11T18:29:16+00:00",
+  "qa_floor_met": false,
+  "ruleset_base": 0,
+  "recommend": false
+}

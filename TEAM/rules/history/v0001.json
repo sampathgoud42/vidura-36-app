@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "updated_at": "2026-10-11T19:31:39+00:00",
+  "change": "approve P-0001 parley block_price_band {\"min_c\": 60, \"max_c\": 70} -- operator approved in chat 2026-10-11",
+  "rules": [
+    {
+      "id": "R-0001",
+      "proposal": "P-0001",
+      "bot": "parley",
+      "type": "block_price_band",
+      "params": {
+        "min_c": 60,
+        "max_c": 70
+      }
+    }
+  ]
+}

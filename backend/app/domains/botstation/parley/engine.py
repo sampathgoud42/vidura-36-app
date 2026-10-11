@@ -324,18 +324,40 @@ def place_combo(cred, combo: ComboOrder, collection: str, *,
                 slippage_c: int = DEFAULT_SLIPPAGE_C,
                 escalation_pct: float = DEFAULT_ESCALATION_PCT,
                 fill_wait_s: float = DEFAULT_FILL_WAIT_S,
-                idempotency_key: str | None = None) -> dict:
+                idempotency_key: str | None = None,
+                team_bot: str | None = None) -> dict:
     """Create the combined market for a parlay and rest a buy against it.
 
     Returns what happened, including when nothing did. "No fill" is an
     ordinary outcome here rather than an error: an empty book is the normal
     state of a market that was created seconds ago.
+
+    ``team_bot`` names the calling bot so its approved TEAM rules apply
+    (``app.domains.botstation.team_gate``). None skips the gate.
     """
     from app.domains.botstation import venue as kalshi
 
     legs = selected_markets(combo.legs)
     fair_c = theoretical_price_c(combo)
     limit_c = min(MAX_COMBO_PRICE_C, fair_c + slippage_c)
+
+    # TEAM gate, before anything touches the exchange. The price judged is
+    # what the bot expects to pay: its limit, or fair value for the
+    # at-market bots whose limit is the ceiling rather than a price.
+    if team_bot:
+        from app.domains.botstation import team_gate
+        expect_c = fair_c if slippage_c >= MAX_COMBO_PRICE_C else limit_c
+        verdict = team_gate.check(team_bot, price_c=expect_c,
+                                  stake_usd=stake_usd, legs=len(combo.legs),
+                                  dry_run=dry_run)
+        if not verdict.allowed:
+            return {"placed": False, "collection": collection,
+                    "tickers": combo.tickers, "theoretical_c": fair_c,
+                    "team_blocked": verdict.rule_ids,
+                    "detail": verdict.detail}
+        if verdict.stake_usd is not None:
+            stake_usd = verdict.stake_usd
+
     count = contracts_for(stake_usd, limit_c)
 
     # Sized BEFORE the combined market is created. Creating an instrument on
@@ -621,7 +643,8 @@ def run_pass(cred, markets: list[MarketState],
              soccer_min: float = filters.SOCCER_MIN_PROBABILITY,
              max_leg: float = filters.MAX_LEG_PROBABILITY,
              max_hours: int = filters.MAX_HOURS_TO_EXPIRY,
-             max_spread_c: int = filters.MAX_SPREAD_C) -> PassResult:
+             max_spread_c: int = filters.MAX_SPREAD_C,
+             team_bot: str | None = "parley") -> PassResult:
     """One full pass: decide, then place.
 
     Positions are read from the exchange rather than from a local file, so a
@@ -733,7 +756,8 @@ def run_pass(cred, markets: list[MarketState],
                                   stake_usd=stake_usd,
                                   slippage_c=slippage_c,
                                   escalation_pct=escalation_pct,
-                                  fill_wait_s=fill_wait_s)
+                                  fill_wait_s=fill_wait_s,
+                                  team_bot=team_bot)
         except Exception as exc:                        # noqa: BLE001
             result.skipped.append({"tickers": combo.tickers,
                                    "detail": f"{type(exc).__name__}: {exc}"})

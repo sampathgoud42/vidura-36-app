@@ -334,7 +334,8 @@ def _daily_ticket(cred, args, customer_dir: Path) -> None:
                 stake_usd=args.daily_stake,
                 slippage_c=_env("slippage_c", 5, int),
                 escalation_pct=args.daily_escalation_pct,
-                fill_wait_s=_env("fill_wait_s", 60, int))
+                fill_wait_s=_env("fill_wait_s", 60, int),
+                team_bot="parley")
             break
         except Exception as exc:                        # noqa: BLE001
             named = _redundant_legs(str(exc))

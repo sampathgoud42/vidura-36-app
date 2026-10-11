@@ -1,0 +1,1 @@
+- v1 2026-10-11T19:31:39+00:00: approve P-0001 parley block_price_band {"min_c": 60, "max_c": 70} -- operator approved in chat 2026-10-11

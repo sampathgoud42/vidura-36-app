@@ -748,7 +748,7 @@ def place(cred, token: str, *, tenant_slug: str = "",
                 # and the price only decides how many contracts that is.
                 # Spending stays bounded by the stake either way, so the
                 # ceiling would only ever turn a fill into no fill.
-                slippage_c=engine.MAX_COMBO_PRICE_C)
+                slippage_c=engine.MAX_COMBO_PRICE_C, team_bot="luck")
             break
         except Exception as exc:                        # noqa: BLE001
             # The exchange names legs that say the same thing; drop the

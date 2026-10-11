@@ -1,0 +1,117 @@
+{
+  "id": "P-0006",
+  "created_at": "2026-10-11T18:28:44+00:00",
+  "status": "proposed",
+  "history": [
+    {
+      "at": "2026-10-11T18:28:44+00:00",
+      "event": "reviewed",
+      "verdict": "FAIL"
+    },
+    {
+      "at": "2026-10-11T18:28:50+00:00",
+      "event": "reviewed",
+      "verdict": "FAIL"
+    },
+    {
+      "at": "2026-10-11T18:29:16+00:00",
+      "event": "reviewed",
+      "verdict": "FAIL"
+    }
+  ],
+  "bot": "luck",
+  "type": "max_legs",
+  "params": {
+    "n": 11
+  },
+  "persona": "sports_parlay_specialist",
+  "evidence": {
+    "n": 10,
+    "win_rate": 0.1,
+    "implied": 0.231,
+    "pnl": -45.47
+  },
+  "rationale": "combos with more than 11 legs lost money",
+  "backtest": {
+    "train": {
+      "baseline": {
+        "n": 21,
+        "wins": 9,
+        "win_rate": 0.429,
+        "implied": 0.253,
+        "breakeven": 0.342,
+        "pnl": 27.91,
+        "max_dd": -50.6
+      },
+      "with_rules": {
+        "n": 11,
+        "wins": 8,
+        "win_rate": 0.727,
+        "implied": 0.272,
+        "breakeven": 0.311,
+        "pnl": 73.38,
+        "max_dd": -9.99
+      },
+      "touched": 10,
+      "blocked": 10,
+      "blocked_pnl": -45.47,
+      "winners_blocked": 1,
+      "delta_pnl": 45.47
+    },
+    "test": {
+      "baseline": {
+        "n": 9,
+        "wins": 2,
+        "win_rate": 0.222,
+        "implied": 0.229,
+        "breakeven": 0.309,
+        "pnl": -14.06,
+        "max_dd": -34.93
+      },
+      "with_rules": {
+        "n": 5,
+        "wins": 1,
+        "win_rate": 0.2,
+        "implied": 0.318,
+        "breakeven": 0.512,
+        "pnl": -19.0,
+        "max_dd": -24.93
+      },
+      "touched": 4,
+      "blocked": 4,
+      "blocked_pnl": 4.94,
+      "winners_blocked": 1,
+      "delta_pnl": -4.94
+    },
+    "all": {
+      "baseline": {
+        "n": 30,
+        "wins": 11,
+        "win_rate": 0.367,
+        "implied": 0.246,
+        "breakeven": 0.338,
+        "pnl": 13.85,
+        "max_dd": -50.6
+      },
+      "with_rules": {
+        "n": 16,
+        "wins": 9,
+        "win_rate": 0.562,
+        "implied": 0.286,
+        "breakeven": 0.352,
+        "pnl": 54.38,
+        "max_dd": -24.93
+      },
+      "touched": 14,
+      "blocked": 14,
+      "blocked_pnl": -40.53,
+      "winners_blocked": 2,
+      "delta_pnl": 40.53
+    }
+  },
+  "verdict": "FAIL",
+  "reviewed_at": "2026-10-11T18:29:16+00:00",
+  "qa_floor_met": false,
+  "ruleset_base": 0,
+  "recommend": false
+}

@@ -473,6 +473,19 @@ def place(db, cred, *, tenant, asset: str, signal: str | None, ticker: str,
             raise SignalTradeRefused(
                 f"this quarter closes in {max(0, int(left))}s — too late to enter")
 
+        # TEAM gate: approved rules for this bot, judged at the ask it buys.
+        from app.domains.botstation import team_gate
+        stake = count * ask / 100
+        verdict = team_gate.check(BOT_KEY, price_c=math.ceil(ask),
+                                  stake_usd=stake, ticker=ticker)
+        if not verdict.allowed:
+            raise SignalTradeRefused(f"{verdict.detail} — nothing was placed")
+        if verdict.stake_usd is not None and verdict.stake_usd < stake:
+            count = int(verdict.stake_usd // (ask / 100))
+            if count < 1:
+                raise SignalTradeRefused(
+                    f"{verdict.detail} — the cap buys less than one contract")
+
         limit_c = min(99, math.ceil(ask) + ENTRY_SLIPPAGE_C)
         try:
             order = client.create_order(
