@@ -59,16 +59,39 @@ def hosted_series(collection: dict) -> dict[str, set[str]]:
     return out
 
 
-def _collection(cred) -> dict | None:
-    """The open collection hosting the most fifteen-minute events."""
+# The collections that are FOR crypto and commodities. A sports collection
+# can list the same fifteen-minute events yet mark them YES-only, and a NO
+# leg there is refused with a bare 400 "invalid parameters" (the 13:20
+# auto slot on 2026-10-12, sent to KXMVESPORTSMULTIGAMEEXTENDED-R).
+PREFERRED_COLLECTIONS = ("KXMVECROSSCATEGORY", "KXMVECRYPTO", "KXMVECOMMOD")
+# A combo Kalshi refuses to create in one collection is tried in at most
+# this many collections in all.
+MAX_COLLECTION_TRIES = 2
+
+
+def _preferred(collection: dict) -> bool:
+    ticker = str((collection or {}).get("collection_ticker") or "").upper()
+    return ticker.startswith(PREFERRED_COLLECTIONS)
+
+
+def _collections(cred) -> list[dict]:
+    """Open collections that host fifteen-minute events: the crypto and
+    commodities ones first, then by how many such events each hosts."""
     from app.domains.botstation.parley import engine
 
-    best, best_n = None, 0
+    ranked = []
     for found in engine.open_collections(cred):
         n = sum(len(events) for events in hosted_series(found).values())
-        if n > best_n:
-            best, best_n = found, n
-    return best
+        if n:
+            ranked.append((not _preferred(found), -n, found))
+    ranked.sort(key=lambda item: item[:2])
+    return [found for _p, _n, found in ranked]
+
+
+def _collection(cred) -> dict | None:
+    """The collection a combo is built in: see _collections."""
+    found = _collections(cred)
+    return found[0] if found else None
 
 
 def _boards(tradier_cred) -> dict[str, dict]:
@@ -238,22 +261,38 @@ def _place(cred, *, legs: list[dict], stake_usd: float, key: str,
     finally:
         client.close()
 
-    collection = _collection(cred)
-    hosted = {e for events in hosted_series(collection).values() for e in events}
-    if not collection or any(c.event_ticker not in hosted for c in chosen):
+    # Every collection that hosts every leg on the side it is on, crypto and
+    # commodities first.
+    usable = []
+    for found in _collections(cred):
+        hosted = {e for events in hosted_series(found).values() for e in events}
+        if all(c.event_ticker in hosted and engine.side_allowed(found, c) for c in chosen):
+            usable.append(found)
+    if not usable:
         return {"placed": False,
-                "detail": "the combo collection no longer hosts every leg -- build again"}
-    try:
-        outcome = engine.place_combo(
-            cred, ComboOrder(legs=chosen), collection["collection_ticker"],
-            dry_run=False, stake_usd=stake, escalation_pct=0.0,
-            # At the market, within the stake: the RFQ is sized in dollars,
-            # so the price decides how many contracts the stake buys.
-            slippage_c=engine.MAX_COMBO_PRICE_C,
-            idempotency_key=f"c15-{key}"[:64], team_bot=BOT_KEY)
-    except Exception as exc:                            # noqa: BLE001
-        logger.warning("combo15 refused: %s", exc)
-        return {"placed": False, "detail": f"Kalshi did not take the combo: {exc}"[:300]}
+                "detail": "no combo collection takes every leg on its side -- build again"}
+    refused: list[str] = []
+    outcome = None
+    for collection in usable[:MAX_COLLECTION_TRIES]:
+        try:
+            outcome = engine.place_combo(
+                cred, ComboOrder(legs=chosen), collection["collection_ticker"],
+                dry_run=False, stake_usd=stake, escalation_pct=0.0,
+                # At the market, within the stake: the RFQ is sized in dollars,
+                # so the price decides how many contracts the stake buys.
+                slippage_c=engine.MAX_COMBO_PRICE_C,
+                idempotency_key=f"c15-{key}"[:64], team_bot=BOT_KEY)
+            break
+        except Exception as exc:                        # noqa: BLE001
+            logger.warning("combo15 refused in %s: %s", collection["collection_ticker"], exc)
+            refused.append(f"{collection['collection_ticker']}: {exc}")
+            # Only a refusal to CREATE the combo market is safe to try again
+            # elsewhere: nothing was bought. Past that, an order may exist.
+            if "combination could not be created" not in str(exc):
+                break
+    if outcome is None:
+        return {"placed": False,
+                "detail": f"Kalshi did not take the combo: {' | '.join(refused)}"[:300]}
     if outcome.get("placed") and tenant_slug:
         from app.domains.botstation.ledger import entries
 
