@@ -425,6 +425,9 @@ export const vidura = {
   commodityStart: (bot, body) => api.post(`/bots/${bot}/start`, body),
   commodityStop: (bot, body) => api.post(`/bots/${bot}/stop`, body),
   commodityLogs: (params) => api.get('/bots/gold15/logs', { params }),
+  // Any bot's log, by key -- the path names the bot. btcLogs and commodityLogs
+  // above always asked btc15 and gold15, whichever bot was meant.
+  botLogs: (key, params) => api.get(`/bots/${key}/logs`, { params }),
   commodityProcesses: (bot) => api.get('/bots/gold15/processes', { params: { bot } }),
   commodityKill: (bot) => api.post(`/bots/${bot}/kill`),
   // live gold/silver/oil DMI call-put readout (the v2 engine's signal) —

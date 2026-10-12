@@ -18,6 +18,7 @@ from app.domains.botstation.adapters import TradeRecord
 from app.domains.botstation.registry import BotConfig, BotVersion, register
 
 _BTC15 = "prediction-trade/kalshi/btc/btc15"
+_ETH15 = "prediction-trade/kalshi/eth/eth15"
 _BTC60 = "prediction-trade/kalshi/btc/btc60"
 _SPORTS = "prediction-trade/kalshi/sports"
 _COMMOD = "prediction-trade/kalshi/commodities"
@@ -437,6 +438,7 @@ _STRATEGY: dict[tuple[str, str], tuple[str, tuple[str, ...]]] = {
          "Take-profit +20%, stop -40%, both armed only after the buy FILLS")),
 
     ("btc15", "v9"): _stacked("BTC"),
+    ("eth15", "v1"): _stacked("ETH"),
     ("gold15", "v5"): _stacked("gold"),
     ("silver15", "v5"): _stacked("silver"),
     ("oil15", "v5"): _stacked("oil"),
@@ -558,6 +560,7 @@ for _key, _label, _fut in (("gold15", "Gold", "GC=F"),
 # is already dense, and _bot() attaches these at registration.
 _SERIES: dict[str, tuple[str, ...]] = {
     "btc15": ("KXBTC15M",),
+    "eth15": ("KXETH15M",),
     "btc60": ("KXBTCD",),
     "gold15": ("KXGOLD15M",),
     "silver15": ("KXSILVER15M",),
@@ -680,6 +683,12 @@ BUILTIN = [
           BotVersion("v9", f"{_BTC15}/v9_bot_kalshi_btc15.py", default=True,
                      option_defaults=dict(_V9_DEFAULTS))),
          "cwd_customer", "v2_trade_history.csv", options=_STACK_OPTIONS),
+    # ETH's quarter-hour on the stacked engine from the start: the same loop
+    # as btc15 v9, reading the CRYPTO board's eth row and trading KXETH15M.
+    _bot("eth15", "Kalshi ETH 15-minute bot", "crypto", "15m",
+         (BotVersion("v1", f"{_ETH15}/v1_bot_kalshi_eth15.py", default=True,
+                     option_defaults=dict(_V9_DEFAULTS)),),
+         "cwd_customer", options=_STACK_OPTIONS),
     _bot("btc60", "Kalshi BTC 60-minute bot", "btc", "60m",
          (BotVersion("fable5", f"{_BTC60}/bot_kalshi_btc60_fable5.py", default=True),
           BotVersion("burst", f"{_BTC60}/bot_kalshi_btc60_burst.py")),
