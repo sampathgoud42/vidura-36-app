@@ -195,7 +195,7 @@ def start_all() -> None:
                                         _run_luck_schedule)
         from app.domains.botstation import combo15_auto
 
-        # The 15M Combo auto bot: at :02, :17, :32 and :47 Chicago time.
+        # The 15M Combo auto bot: at :05, :20, :35 and :50 Chicago time.
         _LOOPS["combo15-auto"] = _Loop("combo15-auto", combo15_auto.POLL_S,
                                        _run_combo15_auto)
         _LOOPS["super-telegram"] = _Loop("super-telegram", super_telegram.POLL_S,

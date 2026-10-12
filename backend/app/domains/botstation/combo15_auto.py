@@ -1,6 +1,6 @@
 """The 15M Combo, built and placed by itself every quarter hour.
 
-While an operator has it on, at :02, :17, :32 and :47 Chicago time -- two
+While an operator has it on, at :05, :20, :35 and :50 Chicago time -- five
 minutes into each fifteen-minute market -- one combo is built and placed in
 the background, with nobody there to confirm it:
 
@@ -37,8 +37,8 @@ from sqlalchemy.exc import IntegrityError
 logger = logging.getLogger(__name__)
 
 TZ = ZoneInfo("America/Chicago")
-# Minutes past each hour: two minutes into each fifteen-minute market.
-MINUTES = (2, 17, 32, 47)
+# Minutes past each hour: five minutes into each fifteen-minute market.
+MINUTES = (5, 20, 35, 50)
 # A slot the loop did not see on time still runs up to this long after it;
 # later, the quarter is too far gone for a combo built for it.
 GRACE_S = 4 * 60
@@ -46,7 +46,7 @@ POLL_S = 20
 STALE_RUN_S = 15 * 60
 MAX_LEGS = 5
 MIN_CHANCE, MAX_CHANCE = 0.07, 0.51
-MIN_USD, MAX_USD = 1.0, 2.0
+MIN_USD, MAX_USD = 1.0, 1.5
 # Past MAX_LEGS legs, how many random picks are tried for one in the chance band.
 PICK_TRIES = 25
 
@@ -69,7 +69,7 @@ def _slot_at(local: datetime) -> datetime | None:
 
 
 def due_slot(now: datetime | None = None) -> str | None:
-    """The slot due now, "2026-10-12 10:02" -- or None."""
+    """The slot due now, "2026-10-12 10:05" -- or None."""
     at = _slot_at((now or _now()).astimezone(TZ))
     return at.strftime("%Y-%m-%d %H:%M") if at else None
 
@@ -122,7 +122,7 @@ def _serialize_run(row) -> dict:
 
 def rule() -> dict:
     return {"minutes": list(MINUTES), "tz": "America/Chicago", "max_legs": MAX_LEGS,
-            "min_chance_pct": MIN_CHANCE * 100, "max_chance_pct": MAX_CHANCE * 100,
+            "min_chance_pct": round(MIN_CHANCE * 100, 2), "max_chance_pct": round(MAX_CHANCE * 100, 2),
             "min_usd": MIN_USD, "max_usd": MAX_USD}
 
 

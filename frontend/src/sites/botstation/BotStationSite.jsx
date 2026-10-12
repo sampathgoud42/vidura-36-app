@@ -2196,9 +2196,9 @@ function SignalStrips() {
 // side is at most 5c wide; the rest are listed unticked with the reason. A
 // market with no side (no signal, mixed) or whose quarter the collection does
 // not host cannot be ticked. One stake, $5 unless changed, at most $99.
-// The 15M Combo's auto bot, beside its button: lit while it is on. At :02,
-// :17, :32 and :47 Chicago time it builds the combo the sheet would, keeps
-// up to five of its DMI-validated legs, and places it for $1-2 when its
+// The 15M Combo's auto bot, beside its button: lit while it is on. At the
+// server's slot minutes (rule.minutes) it builds the combo the sheet would,
+// keeps up to five of its DMI-validated legs, and places it for its stake when its
 // chance of winning is 7-51% -- with nobody there to confirm it.
 function Combo15AutoButton() {
   const [st, setSt] = useState(null);
@@ -2217,7 +2217,7 @@ function Combo15AutoButton() {
       <button type="button" className={`bs-btn bs-combo15-auto${on ? ' on' : ''}`}
         onClick={() => setOpen(true)} aria-pressed={on}
         aria-label={on ? '15M combo auto bot: on' : '15M combo auto bot: off'}
-        title={on ? 'auto bot ON — a combo every quarter hour (:02, :17, :32, :47). Tap for its runs.'
+        title={on ? `auto bot ON — a combo every quarter hour (${slotText(st?.rule)}). Tap for its runs.`
           : 'auto bot — build and place the 15M combo by itself every quarter hour'}>
         <span aria-hidden="true">🤖</span>{on && <span className="dot" aria-hidden="true" />}
       </button>
@@ -2226,6 +2226,11 @@ function Combo15AutoButton() {
     </>
   );
 }
+
+// The slot minutes as the server runs them: ":05, :20, :35, :50".
+const slotText = (rule) => (rule?.minutes || [5, 20, 35, 50])
+  .map((m) => `:${String(m).padStart(2, '0')}`).join(', ');
+const usd2 = (v) => `$${Number(v).toFixed(2)}`;
 
 function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
   const [busy, setBusy] = useState(false);
@@ -2237,12 +2242,12 @@ function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
     if (!on) {
       const ok = await confirmDialog({
         title: 'Switch the 15M combo auto bot on?',
-        body: `Every quarter hour, at :02, :17, :32 and :47 Chicago time, it builds the 15-minute `
+        body: `Every quarter hour, at ${slotText(rule)} Chicago time, it builds the 15-minute `
           + `combo from the DMI-validated legs (at most ${rule.max_legs ?? 5}, picked at random past that), `
-          + `and places it at the market for $${rule.min_usd ?? 1}–$${rule.max_usd ?? 2} when its chance `
+          + `and places it at the market for ${usd2(rule.min_usd ?? 1)}–${usd2(rule.max_usd ?? 1.5)} when its chance `
           + `of winning is ${rule.min_chance_pct ?? 7}–${rule.max_chance_pct ?? 51}%.`,
         notes: ['REAL MONEY on Kalshi, with nobody there to confirm each combo.',
-          'Up to 96 combos a day while it is on; a quarter with no qualifying combo is skipped.'],
+          `Up to 96 combos a day while it is on (at most ${usd2((rule.max_usd ?? 1.5) * 96)}); a quarter with no qualifying combo is skipped.`],
         confirmText: 'Switch on', cancelText: 'Keep off',
       });
       if (!ok) return;
@@ -2265,9 +2270,9 @@ function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
           <button type="button" className="close" onClick={onClose}>×</button>
         </header>
         <p className="bs-luck-note">
-          At <b>:02, :17, :32, :47</b> Chicago time: build the combo from the legs that pass the DMI
+          At <b>{slotText(rule)}</b> Chicago time: build the combo from the legs that pass the DMI
           validation, keep at most <b>{rule.max_legs ?? 5}</b> (a random {rule.max_legs ?? 5} past that),
-          and place it for <b>${rule.min_usd ?? 1}–${rule.max_usd ?? 2}</b> when its chance of winning is
+          and place it for <b>{usd2(rule.min_usd ?? 1)}–{usd2(rule.max_usd ?? 1.5)}</b> when its chance of winning is
           {' '}<b>{rule.min_chance_pct ?? 7}–{rule.max_chance_pct ?? 51}%</b>. Real money.
         </p>
         <div className="bs-luck-actions">
