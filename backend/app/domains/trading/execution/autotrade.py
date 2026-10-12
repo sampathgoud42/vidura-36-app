@@ -151,9 +151,6 @@ class Watcher:
     tickers: list[str]
     strategy: str
     live: bool
-    # Paper on SIP (SIM) rather than Tradier's sandbox: fixed at arm
-    # time, so flipping the board's venue never moves a running watcher.
-    sim: bool = False
     buy_pct: float
     tp_pct: float
     sl_pct: float
@@ -203,6 +200,9 @@ class Watcher:
     marks: object = None
     # star_signals: the star counts it trades (STAR_LEVELS)
     stars: tuple = STAR_DEFAULT
+    # Paper on SIP (SIM) rather than Tradier's sandbox: fixed at arm
+    # time, so flipping the board's venue never moves a running watcher.
+    sim: bool = False
 
     def fail(self, ticker: str, message: str) -> None:
         """An entry that did not happen: counted, logged, and kept as the
