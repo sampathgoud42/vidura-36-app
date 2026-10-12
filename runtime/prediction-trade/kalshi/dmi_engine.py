@@ -107,6 +107,8 @@ class Profile:
     #
     #   "unanimous"  v7 -- all four timeframes on the same side
     #   "majority"   v8 -- three of four on a side AND three of four rising
+    #   "stacked"    v9 -- the five-column board (2m-30m): four of five on a
+    #                side, 2m's ADX rising, and three of five rising in all
     #
     # Defaulted to unanimous so an existing profile keeps the rule it was
     # written with. A version is a name; this is the behaviour, and the two
@@ -720,7 +722,11 @@ def main(profile: Profile) -> int:
              args.min_price_c, args.max_price_c, args.tp_pct, args.sl_pct,
              os.environ.get("KALSHI_TIF", "good_till_canceled"),
              args.window_poll_s, args.poll_s)
-    if profile.rule == "majority":
+    if profile.rule == "stacked":
+        log.info("the rule: of 2m 5m 10m 15m 30m, at least 4 CALL, 2m ADX rising ↑ and "
+                 "at least 3 rising ↑ (2m among them) -> buy YES; the same with 4 PUT "
+                 "-> buy NO; anything else -> stand aside")
+    elif profile.rule == "majority":
         log.info("the rule: at least 3 of 4 timeframes CALL and at least 3 "
                  "rising ↑ -> buy YES; 3 of 4 PUT and 3 rising ↑ -> buy NO; "
                  "anything else -> stand aside")

@@ -353,6 +353,23 @@ _STACK_OPTIONS = {
 _V7_DEFAULTS = {"tp_pct": 20, "sl_pct": 40,
                 "min_price_c": 30, "max_price_c": 65,
                 "entry_open_s": 5, "entry_close_s": 300}
+# The stacked engine (btc15 v9, gold/silver/oil v5): the same gates, and a
+# tighter take-profit.
+_V9_DEFAULTS = {**_V7_DEFAULTS, "tp_pct": 15}
+
+_STACKED_LINES = (
+    "At least 4 of 5 CALL, 2m ADX rising and at least 3 of 5 rising buys YES; "
+    "the same with 4 of 5 PUT buys NO",
+    "The rising count is over the WHOLE stack, not just the agreeing "
+    "timeframes -- and 2m must be one of the rising",
+    "Strictly 5-300 seconds after the market opens, pays 30-65c",
+    "Take-profit +15%, stop -40%, both armed only after the buy FILLS")
+
+
+def _stacked(name: str) -> tuple[str, tuple[str, ...]]:
+    return (f"Four of {name}'s five DMI timeframes (2m 5m 10m 15m 30m) on one side, "
+            "AND 2m's ADX rising with at least three of five rising -- mostly agreed "
+            "and still building.", _STACKED_LINES)
 
 # What each engine version actually DOES, in the words an operator needs
 # before committing money to it. Shown in the launch confirmation, so the
@@ -418,6 +435,11 @@ _STRATEGY: dict[tuple[str, str], tuple[str, tuple[str, ...]]] = {
          "timeframes",
          "Strictly 5-300 seconds after the market opens, pays 30-65c",
          "Take-profit +20%, stop -40%, both armed only after the buy FILLS")),
+
+    ("btc15", "v9"): _stacked("BTC"),
+    ("gold15", "v5"): _stacked("gold"),
+    ("silver15", "v5"): _stacked("silver"),
+    ("oil15", "v5"): _stacked("oil"),
 
     ("monitor15", "v1"): (
         "Records the yes and no bid of every 15-minute market it is given, "
@@ -650,8 +672,13 @@ BUILTIN = [
           # the slope for the conviction v7 got from the fourth timeframe.
           # Same engine, same window, same band; a different reading of the
           # same board.
-          BotVersion("v8", f"{_BTC15}/v8_bot_kalshi_btc15.py", default=True,
-                     option_defaults=dict(_V7_DEFAULTS))),
+          BotVersion("v8", f"{_BTC15}/v8_bot_kalshi_btc15.py",
+                     option_defaults=dict(_V7_DEFAULTS)),
+          # v9 reads the board as it is drawn now -- five columns, 2m to 30m
+          # -- and asks four of five on a side, 2m's ADX rising, and three of
+          # five rising in all; take-profit +15%. v8 stays as it was.
+          BotVersion("v9", f"{_BTC15}/v9_bot_kalshi_btc15.py", default=True,
+                     option_defaults=dict(_V9_DEFAULTS))),
          "cwd_customer", "v2_trade_history.csv", options=_STACK_OPTIONS),
     _bot("btc60", "Kalshi BTC 60-minute bot", "btc", "60m",
          (BotVersion("fable5", f"{_BTC60}/bot_kalshi_btc60_fable5.py", default=True),
@@ -704,8 +731,12 @@ BUILTIN = [
           # three of four timeframes on a side AND three of four with
           # ADX rising, rather than all four on one side.
           BotVersion("v4", f"{_COMMOD}/gold15/v4_bot_kalshi_gold15.py",
+                     option_defaults=dict(_V7_DEFAULTS)),
+          # v5 is btc15 v9's stacked engine: four of five (2m-30m) on a side,
+          # 2m's ADX rising, three of five rising; take-profit +15%.
+          BotVersion("v5", f"{_COMMOD}/gold15/v5_bot_kalshi_gold15.py",
                      default=True,
-                     option_defaults=dict(_V7_DEFAULTS))),
+                     option_defaults=dict(_V9_DEFAULTS))),
          # Kalshi publishes no price series to compute an indicator from, so
          # the signal comes from the liquid ETF that tracks the same
          # underlying. Declared here as CONFIG: a fourth commodity bot names
@@ -732,8 +763,12 @@ BUILTIN = [
           # three of four timeframes on a side AND three of four with
           # ADX rising, rather than all four on one side.
           BotVersion("v4", f"{_COMMOD}/silver15/v4_bot_kalshi_silver15.py",
+                     option_defaults=dict(_V7_DEFAULTS)),
+          # v5 is btc15 v9's stacked engine: four of five (2m-30m) on a side,
+          # 2m's ADX rising, three of five rising; take-profit +15%.
+          BotVersion("v5", f"{_COMMOD}/silver15/v5_bot_kalshi_silver15.py",
                      default=True,
-                     option_defaults=dict(_V7_DEFAULTS))),
+                     option_defaults=dict(_V9_DEFAULTS))),
          # Kalshi publishes no price series to compute an indicator from, so
          # the signal comes from the liquid ETF that tracks the same
          # underlying. Declared here as CONFIG: a fourth commodity bot names
@@ -755,8 +790,12 @@ BUILTIN = [
           # three of four timeframes on a side AND three of four with
           # ADX rising, rather than all four on one side.
           BotVersion("v4", f"{_COMMOD}/oil15/v4_bot_kalshi_oil15.py",
+                     option_defaults=dict(_V7_DEFAULTS)),
+          # v5 is btc15 v9's stacked engine: four of five (2m-30m) on a side,
+          # 2m's ADX rising, three of five rising; take-profit +15%.
+          BotVersion("v5", f"{_COMMOD}/oil15/v5_bot_kalshi_oil15.py",
                      default=True,
-                     option_defaults=dict(_V7_DEFAULTS))),
+                     option_defaults=dict(_V9_DEFAULTS))),
          # Kalshi publishes no price series to compute an indicator from, so
          # the signal comes from the liquid ETF that tracks the same
          # underlying. Declared here as CONFIG: a fourth commodity bot names
