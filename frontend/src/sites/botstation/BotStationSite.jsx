@@ -2336,52 +2336,31 @@ function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
   );
 }
 
-// The auto bot on the helios core: a replica of the strip's 🤖 -- state,
-// next run, last result, and LAUNCH / STOP in one click. Tapping the card
-// opens the same sheet, with the history.
+// The auto bot on the helios core: a small moon in the stage's top right,
+// coloured by the most recent slot -- green it WON, orange it LOST, grey
+// anything else (skipped, failed, still settling). A halo while the bot is
+// ON. Tapping it opens the same sheet as the strip's 🤖, switch and history.
 function HeliosCombo15Auto() {
   const [st, setSt, load] = useCombo15Auto();
   const [open, setOpen] = useState(false);
-  const [busy, setBusy] = useState(false);
   const on = !!st?.enabled;
-  const last = (st?.runs || []).find((r) => r.status === 'placed');
-  const launch = async (e) => {
-    e.stopPropagation();
-    setBusy(true);
-    try {
-      const next = await flipCombo15Auto(st);
-      if (next) setSt(next);
-    } catch { load(); }
-    finally { setBusy(false); }
-  };
+  const last = (st?.runs || [])[0];
+  const tone = last?.status === 'placed' && last.result === 'won' ? 'won'
+    : last?.status === 'placed' && last.result === 'lost' ? 'lost' : 'other';
+  const said = !last ? 'no runs yet'
+    : last.status !== 'placed' ? `${last.slot.slice(11)} ${last.status}`
+    : `${last.slot.slice(11)} ${last.result === 'won' ? 'WON' : last.result === 'lost' ? 'LOST'
+      : last.result === 'void' ? 'void' : 'settling'}`
+      + (last.pnl_usd != null ? ` ${last.pnl_usd >= 0 ? '+' : '−'}$${Math.abs(last.pnl_usd).toFixed(2)}` : '');
+  const title = `15M combo auto bot · ${on ? `ON, next ${st?.next_run ? deskTime(st.next_run) : '—'}` : 'OFF'}`
+    + ` · last: ${said}. Tap to switch it or see its runs.`;
   return (
     <>
-      <div className={`bs-helios-c15${on ? ' on' : ''}`} role="button" tabIndex={0}
-        onClick={() => setOpen(true)}
-        onKeyDown={(e) => { if (e.key === 'Enter') setOpen(true); }}
-        title="15M combo auto bot — tap for its runs">
-        <div className="hd">
-          <span className="dot" aria-hidden="true" />
-          <b>15M COMBO · AUTO</b>
-        </div>
-        <div className="ln">
-          {on ? <>ON · next <b>{st?.next_run ? deskTime(st.next_run) : '—'}</b></> : 'OFF'}
-        </div>
-        {last && (
-          <div className="ln">
-            last {last.slot.slice(11)}{' '}
-            <span className={`res ${last.result || 'pending'}`}>
-              {last.result === 'won' ? 'WIN' : last.result === 'lost' ? 'LOST'
-                : last.result === 'void' ? 'VOID' : '…'}
-              {last.pnl_usd != null && ` ${last.pnl_usd >= 0 ? '+' : '−'}$${Math.abs(last.pnl_usd).toFixed(2)}`}
-            </span>
-          </div>
-        )}
-        <button type="button" className={`bs-btn ${on ? 'bs-combo15-off' : 'bs-combo15-on'}`}
-          onClick={launch} disabled={busy || !st}>
-          {busy ? '…' : on ? 'STOP' : 'LAUNCH'}
-        </button>
-      </div>
+      <button type="button" className={`bs-helios-moon ${tone}${on ? ' on' : ''}`}
+        onClick={() => setOpen(true)} title={title} aria-label={title}>
+        <span className="orb" aria-hidden="true" />
+        <span className="lbl" aria-hidden="true">15M</span>
+      </button>
       {open && <Combo15AutoSheet st={st} onChange={setSt} onReload={load}
         onClose={() => setOpen(false)} />}
     </>
