@@ -130,6 +130,12 @@ def _run_luck_schedule() -> None:
     luck_schedule.sweep_all_tenants()
 
 
+def _run_combo15_auto() -> None:
+    from app.domains.botstation import combo15_auto
+
+    combo15_auto.sweep_all_tenants()
+
+
 def _post_super_signals() -> None:
     from app.domains.notify import super_telegram
 
@@ -187,6 +193,11 @@ def start_all() -> None:
                                         _sweep_signal_trades)
         _LOOPS["luck-schedule"] = _Loop("luck-schedule", luck_schedule.POLL_S,
                                         _run_luck_schedule)
+        from app.domains.botstation import combo15_auto
+
+        # The 15M Combo auto bot: at :05, :20, :35 and :50 Chicago time.
+        _LOOPS["combo15-auto"] = _Loop("combo15-auto", combo15_auto.POLL_S,
+                                       _run_combo15_auto)
         _LOOPS["super-telegram"] = _Loop("super-telegram", super_telegram.POLL_S,
                                          _post_super_signals)
         _LOOPS["superhot-telegram"] = _Loop("superhot-telegram",

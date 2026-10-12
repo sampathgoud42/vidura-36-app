@@ -271,3 +271,49 @@ class LuckRun(Base, TenantOwned, Timestamped):
             name="status_known"),
         Index("ix_luck_run_tenant_slot", "tenant_id", "slot"),
     )
+
+
+class Combo15Auto(Base, TenantOwned, Timestamped):
+    """An operator's 15M Combo auto bot: on or off. While on, a combo is built
+    and placed at :02, :17, :32 and :47 (combo15_auto). One row per operator."""
+
+    __tablename__ = "combo15_auto"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # When it was last switched ON: a slot that began before that is not run.
+    enabled_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (UniqueConstraint("tenant_id", name="one_combo15_auto_per_tenant"),)
+
+
+class Combo15AutoRun(Base, TenantOwned, Timestamped):
+    """One slot of the 15M Combo auto bot, for one operator. Written BEFORE
+    the combo is built, unique per (operator, slot): a slot runs once, across
+    loop passes and restarts -- running it again could buy the combo twice."""
+
+    __tablename__ = "combo15_auto_run"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    # The slot in Chicago time, "2026-10-12 10:02".
+    slot: Mapped[str] = mapped_column(String(16), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="running")
+    detail: Mapped[str | None] = mapped_column(String(255))
+    legs: Mapped[int | None] = mapped_column(Integer)
+    # The combo's chance of winning on the bids, in percent.
+    chance_pct: Mapped[float | None] = mapped_column(Float)
+    stake_usd: Mapped[float | None] = mapped_column(Float)
+    cost_usd: Mapped[float | None] = mapped_column(Float)
+    combo_ticker: Mapped[str | None] = mapped_column(String(64))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime)
+
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "slot", name="one_combo15_run_per_slot"),
+        CheckConstraint(
+            "status in ('running','placed','skipped','failed','interrupted')",
+            name="status_known"),
+        Index("ix_combo15_auto_run_tenant_slot", "tenant_id", "slot"),
+    )
+

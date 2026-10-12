@@ -366,6 +366,9 @@ export const vidura = {
   rainTrade: (body, key) => api.post('/climate/rain-forecast/trade', body,
     { idempotencyKey: key }),
   combo15Preview: () => api.post('/bots/combo15/preview', {}),
+  // the 15M Combo auto bot: on or off, its rule, its next and latest slots
+  combo15Auto: () => api.get('/bots/combo15/auto'),
+  setCombo15Auto: (enabled) => api.put('/bots/combo15/auto', { enabled }),
   // Placing STARTS a job and returns; the sheet then reads the answer, up
   // to three minutes, so a slow RFQ can no longer be cut off by a timeout.
   combo15Place: async (body, key, onTick) => {

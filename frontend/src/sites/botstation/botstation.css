@@ -1459,3 +1459,21 @@
   }
   .bs-luck-sheet > .bs-modal-hd .bs-refresh { flex: none; min-width: 44px; min-height: 44px; }
 }
+
+/* the 15M Combo auto bot: its icon beside 15M COMBO, lit while on, and its runs */
+.bs-combo15-auto { position: relative; margin-left: 4px; padding: 0 8px; }
+.bs-combo15-auto.on { border-color: var(--bs-sun, #fbbf24); box-shadow: 0 0 0 1px rgba(251, 191, 36, 0.35) inset; }
+.bs-combo15-auto .dot { position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%;
+  background: #34d399; }
+@media (pointer: coarse) { .bs-combo15-auto { min-width: 44px; min-height: 44px; } }
+.bs-combo15-on { border-color: rgba(52, 211, 153, 0.6); color: #34d399; }
+.bs-combo15-off { border-color: rgba(248, 113, 113, 0.6); color: #f87171; }
+.bs-combo15-runs { margin-top: 10px; max-height: 260px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.bs-combo15-run { display: flex; gap: 8px; padding: 5px 2px; font-size: 11.5px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06); }
+.bs-combo15-run .slot { flex: none; width: 42px; font-variant-numeric: tabular-nums; color: var(--bs-ink-2, #c9d1e8); }
+.bs-combo15-run .st { flex: none; width: 70px; text-transform: uppercase; font-size: 10px; letter-spacing: 0.08em; }
+.bs-combo15-run.placed .st { color: #34d399; }
+.bs-combo15-run.skipped .st { color: var(--bs-ink-3, #8b93ad); }
+.bs-combo15-run.failed .st, .bs-combo15-run.interrupted .st { color: #f87171; }
+.bs-combo15-run .what { color: var(--bs-ink-3, #8b93ad); overflow-wrap: anywhere; }
