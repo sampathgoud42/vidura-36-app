@@ -1477,3 +1477,8 @@
 .bs-combo15-run.skipped .st { color: var(--bs-ink-3, #8b93ad); }
 .bs-combo15-run.failed .st, .bs-combo15-run.interrupted .st { color: #f87171; }
 .bs-combo15-run .what { color: var(--bs-ink-3, #8b93ad); overflow-wrap: anywhere; }
+.bs-combo15-run .res { flex: none; min-width: 64px; font-size: 10px; font-weight: 700;
+  letter-spacing: 0.06em; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bs-combo15-run .res.won { color: #34d399; }
+.bs-combo15-run .res.lost { color: #f87171; }
+.bs-combo15-run .res.void, .bs-combo15-run .res.pending { color: var(--bs-ink-3, #8b93ad); }
