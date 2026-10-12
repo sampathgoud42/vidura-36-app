@@ -1596,3 +1596,8 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
 }
 .tr-autoline .tr-autodisarm:disabled { opacity: 0.5; cursor: default; }
 .tr-autoline.tr-autoctl { display: flex; gap: 6px; flex-wrap: wrap; color: inherit; }
+
+/* the arm form's one-click Star Signals: amber, the stars' own colour */
+.tr-btn.tr-preset { border-color: rgba(251, 191, 36, 0.6); color: #fbbf24; background: rgba(251, 191, 36, 0.08); }
+.tr-btn.tr-preset:not(:disabled):hover { background: rgba(251, 191, 36, 0.16); }
+@media (pointer: coarse) { .tr-btn.tr-preset { min-height: 44px; } }
