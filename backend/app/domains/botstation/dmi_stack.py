@@ -50,7 +50,11 @@ from datetime import datetime, timezone
 # would drift from the screen the first time either was touched, and nothing
 # compares them.
 TIMEFRAMES = ("m1", "m2", "m5", "m10")
-LABELS = {"m1": "1m", "m2": "2m", "m5": "5m", "m10": "10m"}
+LABELS = {"m1": "1m", "m2": "2m", "m5": "5m", "m10": "10m", "m15": "15m", "m30": "30m"}
+# The board as the panel draws it now: five columns, 2m to 30m. The STACKED
+# rule (BTC-15 v9, gold/silver/oil v5) reads these; v7 and v8 keep the four
+# above, unchanged.
+STACK5 = ("m2", "m5", "m10", "m15", "m30")
 
 # TWO INDEPENDENT THINGS, and the panel draws them as two independent things.
 # Getting them confused is the whole reason this comment exists.
@@ -76,6 +80,14 @@ MAJORITY_NEED = 3
 # "unanimous=False" at a call site says nothing about what it does instead.
 UNANIMOUS = "unanimous"
 MAJORITY = "majority"
+STACKED = "stacked"
+
+# STACKED (v9): over the five-column board, at least STACKED_SIDE_NEED on one
+# side, 2m's ADX rising, and at least STACKED_RISE_NEED rising in all -- 2m
+# among them -- counted over the WHOLE stack, not the agreeing side.
+STACKED_SIDE_NEED = 4
+STACKED_RISE_NEED = 3
+STACKED_LEAD = "m2"
 
 # The entry window, in seconds after the market opened.
 ENTRY_OPEN_S = 5
@@ -106,6 +118,8 @@ class Stack:
     # "not rising" rather than as rising: an unknown must never satisfy a
     # threshold.
     rising: dict[str, bool | None] = field(default_factory=dict)
+    # The columns this reading covers: the four of v7/v8, or STACK5.
+    frames: tuple = TIMEFRAMES
 
     @property
     def tradeable(self) -> bool:
@@ -129,7 +143,7 @@ class Stack:
         """
         price = f"{self.last:g}" if self.last is not None else "?"
         cells = []
-        for name in TIMEFRAMES:
+        for name in self.frames:
             adx = self.adx.get(name)
             if adx is None:
                 # No reading at all -- not a flat one. Printed as a gap rather
@@ -145,12 +159,12 @@ class Stack:
         return f"{self.label} {price}  " + "  ".join(cells)
 
 
-def _blocked(per_tf, adx, last, label, reason, rising=None) -> Stack:
+def _blocked(per_tf, adx, last, label, reason, rising=None, frames=TIMEFRAMES) -> Stack:
     return Stack(False, None, None, per_tf, adx, last, label, reason,
-                 rising or {})
+                 rising or {}, frames)
 
 
-def _read_row(rows: list[dict], row_key: str):
+def _read_row(rows: list[dict], row_key: str, frames=TIMEFRAMES):
     """The board row for one instrument, unpacked into the four facts.
 
     Returns (row, label, per_tf, rising, adx, last) or a blocked Stack when
@@ -164,9 +178,9 @@ def _read_row(rows: list[dict], row_key: str):
                         f"no {row_key} row on the board (it carried: {seen})")
 
     label = str(row.get("label") or row_key).upper()
-    per_tf = {n: row.get(f"{n}_side") for n in TIMEFRAMES}
-    adx = {n: row.get(f"{n}_adx") for n in TIMEFRAMES}
-    slopes = {n: row.get(f"{n}_slope") for n in TIMEFRAMES}
+    per_tf = {n: row.get(f"{n}_side") for n in frames}
+    adx = {n: row.get(f"{n}_adx") for n in frames}
+    slopes = {n: row.get(f"{n}_slope") for n in frames}
     rising = {n: (None if v is None else float(v) > 0)
               for n, v in slopes.items()}
     last = row.get("last")
@@ -174,7 +188,7 @@ def _read_row(rows: list[dict], row_key: str):
     if row.get("error"):
         return _blocked(per_tf, adx, last, label,
                         f"the board could not read {label}: {row['error']}",
-                        rising)
+                        rising, frames)
     return row, label, per_tf, rising, adx, last
 
 
@@ -244,6 +258,61 @@ def read_majority(rows: list[dict], row_key: str, *,
                  f"{len(ups)} rising -> buy {side.upper()}", rising)
 
 
+def read_stacked(rows: list[dict], row_key: str) -> Stack:
+    """v9: the five-column board, mostly agreed and still building.
+
+        at least 4 of 5 (2m 5m 10m 15m 30m) CALL, 2m ADX rising,
+            and at least 3 of 5 rising (2m among them)   -> buy YES
+        at least 4 of 5 PUT, the same rising test        -> buy NO
+        anything else                                    -> stand aside
+
+    The rising count is over the WHOLE stack, not over the agreeing side, as
+    v8's is. 2m leads: its ADX must be rising whatever the others do, so a
+    stack whose fastest column is fading stands aside however convinced the
+    slow ones look. A missing side counts toward neither, a missing slope as
+    not rising.
+    """
+    frames = STACK5
+    unpacked = _read_row(rows, row_key, frames)
+    if isinstance(unpacked, Stack):
+        return unpacked
+    _row, label, per_tf, rising, adx, last = unpacked
+
+    calls = [n for n in frames if per_tf.get(n) == "call"]
+    puts = [n for n in frames if per_tf.get(n) == "put"]
+    ups = [n for n in frames if rising.get(n)]
+    shown = "  ".join(
+        f"{LABELS[n]}{WORDS.get(per_tf.get(n), 'flat')}"
+        f"{ARROWS.get(bool(rising.get(n)), '-') if rising.get(n) is not None else '·'}"
+        for n in frames)
+    n_all = len(frames)
+
+    if len(calls) >= STACKED_SIDE_NEED:
+        direction = "call"
+    elif len(puts) >= STACKED_SIDE_NEED:
+        direction = "put"
+    else:
+        return _blocked(per_tf, adx, last, label,
+                        f"no side has {STACKED_SIDE_NEED} of {n_all} "
+                        f"({len(calls)} call, {len(puts)} put): {shown}", rising, frames)
+    if not rising.get(STACKED_LEAD):
+        return _blocked(per_tf, adx, last, label,
+                        f"{LABELS[STACKED_LEAD]} ADX is not rising: {shown}", rising, frames)
+    if len(ups) < STACKED_RISE_NEED:
+        return _blocked(per_tf, adx, last, label,
+                        f"only {len(ups)} of {n_all} rising, {STACKED_RISE_NEED} needed "
+                        f"({LABELS[STACKED_LEAD]} among them): {shown}", rising, frames)
+
+    side = SIDE_FOR.get(direction)
+    if side is None:
+        return _blocked(per_tf, adx, last, label,
+                        f"no tradeable side for {direction!r}", rising, frames)
+    agreeing = len(calls) if direction == "call" else len(puts)
+    return Stack(True, direction, side, per_tf, adx, last, label,
+                 f"{agreeing} of {n_all} {WORDS[direction]}, {LABELS[STACKED_LEAD]} rising and "
+                 f"{len(ups)} rising -> buy {side.upper()}", rising, frames)
+
+
 def read(rows: list[dict], row_key: str, *, rule: str = UNANIMOUS,
          need: int = MAJORITY_NEED) -> Stack:
     """Whichever rule the engine was launched with.
@@ -251,6 +320,8 @@ def read(rows: list[dict], row_key: str, *, rule: str = UNANIMOUS,
     One entry point so the loop never branches on a version number -- a bot
     names its rule in its profile and everything downstream reads a Stack.
     """
+    if rule == STACKED:
+        return read_stacked(rows, row_key)
     if rule == MAJORITY:
         return read_majority(rows, row_key, need=need)
     return read_stack(rows, row_key)

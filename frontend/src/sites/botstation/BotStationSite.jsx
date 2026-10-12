@@ -19,6 +19,7 @@ import './botstation.css';
 
 const BOTS = [
   { key: 'btc15', label: 'BTC-15', sub: '15 min breakout', accent: '#ffb347', chip: 'b15', meter: 'sun' },
+  { key: 'eth15', label: 'ETH-15', sub: '15 min ETH · DMI stack', accent: '#8a92b2', chip: 'e15', meter: 'cyan' },
   { key: 'btc60', label: 'BTC-60', sub: 'hourly committee', accent: '#4fd6e6', chip: 'b60', meter: 'cyan' },
   { key: 'sports', label: 'SPORTS', sub: 'tennis · baseball', accent: '#9085e9', chip: 'sp', meter: 'violet' },
   { key: 'parley', label: 'PARLEY', sub: 'live-leg combos', accent: '#f26fb8', chip: 'pl', meter: 'rose' },
@@ -48,6 +49,7 @@ const NTT_RE = /^$|^\s*\d{1,2}:\d{2}\s*-\s*\d{1,2}:\d{2}(\s*,\s*\d{1,2}:\d{2}\s*
 
 const BOT_DEFAULTS = {
   btc15: { bank: '50', contracts: '25', target_pct: '30', bank_sl_pct: '20', no_trade_times: NTT_DEFAULT },
+  eth15: { bank: '50', contracts: '25', target_pct: '30', bank_sl_pct: '20', no_trade_times: NTT_DEFAULT },
   btc60: { bank: '50', contracts: '25', target_pct: '30', bank_sl_pct: '20', no_trade_times: NTT_DEFAULT },
   sports: {
     target_pct: '30', bank_sl_pct: '20', no_trade_times: '16:00-20:00',
@@ -2873,11 +2875,10 @@ function BotLogsOverlay({ botKey, user, onClose }) {
     const load = async () => {
       try {
         const tail = { user_id: user.user_id, lines: 120 };
-        const isCmdt = botKey === 'gold15' || botKey === 'silver15' || botKey === 'oil15';
+        // every bot's OWN log, by its key in the path
         const r = botKey === 'sports' ? await vidura.sportsLogs(tail)
           : botKey === 'parley' ? await vidura.parleyLogs(tail)
-            : isCmdt ? await vidura.commodityLogs({ bot: botKey, ...tail })
-              : await vidura.btcLogs({ bot: botKey, ...tail });
+            : await vidura.botLogs(botKey, tail);
         if (alive) { setLines(r.lines || []); setErr(null); }
       } catch (e) {
         if (!alive) return;
@@ -3721,7 +3722,7 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
     const results = { ok: [], fail: [] };
     const stops = alreadyRunning.map(async (bot) => {
       const isCommodity = bot.key === 'gold15' || bot.key === 'silver15' || bot.key === 'oil15';
-      const isBtc = (bot.key === 'btc15' || bot.key === 'btc60'
+      const isBtc = (bot.key === 'btc15' || bot.key === 'btc60' || bot.key === 'eth15'
                      || bot.key === 'monitor15');
       const isParley = bot.key === 'parley';
       const body = {};
@@ -3782,7 +3783,7 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
     // without this the promise in the dialog was not kept.
     await Promise.allSettled(selRunning.map(async (bot) => {
       const c = bot.key === 'gold15' || bot.key === 'silver15' || bot.key === 'oil15';
-      const b = bot.key === 'btc15' || bot.key === 'btc60';
+      const b = bot.key === 'btc15' || bot.key === 'btc60' || bot.key === 'eth15';
       const pl = bot.key === 'parley';
       return (c ? vidura.commodityStop(bot.key, {})
         : b ? vidura.btcStop(bot.key, {})
@@ -3792,7 +3793,7 @@ function LaunchAllModal({ user, statuses, onClose, onChanged, onGuard }) {
     const launches = selected.map(async (bot) => {
       const botBank = parseFloat(perBotBank[bot.key]) || 0;
       const isCommodity = bot.key === 'gold15' || bot.key === 'silver15' || bot.key === 'oil15';
-      const isBtc = bot.key === 'btc15' || bot.key === 'btc60';
+      const isBtc = bot.key === 'btc15' || bot.key === 'btc60' || bot.key === 'eth15';
       const isParley = bot.key === 'parley';
       // The monitor takes no bank, no contracts and no target. Without this it
       // falls off the end of every chain below and is launched as the SPORTS
@@ -4438,7 +4439,7 @@ export default function BotStationSite() {
     (async () => {
       const stops = running.map(async (bot) => {
         const isCommodity = bot.key === 'gold15' || bot.key === 'silver15' || bot.key === 'oil15';
-        const isBtc = bot.key === 'btc15' || bot.key === 'btc60';
+        const isBtc = bot.key === 'btc15' || bot.key === 'btc60' || bot.key === 'eth15';
         const isParley = bot.key === 'parley';
         const body = {};
         try {
