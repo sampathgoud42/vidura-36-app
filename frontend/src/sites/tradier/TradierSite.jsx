@@ -2820,17 +2820,34 @@ export function deskOwnerNote(owner) {
     : `${owner.describe} holds the signal desk`;
 }
 
-// One click arms this: star signals, exactly as the operator set it up --
-// ⭐⭐ and ⭐⭐⭐ on any ticker, 09:15-13:15 CST, the strike by OI + VOL on the
-// nearest expiry after today, 20% of the balance at SMART, TP 10% / SL 40%.
-// It arms on the board's current venue, like the form's own button.
-export const STAR_SIGNALS_PRESET = {
-  strategy: 'star_signals', tickers: '', stars: [2, 3],
-  window_open: '09:15', window_close: '13:15',
+// The one-click strategies, each armed exactly as the operator set it up, on
+// the board's current venue like the form's own button. They share one setup
+// -- any ticker, 09:15-13:15 CST, the strike by OI + VOL on the nearest
+// expiry after today, 20% of the balance, size +/-10%, TP 10% / SL 40% --
+// and differ in what they trade and how they price it: Star Signals at
+// SMART, the rest a LIMIT 10% under the mark.
+const ONE_CLICK_BASE = {
+  tickers: '', window_open: '09:15', window_close: '13:15',
   buy_pct: 20, tolerance_pct: 10, tp_pct: 10, sl_pct: 40, min_contracts: '1',
   delta: '0.14-0.20', delta_min: 0.14, delta_max: 0.20, pick: 'open_interest',
-  order_type: 'smart', discount_pct: 0, zero_dte: false, near_expiry: true,
+  zero_dte: false, near_expiry: true,
 };
+const LIMIT_10 = { order_type: 'limit', discount_pct: 10 };
+export const STAR_SIGNALS_PRESET = {
+  ...ONE_CLICK_BASE, strategy: 'star_signals', stars: [2, 3],
+  order_type: 'smart', discount_pct: 0,
+};
+// [label, preset, what it trades, trades the signal desk?]
+export const ONE_CLICK = [
+  ['⭐ Star Signals', STAR_SIGNALS_PRESET, 'any ticker\'s ⭐⭐ or ⭐⭐⭐ signal, at SMART', true],
+  ['⭐👍 Best Picks', { ...ONE_CLICK_BASE, ...LIMIT_10, strategy: 'best_picks' },
+    'any ticker\'s ⭐⭐⭐ and 👍 signal, LIMIT −10%', true],
+  // every pair on today's best-pairs list, read the moment it is clicked
+  ['👍 Best Pair', { ...ONE_CLICK_BASE, ...LIMIT_10, strategy: 'best_pairs', pairs: 'today' },
+    'every pair on today\'s best-pairs list, LIMIT −10%', true],
+  ['🔥 Best DMI', { ...ONE_CLICK_BASE, ...LIMIT_10, strategy: 'superhot_dmi' },
+    'a ticker joining the SUPERHOT list (CALL for DMI UP, PUT for DOWN), LIMIT −10%', false],
+];
 
 export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, deskOwner,
   armed = [] }) {
@@ -2863,6 +2880,28 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
   // How strikes are picked: the delta band, or open interest (STRIKE_PICKS).
   const [pick, setPick] = useState('delta');
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
+  // A one-click preset: armed as it stands -- Best Pair with every pair on
+  // today's list, read now rather than whenever the form was opened.
+  const [presetBusy, setPresetBusy] = useState('');
+  const [presetErr, setPresetErr] = useState('');
+  const armPreset = async (preset) => {
+    setPresetErr('');
+    let body = { ...f, ...preset };
+    if (preset.pairs === 'today') {
+      setPresetBusy(preset.strategy);
+      try {
+        const r = await vidura.superSignalsBestPairs();
+        body = { ...body, pairs: (r?.pairs || []).map(({ type_key: k, ticker }) => ({ type_key: k, ticker })) };
+      } catch (e) {
+        setPresetErr(`the best-pairs list could not be read: ${errText(e)}`);
+        setPresetBusy('');
+        return;
+      }
+      setPresetBusy('');
+      if (!body.pairs.length) { setPresetErr('there are no best pairs on today\'s list to arm'); return; }
+    }
+    onArm(body);
+  };
   const isHot = f.strategy === 'hot_tickers';
   const isSuperHot = f.strategy === 'super_hot_tickers';
   const isAutoScan = isHot || isSuperHot;
@@ -3206,17 +3245,25 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
             : 'SANDBOX venue — paper money, real order flow.'}
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <button type="button" className="tr-btn sm auto tr-preset"
-            disabled={busy || !!deskOwner || armed.includes('star_signals')
-              || !(defaults?.strategies || []).includes('star_signals')}
-            title={armed.includes('star_signals') ? 'star signals is already armed'
-              : deskOwner ? deskOwnerNote(deskOwner)
-              : 'Arm star signals in one click: ⭐⭐ and ⭐⭐⭐ on any ticker, 09:15–13:15 CST, '
-                + 'strike by OI + VOL on the nearest expiry, Buy 20% at SMART, TP 10% / SL 40%, '
-                + `min 1 contract${paper ? ' — on the paper venue' : ' — on the LIVE account'}`}
-            onClick={() => onArm({ ...f, ...STAR_SIGNALS_PRESET })}>
-            {busy ? '…' : '⭐ Star Signals'}
-          </button>
+          {ONE_CLICK.map(([label, preset, what, onDeskToo]) => {
+            const name = preset.strategy;
+            const taken = armed.includes(name);
+            const blocked = onDeskToo && !!deskOwner;
+            return (
+              <button key={name} type="button" className="tr-btn sm auto tr-preset"
+                disabled={busy || !!presetBusy || taken || blocked
+                  || !(defaults?.strategies || []).includes(name)}
+                title={taken ? `${STRATEGY_LABELS[name] || name} is already armed`
+                  : blocked ? deskOwnerNote(deskOwner)
+                  : `Arm ${STRATEGY_LABELS[name] || name} in one click: ${what}; 09:15–13:15 CST, `
+                    + 'strike by OI + VOL on the nearest expiry, Buy 20% (±10%), TP 10% / SL 40%, '
+                    + `min 1 contract${paper ? ' — on the paper venue' : ' — on the LIVE account'}`}
+                onClick={() => armPreset(preset)}>
+                {presetBusy === name ? '…' : label}
+              </button>
+            );
+          })}
+          {presetErr && <span className="tr-note" style={{ color: 'var(--tr-red)', flexBasis: '100%' }}>{presetErr}</span>}
           <button type="button" className="tr-btn sm auto"
             disabled={busy || deskTaken || armed.includes(f.strategy)
               || (isSuper && f.signals.length === 0)
