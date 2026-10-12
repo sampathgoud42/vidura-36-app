@@ -65,20 +65,14 @@ const RECOVERED_MS = 3 * 60 * 1000;
 // rungs. The backend caps discount_pct at 50.
 const DISCOUNT_OPTIONS = [5, 10, 20, 40];
 
-const VENUE_KEY = 'desk36.venue';
-// The venue survives a refresh, because forgetting it silently is how a paper
-// order becomes a real one. Nothing stored means this browser has never opened
-// the board, and that first load is LIVE.
+// The board opens on the SANDBOX, every load, on every device (user
+// 10/12): LIVE is armed by hand from the venue sheet and never remembered.
+// The key the venue used to be remembered under is cleared, so a browser
+// that last left it on LIVE does not carry that forward.
+const LEGACY_VENUE_KEY = 'desk36.venue';
 const loadVenue = () => {
-  try {
-    const v = localStorage.getItem(VENUE_KEY);
-    if (v === 'paper') return false;
-    if (v === 'live') return true;
-  } catch { /* private mode */ }
-  return true;
-};
-const saveVenue = (live) => {
-  try { localStorage.setItem(VENUE_KEY, live ? 'live' : 'paper'); } catch { /* ignore */ }
+  try { localStorage.removeItem(LEGACY_VENUE_KEY); } catch { /* private mode */ }
+  return false;
 };
 
 // MiniChart remembers its granularity per symbol under this key and falls
@@ -1150,7 +1144,6 @@ export default function Desk36Site() {
 
   useEffect(() => { ensureUser().then(setUser).catch(failNow); }, [failNow]);
   useEffect(() => { saveTickers(tickers); }, [tickers]);
-  useEffect(() => { saveVenue(live); }, [live]);
 
   const symbols = useMemo(() => tickers.join(','), [tickers]);
 
