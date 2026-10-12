@@ -2202,17 +2202,46 @@ function SignalStrips() {
 // server's slot minutes (rule.minutes) it builds the combo the sheet would,
 // keeps up to five of its DMI-validated legs, and places it for its stake when its
 // chance of winning is 7-51% -- with nobody there to confirm it.
-function Combo15AutoButton() {
+// The auto bot's state, read on open and every minute. The strip's 🤖 and
+// the helios core's replica each hold one; both switch the same server row.
+function useCombo15Auto() {
   const [st, setSt] = useState(null);
-  const [open, setOpen] = useState(false);
   const load = useCallback(async () => {
-    try { setSt(await vidura.combo15Auto()); } catch { /* the icon reads as off */ }
+    try { setSt(await vidura.combo15Auto()); } catch { /* reads as off */ }
   }, []);
   useEffect(() => {
     load();
     const id = setInterval(load, 60000);
     return () => clearInterval(id);
   }, [load]);
+  return [st, setSt, load];
+}
+
+// Switch the auto bot on or off. ON is confirmed -- real money, no one there
+// to confirm each combo -- OFF is not. Returns the new state, or null when
+// the operator kept it off.
+async function flipCombo15Auto(st) {
+  const rule = st?.rule || {};
+  const on = !!st?.enabled;
+  if (!on) {
+    const ok = await confirmDialog({
+      title: 'Switch the 15M combo auto bot on?',
+      body: `Every quarter hour, at ${slotText(rule)} Chicago time, it builds the 15-minute `
+        + `combo from the DMI-validated legs (at most ${rule.max_legs ?? 5}, picked at random past that), `
+        + `and places it at the market for ${usd2(rule.min_usd ?? 1)}–${usd2(rule.max_usd ?? 1.5)} when its chance `
+        + `of winning is ${rule.min_chance_pct ?? 11}–${rule.max_chance_pct ?? 51}%.`,
+      notes: ['REAL MONEY on Kalshi, with nobody there to confirm each combo.',
+        `Up to 96 combos a day while it is on (at most ${usd2((rule.max_usd ?? 1.5) * 96)}); a quarter with no qualifying combo is skipped.`],
+      confirmText: 'Switch on', cancelText: 'Keep off',
+    });
+    if (!ok) return null;
+  }
+  return vidura.setCombo15Auto(!on);
+}
+
+function Combo15AutoButton() {
+  const [st, setSt, load] = useCombo15Auto();
+  const [open, setOpen] = useState(false);
   const on = !!st?.enabled;
   return (
     <>
@@ -2241,21 +2270,11 @@ function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
   const on = !!st?.enabled;
   const flip = async () => {
     setErr('');
-    if (!on) {
-      const ok = await confirmDialog({
-        title: 'Switch the 15M combo auto bot on?',
-        body: `Every quarter hour, at ${slotText(rule)} Chicago time, it builds the 15-minute `
-          + `combo from the DMI-validated legs (at most ${rule.max_legs ?? 5}, picked at random past that), `
-          + `and places it at the market for ${usd2(rule.min_usd ?? 1)}–${usd2(rule.max_usd ?? 1.5)} when its chance `
-          + `of winning is ${rule.min_chance_pct ?? 11}–${rule.max_chance_pct ?? 51}%.`,
-        notes: ['REAL MONEY on Kalshi, with nobody there to confirm each combo.',
-          `Up to 96 combos a day while it is on (at most ${usd2((rule.max_usd ?? 1.5) * 96)}); a quarter with no qualifying combo is skipped.`],
-        confirmText: 'Switch on', cancelText: 'Keep off',
-      });
-      if (!ok) return;
-    }
     setBusy(true);
-    try { onChange(await vidura.setCombo15Auto(!on)); } catch (e) { setErr(e?.message || String(e)); }
+    try {
+      const next = await flipCombo15Auto(st);
+      if (next) onChange(next);
+    } catch (e) { setErr(e?.message || String(e)); }
     finally { setBusy(false); }
   };
   const when = (iso) => (iso ? deskTime(iso) : '—');
@@ -2314,6 +2333,58 @@ function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
       </div>
     </div>,
     document.body,
+  );
+}
+
+// The auto bot on the helios core: a replica of the strip's 🤖 -- state,
+// next run, last result, and LAUNCH / STOP in one click. Tapping the card
+// opens the same sheet, with the history.
+function HeliosCombo15Auto() {
+  const [st, setSt, load] = useCombo15Auto();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const on = !!st?.enabled;
+  const last = (st?.runs || []).find((r) => r.status === 'placed');
+  const launch = async (e) => {
+    e.stopPropagation();
+    setBusy(true);
+    try {
+      const next = await flipCombo15Auto(st);
+      if (next) setSt(next);
+    } catch { load(); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <div className={`bs-helios-c15${on ? ' on' : ''}`} role="button" tabIndex={0}
+        onClick={() => setOpen(true)}
+        onKeyDown={(e) => { if (e.key === 'Enter') setOpen(true); }}
+        title="15M combo auto bot — tap for its runs">
+        <div className="hd">
+          <span className="dot" aria-hidden="true" />
+          <b>15M COMBO · AUTO</b>
+        </div>
+        <div className="ln">
+          {on ? <>ON · next <b>{st?.next_run ? deskTime(st.next_run) : '—'}</b></> : 'OFF'}
+        </div>
+        {last && (
+          <div className="ln">
+            last {last.slot.slice(11)}{' '}
+            <span className={`res ${last.result || 'pending'}`}>
+              {last.result === 'won' ? 'WIN' : last.result === 'lost' ? 'LOST'
+                : last.result === 'void' ? 'VOID' : '…'}
+              {last.pnl_usd != null && ` ${last.pnl_usd >= 0 ? '+' : '−'}$${Math.abs(last.pnl_usd).toFixed(2)}`}
+            </span>
+          </div>
+        )}
+        <button type="button" className={`bs-btn ${on ? 'bs-combo15-off' : 'bs-combo15-on'}`}
+          onClick={launch} disabled={busy || !st}>
+          {busy ? '…' : on ? 'STOP' : 'LAUNCH'}
+        </button>
+      </div>
+      {open && <Combo15AutoSheet st={st} onChange={setSt} onReload={load}
+        onClose={() => setOpen(false)} />}
+    </>
   );
 }
 
@@ -4699,6 +4770,7 @@ export default function BotStationSite() {
             <div className="bs-hud br">
               <span className="frame">{runningCount}/{BOTS.length} CORES ACTIVE · POLL 10s</span>
             </div>
+            <HeliosCombo15Auto />
             <HeliosCanvas bots={botStates} neon={(pnlWin?.h3 ?? 0) > 0}
               operator={user?.username} onPick={setConsole} onLogs={setLogsFor}
               onSunDblClick={() => setLaunchAll(true)} />
