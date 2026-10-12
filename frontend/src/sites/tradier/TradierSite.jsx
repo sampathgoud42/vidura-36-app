@@ -3832,16 +3832,10 @@ export default function TradierSite() {
   const [positions, setPositions] = useState(null);
   const [filter, setFilter] = useState('active');
   const [venueFilter, setVenueFilter] = useState('all');
-  // The desk opens on LIVE (user 08/18). It used to land on the sandbox every
-  // reload, on the Kalshi bots' rule that a paper/live mode should never be
-  // inherited — but this desk is used live, and starting every session one
-  // click away from the wrong account was its own kind of wrong.
-  //
-  // The reversal is real and worth being plain about: a refresh now arms the
-  // production account, and the venue button is red while it is. The one
-  // guard kept is below — if this operator has no live keys, or the server is
-  // paper-locked, it falls back rather than sitting on a venue it cannot use.
-  const [live, setLive] = useState(true);
+  // The desk opens on the SANDBOX (user 10/12), Regular and Lightweight
+  // alike: LIVE is armed by hand through the venue switch, confirmed, and a
+  // reload returns to SANDBOX. (From 08/18 it opened on LIVE.)
+  const [live, setLive] = useState(false);
   const [venueInfo, setVenueInfo] = useState(null);
   const [posAt, setPosAt] = useState(null);
   // one socket for the whole desk: the strip and the charts share it
@@ -4000,10 +3994,8 @@ export default function TradierSite() {
     if (!user) return;
     vidura.tradierVenue(user.user_id).then((v) => {
       setVenueInfo(v);
-      // The desk opens LIVE, but only where LIVE is actually reachable.
-      // Without this it would sit on a venue with no keys, every call 4xx-ing
-      // into the error tray, and read as a broken desk rather than a
-      // misconfigured one.
+      // LIVE, once armed, only where LIVE is actually reachable: without
+      // keys every call would 4xx into the error tray.
       if (!v?.live?.configured || v?.paper_only_server) setLive(false);
     }).catch(() => setVenueInfo(null));
   }, [user]);
