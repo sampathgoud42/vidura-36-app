@@ -289,6 +289,35 @@ def combo15_place(payload: Combo15PlaceRequest,
                                owner=tenant.id, tenant_slug=tenant.slug)
 
 
+class Combo15AutoRequest(BaseModel):
+    enabled: bool
+
+
+@router.get("/combo15/auto", operation_id="getCombo15Auto")
+@deps.tenant_scoped
+def combo15_auto_get(tenant: Tenant = Depends(deps.current_tenant),
+                     db: DbSession = Depends(deps.get_db)) -> dict:
+    """The 15M Combo auto bot: on or off, its rule, when it next runs, and
+    its latest slots."""
+    from app.domains.botstation import combo15_auto
+
+    return combo15_auto.get_state(db, tenant.id)
+
+
+@router.put("/combo15/auto", operation_id="setCombo15Auto")
+@deps.tenant_scoped
+def combo15_auto_set(payload: Combo15AutoRequest,
+                     tenant: Tenant = Depends(deps.current_tenant),
+                     db: DbSession = Depends(deps.get_db)) -> dict:
+    """Switch the 15M Combo auto bot on or off. REAL MONEY while on: at :02,
+    :17, :32 and :47 Chicago time a combo of up to five DMI-validated legs,
+    with a 7-51% chance of winning, is placed for $1-2, with nobody there to
+    confirm it."""
+    from app.domains.botstation import combo15_auto
+
+    return combo15_auto.set_state(db, tenant.id, enabled=payload.enabled)
+
+
 @router.get("/combo15/place/{key}", operation_id="getCombo15Placement")
 @deps.tenant_scoped
 def combo15_placement(key: str, tenant: Tenant = Depends(deps.current_tenant)) -> dict:

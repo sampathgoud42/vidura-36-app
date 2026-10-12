@@ -1964,10 +1964,13 @@ function CryptoStrip({ onSignal, onCombo }) {
       labelFor={(r) => ({ label: r.label || r.bot.toUpperCase(),
                           accent: CRYPTO_ACCENT[r.bot] })}
       extra={(
-        <button type="button" className="bs-btn bs-combo15-btn" onClick={onCombo}
-          title="build one Kalshi combo across every fifteen-minute market, crypto and commodities, from these DMI signals">
-          15M COMBO
-        </button>
+        <>
+          <button type="button" className="bs-btn bs-combo15-btn" onClick={onCombo}
+            title="build one Kalshi combo across every fifteen-minute market, crypto and commodities, from these DMI signals">
+            15M COMBO
+          </button>
+          <Combo15AutoButton />
+        </>
       )}
     />
   );
@@ -2193,6 +2196,112 @@ function SignalStrips() {
 // side is at most 5c wide; the rest are listed unticked with the reason. A
 // market with no side (no signal, mixed) or whose quarter the collection does
 // not host cannot be ticked. One stake, $5 unless changed, at most $99.
+// The 15M Combo's auto bot, beside its button: lit while it is on. At :02,
+// :17, :32 and :47 Chicago time it builds the combo the sheet would, keeps
+// up to five of its DMI-validated legs, and places it for $1-2 when its
+// chance of winning is 7-51% -- with nobody there to confirm it.
+function Combo15AutoButton() {
+  const [st, setSt] = useState(null);
+  const [open, setOpen] = useState(false);
+  const load = useCallback(async () => {
+    try { setSt(await vidura.combo15Auto()); } catch { /* the icon reads as off */ }
+  }, []);
+  useEffect(() => {
+    load();
+    const id = setInterval(load, 60000);
+    return () => clearInterval(id);
+  }, [load]);
+  const on = !!st?.enabled;
+  return (
+    <>
+      <button type="button" className={`bs-btn bs-combo15-auto${on ? ' on' : ''}`}
+        onClick={() => setOpen(true)} aria-pressed={on}
+        aria-label={on ? '15M combo auto bot: on' : '15M combo auto bot: off'}
+        title={on ? 'auto bot ON — a combo every quarter hour (:02, :17, :32, :47). Tap for its runs.'
+          : 'auto bot — build and place the 15M combo by itself every quarter hour'}>
+        <span aria-hidden="true">🤖</span>{on && <span className="dot" aria-hidden="true" />}
+      </button>
+      {open && <Combo15AutoSheet st={st} onChange={setSt} onReload={load}
+        onClose={() => setOpen(false)} />}
+    </>
+  );
+}
+
+function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const rule = st?.rule || {};
+  const on = !!st?.enabled;
+  const flip = async () => {
+    setErr('');
+    if (!on) {
+      const ok = await confirmDialog({
+        title: 'Switch the 15M combo auto bot on?',
+        body: `Every quarter hour, at :02, :17, :32 and :47 Chicago time, it builds the 15-minute `
+          + `combo from the DMI-validated legs (at most ${rule.max_legs ?? 5}, picked at random past that), `
+          + `and places it at the market for $${rule.min_usd ?? 1}–$${rule.max_usd ?? 2} when its chance `
+          + `of winning is ${rule.min_chance_pct ?? 7}–${rule.max_chance_pct ?? 51}%.`,
+        notes: ['REAL MONEY on Kalshi, with nobody there to confirm each combo.',
+          'Up to 96 combos a day while it is on; a quarter with no qualifying combo is skipped.'],
+        confirmText: 'Switch on', cancelText: 'Keep off',
+      });
+      if (!ok) return;
+    }
+    setBusy(true);
+    try { onChange(await vidura.setCombo15Auto(!on)); } catch (e) { setErr(e?.message || String(e)); }
+    finally { setBusy(false); }
+  };
+  const when = (iso) => (iso ? deskTime(iso) : '—');
+  return createPortal(
+    <div className="bs-luck-scrim" onClick={onClose}>
+      <div className="bs-luck-sheet bs-combo15" role="dialog" aria-modal="true"
+        aria-label="15-minute combo auto bot" onClick={(e) => e.stopPropagation()}>
+        <header className="bs-modal-hd">
+          <h2>15M COMBO · AUTO BOT</h2>
+          <button type="button" className="bs-refresh" onClick={onReload} disabled={busy}
+            aria-label="read again" title="read its state and runs again">
+            <span aria-hidden="true">↻</span>
+          </button>
+          <button type="button" className="close" onClick={onClose}>×</button>
+        </header>
+        <p className="bs-luck-note">
+          At <b>:02, :17, :32, :47</b> Chicago time: build the combo from the legs that pass the DMI
+          validation, keep at most <b>{rule.max_legs ?? 5}</b> (a random {rule.max_legs ?? 5} past that),
+          and place it for <b>${rule.min_usd ?? 1}–${rule.max_usd ?? 2}</b> when its chance of winning is
+          {' '}<b>{rule.min_chance_pct ?? 7}–{rule.max_chance_pct ?? 51}%</b>. Real money.
+        </p>
+        <div className="bs-luck-actions">
+          <button type="button" className={`bs-btn ${on ? 'bs-combo15-off' : 'bs-combo15-on'}`}
+            onClick={flip} disabled={busy || !st}>
+            {busy ? '…' : on ? 'Switch off' : 'Switch on'}
+          </button>
+          <span className="bs-luck-note">
+            {on ? <>ON · next run <b>{when(st.next_run)}</b></> : 'OFF'}
+          </span>
+        </div>
+        {err && <p className="bs-luck-note" style={{ color: 'var(--bs-red, #f87171)' }}>⚠ {err}</p>}
+        <div className="bs-combo15-runs">
+          {(st?.runs || []).length === 0 ? (
+            <p className="bs-luck-note">No runs yet.</p>
+          ) : (st.runs.map((r) => (
+            <div key={r.slot} className={`bs-combo15-run ${r.status}`}>
+              <span className="slot">{r.slot.slice(11)}</span>
+              <span className="st">{r.status}</span>
+              <span className="what">
+                {r.legs != null && `${r.legs} legs · `}
+                {r.chance_pct != null && `${r.chance_pct.toFixed(1)}% · `}
+                {r.stake_usd != null && `$${r.stake_usd.toFixed(2)} · `}
+                {r.detail || ''}
+              </span>
+            </div>
+          )))}
+        </div>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
 function Combo15Sheet({ onClose }) {
   const [pv, setPv] = useState(null);
   const [busy, setBusy] = useState('load');

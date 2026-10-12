@@ -110,6 +110,9 @@ CONTRACT: list[tuple[str, str]] = [
     ("GET", f"{V1}/bots/luck/sports"),
     # The scheduled Luck parley: on/off, its ticket, its runs.
     ("GET", f"{V1}/bots/luck/schedule"),
+    # the 15M Combo auto bot
+    ("GET", f"{V1}/bots/combo15/auto"),
+    ("PUT", f"{V1}/bots/combo15/auto"),
     ("PUT", f"{V1}/bots/luck/schedule"),
     # New Super Signals to the operator's Telegram chat: the feed, finding the
     # chat id, a test message.
