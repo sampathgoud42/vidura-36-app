@@ -2820,6 +2820,18 @@ export function deskOwnerNote(owner) {
     : `${owner.describe} holds the signal desk`;
 }
 
+// One click arms this: star signals, exactly as the operator set it up --
+// ⭐⭐ and ⭐⭐⭐ on any ticker, 09:15-13:15 CST, the strike by OI + VOL on the
+// nearest expiry after today, 20% of the balance at SMART, TP 10% / SL 40%.
+// It arms on the board's current venue, like the form's own button.
+export const STAR_SIGNALS_PRESET = {
+  strategy: 'star_signals', tickers: '', stars: [2, 3],
+  window_open: '09:15', window_close: '13:15',
+  buy_pct: 20, tolerance_pct: 10, tp_pct: 10, sl_pct: 40, min_contracts: '1',
+  delta: '0.14-0.20', delta_min: 0.14, delta_max: 0.20, pick: 'open_interest',
+  order_type: 'smart', discount_pct: 0, zero_dte: false, near_expiry: true,
+};
+
 export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, deskOwner,
   armed = [] }) {
   // Strategies already running cannot be armed twice; open on the first free one.
@@ -3194,6 +3206,17 @@ export function AutoTradeForm({ defaults, seed, paper, busy, onArm, onClose, des
             : 'SANDBOX venue — paper money, real order flow.'}
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-3">
+          <button type="button" className="tr-btn sm auto tr-preset"
+            disabled={busy || !!deskOwner || armed.includes('star_signals')
+              || !(defaults?.strategies || []).includes('star_signals')}
+            title={armed.includes('star_signals') ? 'star signals is already armed'
+              : deskOwner ? deskOwnerNote(deskOwner)
+              : 'Arm star signals in one click: ⭐⭐ and ⭐⭐⭐ on any ticker, 09:15–13:15 CST, '
+                + 'strike by OI + VOL on the nearest expiry, Buy 20% at SMART, TP 10% / SL 40%, '
+                + `min 1 contract${paper ? ' — on the paper venue' : ' — on the LIVE account'}`}
+            onClick={() => onArm({ ...f, ...STAR_SIGNALS_PRESET })}>
+            {busy ? '…' : '⭐ Star Signals'}
+          </button>
           <button type="button" className="tr-btn sm auto"
             disabled={busy || deskTaken || armed.includes(f.strategy)
               || (isSuper && f.signals.length === 0)
