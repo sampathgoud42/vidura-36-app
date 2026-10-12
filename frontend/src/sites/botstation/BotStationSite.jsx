@@ -2337,14 +2337,15 @@ function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
 }
 
 // The auto bot on the helios core: a small moon in the stage's top right,
-// coloured by the most recent slot -- green it WON, orange it LOST, grey
-// anything else (skipped, failed, still settling). A halo while the bot is
-// ON. Tapping it opens the same sheet as the strip's 🤖, switch and history.
+// coloured by the most recent slot with a final answer -- green it WON,
+// orange it LOST, grey anything else (skipped, failed, void). A combo still
+// settling is passed over, so the moon keeps the last known result until
+// it resolves. A halo while the bot is ON. Tapping it opens the same sheet as the strip's 🤖, switch and history.
 function HeliosCombo15Auto() {
   const [st, setSt, load] = useCombo15Auto();
   const [open, setOpen] = useState(false);
   const on = !!st?.enabled;
-  const last = (st?.runs || [])[0];
+  const last = (st?.runs || []).find((r) => !(r.status === 'placed' && !r.result));
   const tone = last?.status === 'placed' && last.result === 'won' ? 'won'
     : last?.status === 'placed' && last.result === 'lost' ? 'lost' : 'other';
   const said = !last ? 'no runs yet'
