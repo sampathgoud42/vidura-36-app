@@ -134,6 +134,8 @@ def _run_combo15_auto() -> None:
     from app.domains.botstation import combo15_auto
 
     combo15_auto.sweep_all_tenants()
+    # Placed combos that have resolved: WON / LOST into combo15_auto_result.
+    combo15_auto.settle_all_tenants()
 
 
 def _post_super_signals() -> None:

@@ -16,6 +16,9 @@ the background, with nobody there to confirm it:
             does; none, and the slot is skipped;
   4. place  combo15.place at a stake of MIN_USD..MAX_USD, at random to the
             cent, once the combo shards (0 and 1) hold at least MAX_USD.
+  5. settle once the combo market resolves, its outcome -- won, lost or void,
+            with Kalshi's settlement P&L -- goes in combo15_auto_result
+            (settle_all_tenants, at most every SETTLE_EVERY_S).
 
 Each slot is claimed by writing its row FIRST, unique per (operator, slot), as
 the Luck schedule does: a slot runs once, across loop passes and restarts. A
@@ -45,10 +48,19 @@ GRACE_S = 4 * 60
 POLL_S = 20
 STALE_RUN_S = 15 * 60
 MAX_LEGS = 5
-MIN_CHANCE, MAX_CHANCE = 0.07, 0.51
+MIN_CHANCE, MAX_CHANCE = 0.11, 0.51
 MIN_USD, MAX_USD = 1.0, 1.5
 # Past MAX_LEGS legs, how many random picks are tried for one in the chance band.
 PICK_TRIES = 25
+# Settling asks Kalshi about every unresolved combo, so not on every pass.
+SETTLE_EVERY_S = 60
+# A combo resolves within its quarter; past this one still unresolved is
+# given up on rather than asked about forever.
+SETTLE_GIVE_UP_S = 3 * 24 * 3600
+# Market resolved but no settlement row yet: wait this long for one before
+# recording the result without a P&L.
+SETTLEMENT_WAIT_S = 2 * 3600
+_last_settle = 0.0
 
 
 def _now() -> datetime:
@@ -111,13 +123,17 @@ def pick(legs: list[dict], rng=random) -> tuple[list[dict] | None, str]:
                      if len(legs) > MAX_LEGS else ""))
 
 
-def _serialize_run(row) -> dict:
+def _serialize_run(row, outcome=None) -> dict:
     def stamp(moment):
         return moment.replace(tzinfo=timezone.utc).isoformat() if moment else None
     return {"slot": row.slot, "status": row.status, "detail": row.detail, "legs": row.legs,
             "chance_pct": row.chance_pct, "stake_usd": row.stake_usd,
             "cost_usd": row.cost_usd, "combo_ticker": row.combo_ticker,
-            "started_at": stamp(row.created_at), "finished_at": stamp(row.finished_at)}
+            "started_at": stamp(row.created_at), "finished_at": stamp(row.finished_at),
+            "result": outcome.result if outcome else None,
+            "pnl_usd": outcome.pnl_usd if outcome else None,
+            "payout_usd": outcome.payout_usd if outcome else None,
+            "settled_at": stamp(outcome.settled_at) if outcome else None}
 
 
 def rule() -> dict:
@@ -127,17 +143,19 @@ def rule() -> dict:
 
 
 def get_state(db, tenant_id: str, *, runs: int = 8) -> dict:
-    from app.domains.botstation.models import Combo15Auto, Combo15AutoRun
+    from app.domains.botstation.models import Combo15Auto, Combo15AutoResult, Combo15AutoRun
     from app.platform.db.repository import TenantRepository
 
     repo = TenantRepository(db, tenant_id)
     row = db.scalar(repo.query(Combo15Auto))
     recent = db.scalars(repo.query(Combo15AutoRun).order_by(
         Combo15AutoRun.created_at.desc()).limit(runs)).all()
+    outcomes = {o.run_id: o for o in db.scalars(repo.query(Combo15AutoResult).where(
+        Combo15AutoResult.run_id.in_([r.id for r in recent]))).all()} if recent else {}
     on = bool(row and row.enabled)
     return {"enabled": on, "rule": rule(),
             "next_run": next_slot().isoformat() if on else None,
-            "runs": [_serialize_run(r) for r in recent]}
+            "runs": [_serialize_run(r, outcomes.get(r.id)) for r in recent]}
 
 
 def set_state(db, tenant_id: str, *, enabled: bool) -> dict:
@@ -274,3 +292,117 @@ def sweep_all_tenants(now: datetime | None = None, rng=random) -> int:
         except Exception as exc:                # noqa: BLE001
             logger.warning("combo15 auto sweep for one operator: %s", type(exc).__name__)
     return attempted
+
+
+# ---- settling ----------------------------------------------------------------
+
+def _num(value) -> float | None:
+    try:
+        return None if value in (None, "") else float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def outcome_of(market: dict | None, settlement: dict | None) -> dict | None:
+    """What a placed combo came to, or None while it is still unresolved.
+
+    The auto bot buys a combo on YES, so a YES resolution is a win. The P&L
+    is Kalshi's settlement for the ticker -- revenue (cents) less cost and
+    fees (dollars) -- when there is one.
+    """
+    market = market or {}
+    result = str(market.get("result") or "").lower()
+    status = str(market.get("status") or "").lower()
+    if result in ("yes", "no"):
+        won = "won" if result == "yes" else "lost"
+    elif status in ("finalized", "settled") and result in ("", "void", "scalar"):
+        won = "void"
+    else:
+        return None
+    out = {"result": won, "cost_usd": None, "payout_usd": None,
+           "fees_usd": None, "pnl_usd": None}
+    if settlement:
+        revenue = _num(settlement.get("revenue"))
+        cost = ((_num(settlement.get("yes_total_cost_dollars")) or 0.0)
+                + (_num(settlement.get("no_total_cost_dollars")) or 0.0))
+        fees = _num(settlement.get("fee_cost")) or 0.0
+        payout = revenue / 100.0 if revenue is not None else None
+        out.update(cost_usd=round(cost, 4), payout_usd=payout, fees_usd=round(fees, 4),
+                   pnl_usd=(round(payout - cost - fees, 2) if payout is not None else None))
+    return out
+
+
+def _settlement(client, ticker: str) -> dict | None:
+    data = client.request("GET", "/portfolio/settlements", params={"ticker": ticker}) or {}
+    for row in data.get("settlements") or []:
+        if row.get("ticker") == ticker:
+            return row
+    return None
+
+
+def settle_tenant(db, tenant_id: str, cred, now: datetime | None = None) -> int:
+    """Record the outcome of every placed combo that has resolved. Returns how
+    many results were written."""
+    from app.domains.botstation import signal_trade, venue
+    from app.domains.botstation.models import Combo15AutoResult, Combo15AutoRun
+    from app.platform.db.repository import TenantRepository
+
+    now = now or _now()
+    repo = TenantRepository(db, tenant_id)
+    done = select(Combo15AutoResult.run_id).where(Combo15AutoResult.tenant_id == tenant_id)
+    pending = db.scalars(repo.query(Combo15AutoRun).where(
+        Combo15AutoRun.status == "placed",
+        Combo15AutoRun.combo_ticker.is_not(None),
+        Combo15AutoRun.created_at >= _naive_utc(now) - timedelta(seconds=SETTLE_GIVE_UP_S),
+        Combo15AutoRun.id.not_in(done))).all()
+    if not pending:
+        return 0
+    written = 0
+    client = venue._client(cred)
+    try:
+        for run in pending:
+            try:
+                market = signal_trade._market(client, run.combo_ticker)
+                settlement = _settlement(client, run.combo_ticker) if market else None
+            except Exception as exc:            # noqa: BLE001
+                logger.info("combo15 settle %s: %s", run.combo_ticker, type(exc).__name__)
+                continue
+            outcome = outcome_of(market, settlement)
+            if outcome is None:
+                continue
+            age = (_naive_utc(now) - run.created_at).total_seconds()
+            if settlement is None and age < SETTLEMENT_WAIT_S:
+                continue                        # resolved; the P&L is on its way
+            repo.add(Combo15AutoResult(run_id=run.id, slot=run.slot,
+                                       combo_ticker=run.combo_ticker,
+                                       settled_at=_naive_utc(now), **outcome))
+            written += 1
+    finally:
+        client.close()
+    db.commit()
+    return written
+
+
+def settle_all_tenants(now: datetime | None = None, force: bool = False) -> int:
+    """One settle pass for every operator, at most every SETTLE_EVERY_S."""
+    import time
+
+    from app.domains.botstation import signal_trade
+    from app.platform.db.session import session_scope
+    from app.tenancy.models import Tenant
+
+    global _last_settle
+    if not force and time.time() - _last_settle < SETTLE_EVERY_S:
+        return 0
+    _last_settle = time.time()
+    with session_scope() as db:
+        tenant_ids = list(db.scalars(select(Tenant.id)).all())
+    written = 0
+    for tenant_id in tenant_ids:
+        try:
+            with session_scope() as db:
+                cred = signal_trade._credential(db, tenant_id)
+                written += settle_tenant(db, tenant_id, cred, now)
+        except Exception as exc:                # noqa: BLE001
+            logger.info("combo15 settle for one operator: %s", type(exc).__name__)
+    return written

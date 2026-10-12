@@ -9,8 +9,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import (Boolean, CheckConstraint, DateTime, Float, Index,
-                        Integer, String, Text, UniqueConstraint)
+from sqlalchemy import (Boolean, CheckConstraint, DateTime, Float, ForeignKey,
+                        Index, Integer, String, Text, UniqueConstraint)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.platform.db.base import Base, TenantOwned, Timestamped, tenant_fk
@@ -315,5 +315,36 @@ class Combo15AutoRun(Base, TenantOwned, Timestamped):
             "status in ('running','placed','skipped','failed','interrupted')",
             name="status_known"),
         Index("ix_combo15_auto_run_tenant_slot", "tenant_id", "slot"),
+    )
+
+
+class Combo15AutoResult(Base, TenantOwned, Timestamped):
+    """How one placed auto-bot combo came out: won, lost or void. Written once
+    the combo market resolves (combo15_auto.settle_all_tenants), one row per
+    placed run. Kept apart from combo15_auto_run so a run stays the record of
+    what was placed and this the record of what it paid."""
+
+    __tablename__ = "combo15_auto_result"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[str] = tenant_fk()
+    run_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("combo15_auto_run.id", ondelete="CASCADE"), nullable=False)
+    slot: Mapped[str] = mapped_column(String(16), nullable=False)
+    combo_ticker: Mapped[str] = mapped_column(String(64), nullable=False)
+    # won: the combo resolved YES (every leg landed); lost: NO; void: the
+    # market finalized with neither.
+    result: Mapped[str] = mapped_column(String(8), nullable=False)
+    # From Kalshi's settlement for the ticker; null when it had none to give.
+    cost_usd: Mapped[float | None] = mapped_column(Float)
+    payout_usd: Mapped[float | None] = mapped_column(Float)
+    fees_usd: Mapped[float | None] = mapped_column(Float)
+    pnl_usd: Mapped[float | None] = mapped_column(Float)
+    settled_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("run_id", name="one_combo15_result_per_run"),
+        CheckConstraint("result in ('won','lost','void')", name="result_known"),
+        Index("ix_combo15_auto_result_tenant_slot", "tenant_id", "slot"),
     )
 

@@ -2247,7 +2247,7 @@ function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
         body: `Every quarter hour, at ${slotText(rule)} Chicago time, it builds the 15-minute `
           + `combo from the DMI-validated legs (at most ${rule.max_legs ?? 5}, picked at random past that), `
           + `and places it at the market for ${usd2(rule.min_usd ?? 1)}–${usd2(rule.max_usd ?? 1.5)} when its chance `
-          + `of winning is ${rule.min_chance_pct ?? 7}–${rule.max_chance_pct ?? 51}%.`,
+          + `of winning is ${rule.min_chance_pct ?? 11}–${rule.max_chance_pct ?? 51}%.`,
         notes: ['REAL MONEY on Kalshi, with nobody there to confirm each combo.',
           `Up to 96 combos a day while it is on (at most ${usd2((rule.max_usd ?? 1.5) * 96)}); a quarter with no qualifying combo is skipped.`],
         confirmText: 'Switch on', cancelText: 'Keep off',
@@ -2275,7 +2275,7 @@ function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
           At <b>{slotText(rule)}</b> Chicago time: build the combo from the legs that pass the DMI
           validation, keep at most <b>{rule.max_legs ?? 5}</b> (a random {rule.max_legs ?? 5} past that),
           and place it for <b>{usd2(rule.min_usd ?? 1)}–{usd2(rule.max_usd ?? 1.5)}</b> when its chance of winning is
-          {' '}<b>{rule.min_chance_pct ?? 7}–{rule.max_chance_pct ?? 51}%</b>. Real money.
+          {' '}<b>{rule.min_chance_pct ?? 11}–{rule.max_chance_pct ?? 51}%</b>. Real money.
         </p>
         <div className="bs-luck-actions">
           <button type="button" className={`bs-btn ${on ? 'bs-combo15-off' : 'bs-combo15-on'}`}
@@ -2294,6 +2294,14 @@ function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
             <div key={r.slot} className={`bs-combo15-run ${r.status}`}>
               <span className="slot">{r.slot.slice(11)}</span>
               <span className="st">{r.status}</span>
+              {r.status === 'placed' && (
+                <span className={`res ${r.result || 'pending'}`}
+                  title={r.result ? `settled ${deskTime(r.settled_at)}` : 'waiting for the combo to resolve'}>
+                  {r.result === 'won' ? 'WIN' : r.result === 'lost' ? 'LOST'
+                    : r.result === 'void' ? 'VOID' : '…'}
+                  {r.pnl_usd != null && ` ${r.pnl_usd >= 0 ? '+' : '−'}$${Math.abs(r.pnl_usd).toFixed(2)}`}
+                </span>
+              )}
               <span className="what">
                 {r.legs != null && `${r.legs} legs · `}
                 {r.chance_pct != null && `${r.chance_pct.toFixed(1)}% · `}
