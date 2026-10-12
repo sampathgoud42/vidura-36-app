@@ -2202,16 +2202,19 @@ function SignalStrips() {
 // server's slot minutes (rule.minutes) it builds the combo the sheet would,
 // keeps up to five of its DMI-validated legs, and places it for its stake when its
 // chance of winning is 7-51% -- with nobody there to confirm it.
-// The auto bot's state, read on open and every minute. The strip's 🤖 and
-// the helios core's replica each hold one; both switch the same server row.
+// The auto bot's state, read on open and every 15s -- a combo's WIN / LOST
+// lands within a minute of it resolving, and the moon should show it. The
+// strip's 🤖 and the helios moon each hold one; both switch the same row.
+const COMBO15_AUTO_POLL_MS = 15000;
 function useCombo15Auto() {
   const [st, setSt] = useState(null);
   const load = useCallback(async () => {
+    if (document.hidden) return;                 // nobody is looking
     try { setSt(await vidura.combo15Auto()); } catch { /* reads as off */ }
   }, []);
   useEffect(() => {
     load();
-    const id = setInterval(load, 60000);
+    const id = setInterval(load, COMBO15_AUTO_POLL_MS);
     return () => clearInterval(id);
   }, [load]);
   return [st, setSt, load];
