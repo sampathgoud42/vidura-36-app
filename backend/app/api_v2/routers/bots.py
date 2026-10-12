@@ -309,9 +309,9 @@ def combo15_auto_get(tenant: Tenant = Depends(deps.current_tenant),
 def combo15_auto_set(payload: Combo15AutoRequest,
                      tenant: Tenant = Depends(deps.current_tenant),
                      db: DbSession = Depends(deps.get_db)) -> dict:
-    """Switch the 15M Combo auto bot on or off. REAL MONEY while on: at :02,
-    :17, :32 and :47 Chicago time a combo of up to five DMI-validated legs,
-    with a 7-51% chance of winning, is placed for $1-2, with nobody there to
+    """Switch the 15M Combo auto bot on or off. REAL MONEY while on: at :05,
+    :20, :35 and :50 Chicago time a combo of up to five DMI-validated legs,
+    with a 7-51% chance of winning, is placed for $1-1.50, with nobody there to
     confirm it."""
     from app.domains.botstation import combo15_auto
 
