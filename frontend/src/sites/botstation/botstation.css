@@ -1483,21 +1483,21 @@
 .bs-combo15-run .res.lost { color: #f87171; }
 .bs-combo15-run .res.void, .bs-combo15-run .res.pending { color: var(--bs-ink-3, #8b93ad); }
 
-/* the auto bot's replica on the helios core, top right of the stage */
-.bs-helios-c15 { position: absolute; top: 10px; right: 12px; z-index: 3; width: 168px;
-  padding: 8px 10px; border-radius: 10px; cursor: pointer;
-  background: rgba(10, 14, 28, 0.72); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
-  border: 1px solid rgba(255, 255, 255, 0.10); font-size: 10.5px; color: var(--bs-ink-3, #8b93ad); }
-.bs-helios-c15.on { border-color: var(--bs-sun, #fbbf24); box-shadow: 0 0 12px rgba(251, 191, 36, 0.25); }
-.bs-helios-c15 .hd { display: flex; align-items: center; margin-bottom: 4px; }
-.bs-helios-c15 .hd b { font-size: 10px; letter-spacing: 0.12em; color: var(--bs-ink-1, #e7ecff); margin-left: 6px; }
-.bs-helios-c15 .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--bs-ink-4, #5b6380); flex: none; }
-.bs-helios-c15.on .dot { background: #34d399; box-shadow: 0 0 6px #34d399; }
-.bs-helios-c15 .ln { margin: 2px 0; font-variant-numeric: tabular-nums; }
-.bs-helios-c15 .ln b { color: var(--bs-ink-2, #c9d1e8); }
-.bs-helios-c15 .res { font-weight: 700; }
-.bs-helios-c15 .res.won { color: #34d399; }
-.bs-helios-c15 .res.lost { color: #f87171; }
-.bs-helios-c15 .bs-btn { width: 100%; margin-top: 6px; min-height: 30px; }
-@media (pointer: coarse) { .bs-helios-c15 .bs-btn { min-height: 44px; } }
-@media (max-width: 520px) { .bs-helios-c15 { top: auto; bottom: 30px; right: 8px; width: 150px; } }
+/* the auto bot on the helios core: a small moon, top right of the stage.
+   green = last slot WON, orange = LOST, grey = skipped / failed / settling. */
+.bs-helios-moon { position: absolute; top: 12px; right: 14px; z-index: 3;
+  display: flex; flex-direction: column; align-items: center; gap: 3px;
+  min-width: 44px; min-height: 44px; padding: 4px; background: none; border: 0; cursor: pointer; }
+.bs-helios-moon .orb { --moon: #8b93ad; --glow: rgba(139, 147, 173, 0.35);
+  width: 22px; height: 22px; border-radius: 50%; position: relative;
+  background: radial-gradient(circle at 34% 32%, rgba(255, 255, 255, 0.55) 0 8%, var(--moon) 46%, rgba(0, 0, 0, 0.45) 100%);
+  box-shadow: inset -5px -3px 0 rgba(0, 0, 0, 0.32), 0 0 10px var(--glow); }
+.bs-helios-moon.won .orb { --moon: #34d399; --glow: rgba(52, 211, 153, 0.55); }
+.bs-helios-moon.lost .orb { --moon: #fb923c; --glow: rgba(251, 146, 60, 0.55); }
+.bs-helios-moon.on .orb::after { content: ''; position: absolute; inset: -5px; border-radius: 50%;
+  border: 1px solid var(--glow); animation: bs-moon-halo 2.4s ease-in-out infinite; }
+@keyframes bs-moon-halo { 0%, 100% { opacity: 0.35; transform: scale(1); } 50% { opacity: 1; transform: scale(1.12); } }
+@media (prefers-reduced-motion: reduce) { .bs-helios-moon.on .orb::after { animation: none; opacity: 0.8; } }
+.bs-helios-moon .lbl { font-size: 8px; letter-spacing: 0.14em; color: var(--bs-ink-3, #8b93ad); }
+.bs-helios-moon.on .lbl { color: var(--bs-ink-2, #c9d1e8); }
+.bs-helios-moon:focus-visible { outline: 1px solid var(--bs-cyan, #00e5ff); outline-offset: 2px; border-radius: 8px; }
