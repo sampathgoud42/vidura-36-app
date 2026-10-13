@@ -109,6 +109,8 @@ class Profile:
     #   "majority"   v8 -- three of four on a side AND three of four rising
     #   "stacked"    v9 -- the five-column board (2m-30m): four of five on a
     #                side, 2m's ADX rising, and three of five rising in all
+    #   "confirmed"  v10 -- the board's "CALL ✓" / "PUT ✓" with the 30m side
+    #                matching
     #
     # Defaulted to unanimous so an existing profile keeps the rule it was
     # written with. A version is a name; this is the behaviour, and the two
@@ -722,7 +724,11 @@ def main(profile: Profile) -> int:
              args.min_price_c, args.max_price_c, args.tp_pct, args.sl_pct,
              os.environ.get("KALSHI_TIF", "good_till_canceled"),
              args.window_poll_s, args.poll_s)
-    if profile.rule == "stacked":
+    if profile.rule == "confirmed":
+        log.info("the rule: the board reads CALL ✓ (2m 5m 15m call, 30m confirms) and the "
+                 "30m side is call -> buy YES; PUT ✓ with 30m put -> buy NO; anything "
+                 "else -> stand aside")
+    elif profile.rule == "stacked":
         log.info("the rule: of 2m 5m 10m 15m 30m, at least 4 CALL, 2m ADX rising ↑ and "
                  "at least 3 rising ↑ (2m among them) -> buy YES; the same with 4 PUT "
                  "-> buy NO; anything else -> stand aside")

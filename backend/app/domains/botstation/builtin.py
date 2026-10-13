@@ -357,6 +357,24 @@ _V7_DEFAULTS = {"tp_pct": 20, "sl_pct": 40,
 # The stacked engine (btc15 v9, gold/silver/oil v5): the same gates, and a
 # tighter take-profit.
 _V9_DEFAULTS = {**_V7_DEFAULTS, "tp_pct": 15}
+# The confirmed engine (btc15 v10, eth15 v2): later and narrower entry
+# (30-300s, 35-69c), take-profit +15%, stop -30%.
+_V10_DEFAULTS = {"tp_pct": 15, "sl_pct": 30,
+                 "min_price_c": 35, "max_price_c": 69,
+                 "entry_open_s": 30, "entry_close_s": 300}
+
+_CONFIRMED_LINES = (
+    "The board reads CALL ✓ (2m, 5m and 15m call, 30m confirms) and 30m is "
+    "call -> buys YES; PUT ✓ with 30m put -> buys NO",
+    "Mixed, or no ✓, or 30m disagreeing -> stands aside",
+    "Strictly 30-300 seconds after the market opens, bids 35-69c",
+    "Take-profit +15%, stop -30%, both armed only after the buy FILLS")
+
+
+def _confirmed(name: str) -> tuple[str, tuple[str, ...]]:
+    return (f"Trades {name}'s CRYPTO-board headline when it carries the ✓: "
+            "CALL ✓ or PUT ✓, with the 30-minute DMI on the same side.",
+            _CONFIRMED_LINES)
 
 _STACKED_LINES = (
     "At least 4 of 5 CALL, 2m ADX rising and at least 3 of 5 rising buys YES; "
@@ -438,7 +456,9 @@ _STRATEGY: dict[tuple[str, str], tuple[str, tuple[str, ...]]] = {
          "Take-profit +20%, stop -40%, both armed only after the buy FILLS")),
 
     ("btc15", "v9"): _stacked("BTC"),
+    ("btc15", "v10"): _confirmed("BTC"),
     ("eth15", "v1"): _stacked("ETH"),
+    ("eth15", "v2"): _confirmed("ETH"),
     ("gold15", "v5"): _stacked("gold"),
     ("silver15", "v5"): _stacked("silver"),
     ("oil15", "v5"): _stacked("oil"),
@@ -680,14 +700,21 @@ BUILTIN = [
           # v9 reads the board as it is drawn now -- five columns, 2m to 30m
           # -- and asks four of five on a side, 2m's ADX rising, and three of
           # five rising in all; take-profit +15%. v8 stays as it was.
-          BotVersion("v9", f"{_BTC15}/v9_bot_kalshi_btc15.py", default=True,
-                     option_defaults=dict(_V9_DEFAULTS))),
+          BotVersion("v9", f"{_BTC15}/v9_bot_kalshi_btc15.py",
+                     option_defaults=dict(_V9_DEFAULTS)),
+          # v10, the default: the board's CALL ✓ / PUT ✓ with 30m matching,
+          # 30-300s, 35-69c, TP +15% SL -30%. v9 stays selectable.
+          BotVersion("v10", f"{_BTC15}/v10_bot_kalshi_btc15.py", default=True,
+                     option_defaults=dict(_V10_DEFAULTS))),
          "cwd_customer", "v2_trade_history.csv", options=_STACK_OPTIONS),
     # ETH's quarter-hour on the stacked engine from the start: the same loop
     # as btc15 v9, reading the CRYPTO board's eth row and trading KXETH15M.
     _bot("eth15", "Kalshi ETH 15-minute bot", "crypto", "15m",
-         (BotVersion("v1", f"{_ETH15}/v1_bot_kalshi_eth15.py", default=True,
-                     option_defaults=dict(_V9_DEFAULTS)),),
+         (BotVersion("v1", f"{_ETH15}/v1_bot_kalshi_eth15.py",
+                     option_defaults=dict(_V9_DEFAULTS)),
+          # v2, the default: the same confirmed engine as btc15 v10.
+          BotVersion("v2", f"{_ETH15}/v2_bot_kalshi_eth15.py", default=True,
+                     option_defaults=dict(_V10_DEFAULTS))),
          "cwd_customer", options=_STACK_OPTIONS),
     _bot("btc60", "Kalshi BTC 60-minute bot", "btc", "60m",
          (BotVersion("fable5", f"{_BTC60}/bot_kalshi_btc60_fable5.py", default=True),
