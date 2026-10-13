@@ -49,7 +49,7 @@ POLL_S = 20
 STALE_RUN_S = 15 * 60
 MAX_LEGS = 5
 MIN_CHANCE, MAX_CHANCE = 0.11, 0.51
-MIN_USD, MAX_USD = 1.0, 1.5
+MIN_USD, MAX_USD = 4.0, 5.0
 # Past MAX_LEGS legs, how many random picks are tried for one in the chance band.
 PICK_TRIES = 25
 # Settling asks Kalshi about every unresolved combo, so not on every pass.

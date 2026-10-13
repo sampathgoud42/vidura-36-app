@@ -2231,10 +2231,10 @@ async function flipCombo15Auto(st) {
       title: 'Switch the 15M combo auto bot on?',
       body: `Every quarter hour, at ${slotText(rule)} Chicago time, it builds the 15-minute `
         + `combo from the DMI-validated legs (at most ${rule.max_legs ?? 5}, picked at random past that), `
-        + `and places it at the market for ${usd2(rule.min_usd ?? 1)}–${usd2(rule.max_usd ?? 1.5)} when its chance `
+        + `and places it at the market for ${usd2(rule.min_usd ?? 4)}–${usd2(rule.max_usd ?? 5)} when its chance `
         + `of winning is ${rule.min_chance_pct ?? 11}–${rule.max_chance_pct ?? 51}%.`,
       notes: ['REAL MONEY on Kalshi, with nobody there to confirm each combo.',
-        `Up to 96 combos a day while it is on (at most ${usd2((rule.max_usd ?? 1.5) * 96)}); a quarter with no qualifying combo is skipped.`],
+        `Up to 96 combos a day while it is on (at most ${usd2((rule.max_usd ?? 5) * 96)}); a quarter with no qualifying combo is skipped.`],
       confirmText: 'Switch on', cancelText: 'Keep off',
     });
     if (!ok) return null;
@@ -2296,7 +2296,7 @@ function Combo15AutoSheet({ st, onChange, onReload, onClose }) {
         <p className="bs-luck-note">
           At <b>{slotText(rule)}</b> Chicago time: build the combo from the legs that pass the DMI
           validation, keep at most <b>{rule.max_legs ?? 5}</b> (a random {rule.max_legs ?? 5} past that),
-          and place it for <b>{usd2(rule.min_usd ?? 1)}–{usd2(rule.max_usd ?? 1.5)}</b> when its chance of winning is
+          and place it for <b>{usd2(rule.min_usd ?? 4)}–{usd2(rule.max_usd ?? 5)}</b> when its chance of winning is
           {' '}<b>{rule.min_chance_pct ?? 11}–{rule.max_chance_pct ?? 51}%</b>. Real money.
         </p>
         <div className="bs-luck-actions">
