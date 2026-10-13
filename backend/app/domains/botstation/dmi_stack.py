@@ -81,6 +81,12 @@ MAJORITY_NEED = 3
 UNANIMOUS = "unanimous"
 MAJORITY = "majority"
 STACKED = "stacked"
+# CONFIRMED (BTC-15 v10, ETH-15 v2): the board's own headline, "CALL ✓" or
+# "PUT ✓" -- 2m, 5m and 15m agreeing, 30m confirming -- with the 30m column
+# checked again here, so a row that carries the ✓ but a 30m side that says
+# otherwise stands aside.
+CONFIRMED = "confirmed"
+CONFIRM_FRAME = "m30"
 
 # STACKED (v9): over the five-column board, at least STACKED_SIDE_NEED on one
 # side, 2m's ADX rising, and at least STACKED_RISE_NEED rising in all -- 2m
@@ -313,6 +319,45 @@ def read_stacked(rows: list[dict], row_key: str) -> Stack:
                  f"{len(ups)} rising -> buy {side.upper()}", rising, frames)
 
 
+def read_confirmed(rows: list[dict], row_key: str) -> Stack:
+    """v10: the panel's "CALL ✓" / "PUT ✓", with 30m on the same side.
+
+        signal CALL, ✓ (30m confirms), 30m side CALL   -> buy YES
+        signal PUT,  ✓ (30m confirms), 30m side PUT    -> buy NO
+        anything else (mixed, no ✓, 30m disagreeing)   -> stand aside
+
+    The signal and the ✓ are the board's own fields (``signal``,
+    ``confirms``), so the bot trades exactly what the panel shows. ADX slopes
+    are shown in the log and decide nothing.
+    """
+    frames = STACK5
+    unpacked = _read_row(rows, row_key, frames)
+    if isinstance(unpacked, Stack):
+        return unpacked
+    row, label, per_tf, rising, adx, last = unpacked
+
+    shown = "  ".join(f"{LABELS[n]}{WORDS.get(per_tf.get(n), 'flat')}" for n in frames)
+    signal = row.get("signal")
+    if signal not in SIDE_FOR:
+        return _blocked(per_tf, adx, last, label,
+                        f"the board's signal is mixed (2m/5m/15m disagree): {shown}",
+                        rising, frames)
+    word = WORDS[signal].upper()
+    if not row.get("confirms"):
+        return _blocked(per_tf, adx, last, label,
+                        f"{word} without the ✓ -- 30m does not confirm: {shown}",
+                        rising, frames)
+    slow = per_tf.get(CONFIRM_FRAME)
+    if slow != signal:
+        return _blocked(per_tf, adx, last, label,
+                        f"{word} ✓ but the {LABELS[CONFIRM_FRAME]} side reads "
+                        f"{WORDS.get(slow, 'flat')}: {shown}", rising, frames)
+    side = SIDE_FOR[signal]
+    return Stack(True, signal, side, per_tf, adx, last, label,
+                 f"{word} ✓ and {LABELS[CONFIRM_FRAME]} {WORDS[signal]} -> buy {side.upper()}",
+                 rising, frames)
+
+
 def read(rows: list[dict], row_key: str, *, rule: str = UNANIMOUS,
          need: int = MAJORITY_NEED) -> Stack:
     """Whichever rule the engine was launched with.
@@ -320,6 +365,8 @@ def read(rows: list[dict], row_key: str, *, rule: str = UNANIMOUS,
     One entry point so the loop never branches on a version number -- a bot
     names its rule in its profile and everything downstream reads a Stack.
     """
+    if rule == CONFIRMED:
+        return read_confirmed(rows, row_key)
     if rule == STACKED:
         return read_stacked(rows, row_key)
     if rule == MAJORITY:
