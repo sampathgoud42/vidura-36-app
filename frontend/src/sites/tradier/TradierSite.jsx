@@ -3992,11 +3992,22 @@ export default function TradierSite() {
   // which venues this operator actually has keys for — drives the toggle
   useEffect(() => {
     if (!user) return;
-    vidura.tradierVenue(user.user_id).then((v) => {
+    vidura.tradierVenue(user.user_id).then(async (v) => {
       setVenueInfo(v);
       // LIVE, once armed, only where LIVE is actually reachable: without
       // keys every call would 4xx into the error tray.
       if (!v?.live?.configured || v?.paper_only_server) setLive(false);
+      // The desk opens on the SANDBOX, not SIP (SIM) (user 10/13), Regular
+      // and Lightweight alike. SIM is a server-side choice that outlives the
+      // page, so it is switched back here; an armed auto-trader and open
+      // positions keep the venue they were opened on.
+      if (v?.sim?.active) {
+        try {
+          await vidura.setSimVenue(false);
+          setVenueInfo({ ...v, sim: { ...v.sim, active: false } });
+          refreshRef.current?.(true);
+        } catch { /* stays on SIM; the venue button says so */ }
+      }
     }).catch(() => setVenueInfo(null));
   }, [user]);
 
