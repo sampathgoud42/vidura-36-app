@@ -1215,7 +1215,20 @@ export default function Desk36Site() {
   useEffect(() => {
     if (!user) return;
     vidura.tradierVenue(user.user_id)
-      .then(setVenues)
+      .then(async (v) => {
+        setVenues(v);
+        // The board opens on the SANDBOX, not SIP (SIM) (user 10/13). SIM is
+        // a server-side choice that outlives the page, so it is switched back
+        // here; an armed auto-trader and open positions keep the venue they
+        // were opened on.
+        if (v?.sim?.active) {
+          try {
+            await vidura.setSimVenue(false);
+            setVenues({ ...v, sim: { ...v.sim, active: false } });
+            setOrderKey((k) => k + 1);           // balance and positions, again
+          } catch { /* stays on SIM; the venue button says so */ }
+        }
+      })
       .catch(() => { /* the confirmation falls back to naming no account */ });
   }, [user]);
 

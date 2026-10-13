@@ -110,7 +110,7 @@ def _store_oi(day: str, oi: dict) -> None:
     if not oi:
         return
     try:
-        with write_lock(), session_scope() as db:
+        with session_scope() as db, write_lock(db):
             row = db.scalars(
                 select(DailySnapshot)
                 .where(DailySnapshot.kind == _OI_KIND,

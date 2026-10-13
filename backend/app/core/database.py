@@ -9,6 +9,7 @@ from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from app.core.config import get_settings
+from app.platform.db.engine import BUSY_TIMEOUT_MS
 
 
 class Base(DeclarativeBase):
@@ -20,7 +21,8 @@ def _make_engine(url: str):
     engine = create_engine(
         url,
         # check_same_thread is a SQLite-only DBAPI flag
-        connect_args={"check_same_thread": False} if is_sqlite else {},
+        connect_args=({"check_same_thread": False, "timeout": BUSY_TIMEOUT_MS / 1000}
+                      if is_sqlite else {}),
         pool_pre_ping=True,
     )
     if not is_sqlite:
@@ -32,7 +34,9 @@ def _make_engine(url: str):
         # WAL keeps readers (dashboards) from blocking bot-driven writers.
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA foreign_keys=ON")
-        cursor.execute("PRAGMA busy_timeout=5000")
+        # The same file as the v2 engine, so the same wait: see
+        # app.platform.db.engine.BUSY_TIMEOUT_MS.
+        cursor.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
         cursor.close()
 
     return engine

@@ -7,7 +7,9 @@ Three of these are load-bearing rather than tuning:
   foreign_keys=ON    off by default in SQLite; without it a tenant_id can
                      reference a tenant that does not exist
   busy_timeout       a writer that arrives during another write waits instead
-                     of failing, which the lease relies on
+                     of failing, which the lease relies on. BUSY_TIMEOUT_MS,
+                     sized to the longest write transaction the app holds --
+                     see below
 
 They are set on EVERY connection, not once at startup: the pool opens new
 connections over the life of the process, and a connection without these is a
@@ -17,6 +19,16 @@ connection where the guarantees quietly do not hold.
 from __future__ import annotations
 
 from sqlalchemy import Engine, create_engine, event
+
+# How long a writer waits for SQLite's one write lock before "database is
+# locked". It was 5s, and that was shorter than the app's own longest write:
+# placing an order (execution.orders.open_position) holds one transaction
+# across the idempotency row, the contract lease, the venue checks, the buy,
+# a 2s settle and the confirmation -- several Tradier calls of up to 20s each
+# -- so a sim order, the risk monitor or a bot ledger write that landed behind
+# it failed outright (COIN poc_72h LONG, 2026-10-13 12:15:37). Waiting is
+# always better than failing a write; 60s covers that transaction with room.
+BUSY_TIMEOUT_MS = 60_000
 
 
 def make_engine(url: str, *, echo: bool = False) -> Engine:
@@ -39,7 +51,10 @@ def make_engine(url: str, *, echo: bool = False) -> Engine:
         echo=echo,
         # SQLite-only DBAPI flag: FastAPI serves a request on a worker
         # thread, which is not the thread the connection was made on.
-        connect_args={"check_same_thread": False} if is_sqlite else {},
+        # ``timeout`` is the driver's own wait for the lock, kept equal to
+        # the busy_timeout pragma so neither gives up before the other.
+        connect_args=({"check_same_thread": False, "timeout": BUSY_TIMEOUT_MS / 1000}
+                      if is_sqlite else {}),
         pool_pre_ping=True,
         **pool_kwargs,
     )
@@ -55,7 +70,7 @@ def _install_sqlite_pragmas(engine: Engine) -> None:
         try:
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA foreign_keys=ON")
-            cursor.execute("PRAGMA busy_timeout=5000")
+            cursor.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS}")
             # Durability that survives a process crash without paying for a
             # full fsync on every commit. WAL makes this the documented
             # trade: a power loss can lose the last commits, a crash cannot.
