@@ -1596,6 +1596,12 @@ button.tr-chartsym:hover { color: var(--tr-accent-hi); }
 }
 .tr-autoline .tr-autodisarm:disabled { opacity: 0.5; cursor: default; }
 .tr-autoline.tr-autoctl { display: flex; gap: 6px; flex-wrap: wrap; color: inherit; }
+/* "clear" on a refusal: hides that one message; a new refusal still shows. */
+.tr-autoline .tr-autoerr-clear {
+  margin-left: 8px; padding: 0 6px; min-height: 18px; vertical-align: middle;
+  background: none; border: 1px solid currentColor; border-radius: 4px;
+  color: var(--tr-ink-3, #8b93ad); font: inherit; font-size: 0.9em; line-height: 1.2; cursor: pointer;
+}
 
 /* the arm form's one-click Star Signals: amber, the stars' own colour */
 .tr-btn.tr-preset { border-color: rgba(251, 191, 36, 0.6); color: #fbbf24; background: rgba(251, 191, 36, 0.08); }

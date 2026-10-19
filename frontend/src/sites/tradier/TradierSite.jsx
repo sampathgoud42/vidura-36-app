@@ -3647,20 +3647,59 @@ export function LiteChart({ isBlocked, blocked, ...props }) {
 // What the auto-trader is doing, in words: the AUTO button's colour says it
 // is armed, and this says what for -- strategy, scope, window, entries so far
 // -- rather than leaving that to a tooltip on a board this pared down.
+// Cleared auto-trade errors. The server keeps each watcher's LAST refusal
+// until the next one, so "clear" hides that one refusal on this device --
+// keyed by strategy, time and text -- and a new refusal shows as usual.
+// Kept in localStorage so the clear survives the status poll and a reload,
+// and shared by every board that draws AutoStatus.
+const CLEARED_ERR_KEY = 'tr.autoerr.cleared';
+const errKey = (w) => (w?.last_error ? `${w.last_error.at}|${w.last_error.message}` : null);
+function loadCleared() {
+  try { return JSON.parse(localStorage.getItem(CLEARED_ERR_KEY) || '{}') || {}; } catch { return {}; }
+}
+function useClearedErrors() {
+  const [cleared, setCleared] = useState(loadCleared);
+  useEffect(() => {
+    const sync = (e) => { if (!e || e.key === CLEARED_ERR_KEY) setCleared(loadCleared()); };
+    window.addEventListener('storage', sync);
+    window.addEventListener('tr-autoerr-cleared', sync);
+    return () => {
+      window.removeEventListener('storage', sync);
+      window.removeEventListener('tr-autoerr-cleared', sync);
+    };
+  }, []);
+  const clear = useCallback((watchers) => {
+    const next = { ...loadCleared() };
+    for (const w of watchers) { const k = errKey(w); if (k) next[w.strategy] = k; }
+    try { localStorage.setItem(CLEARED_ERR_KEY, JSON.stringify(next)); } catch { /* private mode */ }
+    setCleared(next);
+    window.dispatchEvent(new Event('tr-autoerr-cleared'));
+  }, []);
+  return [cleared, clear];
+}
+
 /* Every armed strategy, one line each -- they run side by side -- with its
    own ✕ to disarm it, and "＋ arm another" to add one. Without onDisarm /
-   onArmAnother it is the read-only line it always was. */
+   onArmAnother it is the read-only line it always was. A refusal under a
+   line has its own "clear", and "clear errors" clears them all. */
 export function AutoStatus({ st, className = '', onDisarm, onArmAnother, busy = false }) {
   const armed = st?.active ? (st.watchers?.length ? st.watchers : [st]) : [];
+  const [cleared, clearErrors] = useClearedErrors();
+  const showing = armed.filter((w) => errKey(w) && cleared[w.strategy] !== errKey(w));
   if (armed.length) {
     return (
       <div className={`tr-autolines ${className}`}>
         {armed.map((w) => (
           <AutoStatusLine key={w.strategy} st={w} className={className}
-            onDisarm={onDisarm} busy={busy} />
+            onDisarm={onDisarm} busy={busy}
+            showError={showing.includes(w)} onClearError={() => clearErrors([w])} />
         ))}
-        {(onArmAnother || (onDisarm && armed.length > 1)) && (
+        {(onArmAnother || (onDisarm && armed.length > 1) || showing.length > 1) && (
           <p className={`tr-autoline tr-autoctl ${className}`}>
+            {showing.length > 1 && (
+              <button type="button" className="tr-chip" onClick={() => clearErrors(showing)}
+                title="clear every refusal shown — a new one still shows">✕ clear errors</button>
+            )}
             {onArmAnother && (
               <button type="button" className="tr-chip" onClick={onArmAnother} disabled={busy}
                 title="arm another strategy to run alongside">＋ arm another</button>
@@ -3680,7 +3719,7 @@ export function AutoStatus({ st, className = '', onDisarm, onArmAnother, busy = 
   return null;
 }
 
-function AutoStatusLine({ st, className = '', onDisarm, busy }) {
+function AutoStatusLine({ st, className = '', onDisarm, busy, showError = true, onClearError }) {
   {
     const what = STRATEGY_LABELS[st.strategy] || String(st.strategy || '').replace(/_/g, ' ');
     const pairs = (st.pairs || []).length;
@@ -3695,12 +3734,17 @@ function AutoStatusLine({ st, className = '', onDisarm, busy }) {
         {st.order_type && st.order_type !== 'smart' ? ` · ${orderTag(st.order_type, st.discount_pct)}` : ''}
         {st.pick === 'open_interest' ? ' · strike by OI' : ''}
         {st.placed ? ` · ${st.placed} placed` : ''}
-        {st.last_error && (
+        {st.last_error && showError && (
           // The last refusal, in red, so a strike list that ran out is seen;
           // the watcher has already moved on to the next signal.
           <span className="tr-autoerr" role="alert"
             title={`${st.errors || 1} refused or failed since arming`}>
             ⚠ {st.last_error.at} {st.last_error.message}
+            {onClearError && (
+              <button type="button" className="tr-autoerr-clear" onClick={onClearError}
+                title="clear this message — a new refusal still shows"
+                aria-label="clear this error message">clear</button>
+            )}
           </span>
         )}
         {onDisarm && (
