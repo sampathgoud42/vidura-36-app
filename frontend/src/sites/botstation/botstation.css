@@ -1200,6 +1200,8 @@
 .bs-rain-conf { font-size: 10px; letter-spacing: 0.08em; color: var(--bs-ink-3); }
 .bs-rain-conf.settled { color: var(--bs-good, #2fd35b); }
 .bs-rain-conf.high { color: var(--bs-cyan, #4fd6e6); }
+/* the call follows a near-certain Kalshi market */
+.bs-rain-conf.market { color: var(--bs-sun, #fbbf24); }
 .bs-rain-conf.low { color: var(--bs-sun, #fab219); }
 
 .bs-rain-sheet { width: min(760px, 100%); }

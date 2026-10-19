@@ -22,6 +22,7 @@ Orleans 2026-10-04: 0.59" on both), which is the check this rests on.
 A trace is not rain: the market reads "T" as 0.
 
 THE CALL
+    today's CLI report (the settlement product)  TRUE / FALSE   settled
     already measured >= 0.01" today              TRUE   settled
     HRRR >= 0.01" left AND another model agrees  TRUE   (HRRR leads a split)
     HRRR >= 0.05" left on its own                TRUE   low
@@ -29,6 +30,13 @@ THE CALL
     otherwise                                    FALSE
 A binary call on a 35% chance is FALSE: it is the likelier side, and the
 reasons say so in as many words.
+
+THEN THE MARKET. A Kalshi YES bid of MARKET_SURE (95c) or more -- or a YES
+ask of 5c or less -- is the market all but certain, and on these markets
+that certainty almost always comes from the settlement data, a gauge or the
+CLI, before any model sees it (West Palm Beach 2026-10-19: YES 99c over a
+FALSE built on a METAR trace). The call then follows the market, confidence
+"market", unless the CLI or a measured total has already settled it.
 """
 
 from __future__ import annotations
@@ -71,6 +79,7 @@ MM = 25.4
 MEASURABLE = 0.01           # inches
 CLIMO_MM = 1.0              # ERA5 wet-day proxy; it drizzles too often at 0.25
 CLIMO_WINDOW = 3            # days either side of today, over 30 years
+MARKET_SURE = 0.95          # a YES bid at or above this (or an ask at or under 1 - it) decides
 
 _refresh_lock = threading.Lock()
 # One 30-year archive pull at a time: eight at once come back 429.
@@ -185,6 +194,50 @@ def observed_so_far(icao: str, start_utc: datetime) -> tuple[float, bool, list[d
             total += v
             trace |= v == 0
     return round(total, 2), trace and total == 0, obs
+
+
+_CLI_FOR = re.compile(r"CLIMATE SUMMARY FOR ([A-Z]+ \d{1,2} \d{4})")
+_CLI_PRECIP = re.compile(r"^\s*(TODAY|YESTERDAY)\s+(T|MM|\d+\.\d+)\b", re.M)
+
+
+def cli_precip(station: str, day: date) -> tuple[str, float | None, str] | None:
+    """Today's precipitation from the NWS CLI report -- the product Kalshi
+    settles on -- when the office has issued one FOR ``day``.
+
+    The afternoon CLI ("VALID TODAY AS OF 0400 PM") carries a TODAY row; the
+    next morning's carries the whole day as YESTERDAY. Returns (value as
+    printed, inches or None for T/MM, issuance time) or None when no report
+    for ``day`` is out yet."""
+    hdr = {"User-Agent": _UA["User-Agent"], "Accept": "application/ld+json"}
+    items = _get(f"{NWS}/products/types/CLI/locations/{station}", headers=hdr).get("@graph") or []
+    for item in items[:3]:
+        text = _get(item["@id"], headers=hdr).get("productText") or ""
+        hit = _CLI_FOR.search(text)
+        if not hit:
+            continue
+        try:
+            for_day = datetime.strptime(hit.group(1).title(), "%B %d %Y").date()
+        except ValueError:
+            continue
+        if for_day != day:
+            continue
+        block = text[text.find("PRECIPITATION (IN)"):]
+        row = _CLI_PRECIP.search(block)
+        if not row:
+            return None
+        raw = row.group(2)
+        inches = float(raw) if raw[0].isdigit() else None
+        return raw, inches, item.get("issuanceTime") or ""
+    return None
+
+
+def market_call(yes_bid, yes_ask) -> str | None:
+    """TRUE / FALSE when the market is all but certain, else None."""
+    if yes_bid is not None and yes_bid >= MARKET_SURE:
+        return "TRUE"
+    if yes_ask is not None and yes_ask <= 1 - MARKET_SURE:
+        return "FALSE"
+    return None
 
 
 def _val(o: dict, key: str):
@@ -420,6 +473,19 @@ def analyse(m: dict, now_utc: datetime) -> dict:
         observed, trace, obs = observed_so_far(icao, start)
     except Exception as exc:                            # noqa: BLE001
         errors.append(f"observations: {type(exc).__name__}")
+    # The CLI is the settlement number: once it is out for today it beats the
+    # METARs, whose P groups can miss what the gauge's daily total counts.
+    cli = None
+    try:
+        cli = cli_precip(m["station"], day)
+    except Exception as exc:                            # noqa: BLE001
+        errors.append(f"CLI report: {type(exc).__name__}")
+    if cli is not None:
+        raw, inches, _issued = cli
+        if inches is not None:
+            observed, trace = max(observed, inches), False
+        elif raw == "T" and observed < MEASURABLE:
+            trace = True
     latest = obs[0] if obs else {}
     pres = [(_val(o, "barometricPressure"), o["timestamp"]) for o in obs
             if _val(o, "barometricPressure")]
@@ -458,7 +524,20 @@ def analyse(m: dict, now_utc: datetime) -> dict:
         observed=observed, trace=trace, hrrr=mr["hrrr"], nam=mr["nam"], gfs=mr["gfs"],
         ecmwf=mr["ecmwf"], nws_pop=fc["max_pop"], nws_qpf=fc["qpf_in"],
         hrrr_pop=mr["hrrr_max_pop"], hours_left=hours_left)
-    if m.get("yes_ask") is not None:
+    if cli is not None:
+        raw, inches, issued = cli
+        why.insert(0, f"NWS's CLI{m['station']} report ({issued[11:16]}Z) has {raw} "
+                      f"{'in.' if inches is not None else '(trace)' if raw == 'T' else '(missing)'} "
+                      "for today -- the number the market settles on.")
+    market = market_call(m.get("yes_bid"), m.get("yes_ask"))
+    if market and market != decision and conf != "settled":
+        price = m.get("yes_bid") if market == "TRUE" else m.get("yes_ask")
+        why.insert(0, f"Kalshi is all but certain -- YES {'bid' if market == 'TRUE' else 'ask'} "
+                      f"{round(100 * price)}c -- so the call follows the market: {market}. "
+                      f"The weather data alone said {decision}; the market usually has the "
+                      "settlement reading first.")
+        decision, conf = market, "market"
+    elif m.get("yes_ask") is not None:
         implied = round(100 * ((m.get("yes_bid") or 0) + m["yes_ask"]) / 2)
         lean = "agrees" if (implied >= 50) == (decision == "TRUE") else "DISAGREES"
         why.append(f"Kalshi trades YES around {implied}c, so the market {lean} with this call.")
