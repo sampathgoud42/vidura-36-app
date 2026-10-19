@@ -1662,7 +1662,7 @@ const WEATHER_COM_CITY = {
 const weatherComUrl = (row) => (WEATHER_COM_CITY[row.city_code]
   ? `https://weather.com/us/${WEATHER_COM_CITY[row.city_code]}/today`
   : `https://weather.com/search/enhancedlocalsearch?where=${encodeURIComponent(row.city)}`);
-const RAIN_CONF = { settled: 'SETTLED', high: 'HIGH', medium: 'MED', low: 'LOW' };
+const RAIN_CONF = { settled: 'SETTLED', market: 'MARKET', high: 'HIGH', medium: 'MED', low: 'LOW' };
 const inch = (v) => (v == null ? '—' : `${Number(v).toFixed(2)}"`);
 const dollarsC = (v) => (v == null ? '—' : `${Math.round(Number(v) * 100)}c`);
 
