@@ -289,6 +289,36 @@ def combo15_place(payload: Combo15PlaceRequest,
                                owner=tenant.id, tenant_slug=tenant.slug)
 
 
+@router.get("/predict15", operation_id="getPredict15")
+@deps.tenant_scoped
+def predict15_get(coins: str = Query(default="BTC,ETH"),
+                  tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """PREDICT-15: YES / NO on each coin's open Kalshi fifteen-minute window --
+    the digital-option fair value from the price against the strike, blended
+    with Kalshi's mid -- and where the model disagrees with the quote enough to
+    flag. Read-only: nothing is ordered."""
+    from app.domains.botstation import predict15
+
+    wanted = tuple(c.strip().upper() for c in coins.split(",") if c.strip().upper() in predict15.COINS)
+    return predict15.predict_all(wanted or predict15.DEFAULT_COINS)
+
+
+@router.get("/predict15/simulate", operation_id="simulatePredict15")
+@deps.tenant_scoped
+def predict15_simulate(coin: str = Query(default="BTC"), days: float = Query(default=1, gt=0, le=3),
+                       minute: int = Query(default=2, ge=0, le=14),
+                       edge: float = Query(default=0.10, ge=0, le=0.5),
+                       tenant: Tenant = Depends(deps.current_tenant)) -> dict:
+    """Replay the last ``days`` of settled windows as a bot would have traded
+    them at ``minute``: the call, its accuracy, and the trades the model would
+    have taken at the real Kalshi quote (fee included). Paper only."""
+    from app.domains.botstation import predict15
+
+    if coin.upper() not in predict15.COINS:
+        raise HTTPException(status_code=400, detail=f"coin must be one of {', '.join(predict15.COINS)}")
+    return predict15.simulate(coin, days=days, minute=minute, edge_min=edge)
+
+
 class Combo15AutoRequest(BaseModel):
     enabled: bool
 

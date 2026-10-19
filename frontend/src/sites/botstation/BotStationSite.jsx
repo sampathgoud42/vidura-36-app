@@ -1743,6 +1743,153 @@ function RainPanel() {
   );
 }
 
+// PREDICT-15: YES / NO on BTC's and ETH's open Kalshi fifteen-minute window
+// (botstation.predict15). The call is the digital-option fair value from the
+// price against the strike, blended with Kalshi's mid; TRADE marks only a
+// disagreement with the quote of 10c or more after the fee. The simulator
+// replays real settled windows at a chosen minute against their real quotes.
+// Read-only: nothing here places an order.
+const P15_POLL_MS = 15000;
+const pctP = (v) => (v == null ? '—' : `${Math.round(Number(v) * 100)}%`);
+const signedC = (v) => (v == null ? '—' : `${v >= 0 ? '+' : '−'}${Math.abs(Math.round(Number(v) * 100))}c`);
+
+function Predict15Panel() {
+  const [open, setOpen] = useState(false);
+  const [data, setData] = useState(null);
+  const [err, setErr] = useState('');
+  const [sim, setSim] = useState(null);
+  const [simBusy, setSimBusy] = useState(false);
+  const [simErr, setSimErr] = useState('');
+  const [simForm, setSimForm] = useState({ coin: 'BTC', minute: 2, days: 1 });
+  const [why, setWhy] = useState(false);
+
+  const load = useCallback(async () => {
+    if (document.hidden) return;
+    try { setData(await vidura.predict15()); setErr(''); } catch (e) { setErr(errText(e)); }
+  }, []);
+  useEffect(() => {
+    load();
+    const id = setInterval(load, P15_POLL_MS);
+    return () => clearInterval(id);
+  }, [load]);
+
+  const runSim = async () => {
+    setSimBusy(true); setSimErr('');
+    try { setSim(await vidura.predict15Simulate(simForm)); } catch (e) { setSimErr(errText(e)); }
+    finally { setSimBusy(false); }
+  };
+
+  const rows = (data && data.rows) || [];
+  const head = rows.filter((r) => r.call).map((r) => `${r.coin} ${r.call} ${pctP(r.p_yes)}`).join(' · ');
+  return (
+    <section className={`bs-luckdock bs-p15 ${open ? 'open' : ''}`}>
+      <header className="bs-luck-hd" onClick={() => setOpen((v) => !v)}>
+        <h3>PREDICT-15</h3>
+        <span className="sub">{head || 'BTC · ETH next 15 min'}</span>
+        {rows.some((r) => r.trade) && <span className="bs-p15-flag">EDGE</span>}
+        <span className="bs-luck-toggle">{open ? '−' : '+'}</span>
+      </header>
+      {!open ? null : (
+        <div className="bs-luckdock-body">
+          {err ? <p className="bs-luck-err">{err}</p> : null}
+          {rows.length ? (
+            <div className="bs-luck-legs bs-p15-table">
+              <table>
+                <thead>
+                  <tr><th>Coin</th><th>Call</th><th className="num">Model</th><th className="num">Kalshi</th>
+                    <th className="num">vs strike</th><th className="num">Left</th><th className="num">Edge</th></tr>
+                </thead>
+                <tbody>
+                  {rows.map((r) => (r.error ? (
+                    <tr key={r.coin}><td>{r.coin}</td><td colSpan={6} className="bs-luck-err">{r.error}</td></tr>
+                  ) : (
+                    <tr key={r.coin} title={r.reason}>
+                      <td><b>{r.coin}</b></td>
+                      <td><b className={r.call === 'YES' ? 'bs-p15-yes' : 'bs-p15-no'}>{r.call}</b>{' '}
+                        <span className="bs-p15-p">{pctP(r.p_yes)}</span></td>
+                      <td className="num">{pctP(r.p_model)}</td>
+                      <td className="num">{dollarsC(r.yes_bid)}/{dollarsC(r.yes_ask)}</td>
+                      <td className="num">{r.spot && r.strike ? `${((r.spot / r.strike - 1) * 100).toFixed(3)}%` : '—'}</td>
+                      <td className="num">{r.minutes_left != null ? `${r.minutes_left.toFixed(1)}m` : '—'}</td>
+                      <td className="num">
+                        {r.trade ? <span className="bs-p15-trade" title={`buy ${r.trade_side} at ${dollarsC(r.trade_price)} — unproven, paper first`}>
+                          {r.trade_side} {signedC(r.edge)}</span> : <span className="dim">{signedC(r.edge)}</span>}
+                      </td>
+                    </tr>
+                  )))}
+                </tbody>
+              </table>
+            </div>
+          ) : !err ? <p className="bs-luck-note">reading Kalshi and Coinbase…</p> : null}
+          {rows.filter((r) => r.reason).map((r) => (
+            <p key={`w${r.coin}`} className="bs-luck-note bs-p15-reason">{r.reason}</p>
+          ))}
+
+          <div className="bs-p15-sim">
+            <div className="bs-p15-simhd">SIMULATE <span className="dim">· replay real settled windows at their real Kalshi quotes</span></div>
+            <div className="bs-luck-actions">
+              <select value={simForm.coin} onChange={(e) => setSimForm({ ...simForm, coin: e.target.value })} aria-label="coin">
+                <option>BTC</option><option>ETH</option>
+              </select>
+              <select value={simForm.minute} onChange={(e) => setSimForm({ ...simForm, minute: Number(e.target.value) })} aria-label="decision minute">
+                {[0, 1, 2, 3, 5, 8].map((m) => <option key={m} value={m}>call at T+{m}m</option>)}
+              </select>
+              <select value={simForm.days} onChange={(e) => setSimForm({ ...simForm, days: Number(e.target.value) })} aria-label="days">
+                {[0.5, 1, 2, 3].map((d) => <option key={d} value={d}>last {d === 0.5 ? '12h' : `${d}d`}</option>)}
+              </select>
+              <button type="button" className="bs-btn" onClick={runSim} disabled={simBusy}>
+                {simBusy ? 'replaying…' : 'Run'}
+              </button>
+            </div>
+            {simBusy && <p className="bs-luck-note">reading every window's minute-by-minute quotes — about 25s per 12h</p>}
+            {simErr ? <p className="bs-luck-err">{simErr}</p> : null}
+            {sim && !sim.error && (
+              <>
+                <p className="bs-p15-stats">
+                  <b>{sim.windows}</b> windows · call right <b>{pctP(sim.accuracy)}</b> ·{' '}
+                  trades (edge ≥ {Math.round(sim.edge_min * 100)}c) <b>{sim.trades}</b>
+                  {sim.trades ? <> · won <b>{pctP(sim.win_rate)}</b> · P&amp;L{' '}
+                    <b className={sim.pnl_per_contract >= 0 ? 'bs-p15-yes' : 'bs-p15-no'}>
+                      {sim.pnl_per_contract >= 0 ? '+' : '−'}${Math.abs(sim.pnl_per_contract).toFixed(2)}</b>
+                    {' '}per $1 contract (ROI {pctP(sim.roi)})</> : null}
+                </p>
+                <div className="bs-luck-legs bs-p15-simrows">
+                  <table>
+                    <thead><tr><th>Window</th><th>Call</th><th>Result</th><th className="num">Kalshi</th><th className="num">Trade</th></tr></thead>
+                    <tbody>
+                      {sim.rows.slice().reverse().slice(0, 24).map((r) => (
+                        <tr key={r.ticker}>
+                          <td>{deskTime(r.open_time)}</td>
+                          <td><b className={r.call === 'YES' ? 'bs-p15-yes' : 'bs-p15-no'}>{r.call}</b> {pctP(r.p_yes)}</td>
+                          <td className={r.right ? 'bs-p15-yes' : 'bs-p15-no'}>{r.result} {r.right ? '✓' : '✗'}</td>
+                          <td className="num">{dollarsC(r.yes_bid)}/{dollarsC(r.yes_ask)}</td>
+                          <td className="num">{r.traded ? `${r.side} ${r.won ? 'won' : 'lost'}` : '—'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <p className="bs-luck-note">{sim.note}</p>
+              </>
+            )}
+            {sim && sim.error ? <p className="bs-luck-err">{sim.error}</p> : null}
+          </div>
+
+          <button type="button" className="bs-p15-whybtn" onClick={() => setWhy((v) => !v)}>
+            {why ? '− ' : '+ '}what the research found</button>
+          {why && (
+            <ul className="bs-p15-why">
+              <li>Before the open it is a coin flip: momentum, mean reversion, RSI, volatility, the last result, the other coin and the hour all scored 50–54% over 1,990 windows a coin; a 12-feature model made 51.5% (BTC) / 54.7% (ETH) on weeks it had not seen.</li>
+              <li>Inside the window, price against the strike is strong and calibrated: about 61% right at T+1m, 64% at T+2m, 72% at T+5m, 81–85% at T+10m.</li>
+              <li>Kalshi&apos;s own price is just as good early and a little better later, so the call blends the two. Buying every disagreement at the real quote lost 3–7% after fees over 7 days; only a 10c+ edge is flagged, and it is unproven — paper first.</li>
+            </ul>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 function RainCitySheet({ row, onClose }) {
   const [quote, setQuote] = useState(null);
   const [qErr, setQErr] = useState('');
@@ -4140,6 +4287,10 @@ function CompactStation({ user, pv, pvTotal, botStates, clock, anyLive, runningC
         <RainPanel />
       </section>
 
+      <section className="bsc-sec" aria-label="predict 15">
+        <Predict15Panel />
+      </section>
+
       <section className="bsc-sec bsc-cores" aria-label="bot cores">
         <header className="bsc-sechd">
           <h2>Helios · Bot cores</h2>
@@ -4768,6 +4919,7 @@ export default function BotStationSite() {
                 opened, so they cost two lines above the trade log. */}
             <LuckPanel />
             <RainPanel />
+            <Predict15Panel />
 
             {/* NEXT on this column. The ACCOUNT's record, not the bots' --
                 the ledger feed still loads (the per-bot 7d record is computed
