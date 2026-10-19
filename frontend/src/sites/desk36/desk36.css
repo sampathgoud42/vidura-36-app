@@ -1066,5 +1066,12 @@ button.d36-sheet-side { cursor: pointer; border: 0; font-family: inherit; }
 }
 .tr-autoline .tr-autodisarm:disabled { opacity: 0.5; cursor: default; }
 .tr-autoline.tr-autoctl { display: flex; gap: 6px; flex-wrap: wrap; color: inherit; }
+/* "clear" on a refusal: hides that one message; a new refusal still shows. */
+.tr-autoline .tr-autoerr-clear {
+  margin-left: 8px; padding: 0 6px; min-height: 18px; vertical-align: middle;
+  background: none; border: 1px solid currentColor; border-radius: 4px;
+  color: var(--tr-ink-3, #8b93ad); font: inherit; font-size: 0.9em; line-height: 1.2; cursor: pointer;
+}
 /* phone: the disarm targets meet Apple's 44px */
 .d36-autoline .tr-autodisarm { min-width: 44px; min-height: 32px; }
+.d36-autoline .tr-autoerr-clear { min-width: 44px; min-height: 32px; }
