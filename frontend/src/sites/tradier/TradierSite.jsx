@@ -4429,9 +4429,16 @@ export default function TradierSite() {
                 <div className="tr-stat"><div className="k">buying power</div>
                   <div className="v" style={{ color: 'var(--tr-accent-hi)' }}>{usd(bal.option_buying_power)}</div></div>
                 <div className="tr-stat"><div className="k">total equity</div>
-                  <div className="v">{usd(bal.total_equity)}</div></div>
+                  <div className="v" title={bal.venue_total_equity != null
+                    ? `marked at the bid · Tradier's sandbox reports ${usd(bal.venue_total_equity)}` : undefined}>
+                    {usd(bal.total_equity)}</div></div>
                 <div className="tr-stat"><div className="k">open P&L</div>
-                  <div className="v" style={{ color: Number(bal.open_pl) >= 0 ? 'var(--tr-green)' : 'var(--tr-red)' }}>
+                  {/* On the sandbox the server re-marks this at the bid, as the
+                      positions table does; Tradier's own figure is the tooltip. */}
+                  <div className="v" style={{ color: Number(bal.open_pl) >= 0 ? 'var(--tr-green)' : 'var(--tr-red)' }}
+                    title={bal.venue_open_pl != null
+                      ? `every holding at the bid, against its cost · Tradier's sandbox reports ${usd(bal.venue_open_pl)}`
+                      : undefined}>
                     {usd(bal.open_pl)}</div></div>
                 {/* Today = realized (close_pl) + unrealized (open_pl). The
                     percent is against what the account was WORTH this
