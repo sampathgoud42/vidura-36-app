@@ -1198,6 +1198,28 @@
 .bs-rain-true { color: var(--bs-good, #2fd35b); font-weight: 700; }
 .bs-rain-false { color: var(--bs-ink-2, #9aa3b5); font-weight: 700; }
 .bs-rain-conf { font-size: 10px; letter-spacing: 0.08em; color: var(--bs-ink-3); }
+
+/* PREDICT-15 dock */
+.bs-p15 .bs-luck-hd { align-items: center; }
+.bs-p15 .bs-p15-flag { margin-left: auto; font-size: 9px; letter-spacing: 0.12em; padding: 1px 6px;
+  border: 1px solid var(--bs-sun, #fbbf24); color: var(--bs-sun, #fbbf24); border-radius: 4px; }
+.bs-p15 .bs-p15-flag + .bs-luck-toggle { margin-left: 6px; }
+.bs-p15-yes { color: var(--bs-good, #2fd35b); font-weight: 700; }
+.bs-p15-no { color: #f87171; font-weight: 700; }
+.bs-p15-p { font-variant-numeric: tabular-nums; color: var(--bs-ink-2, #c9d1e8); }
+.bs-p15-trade { color: var(--bs-sun, #fbbf24); font-weight: 700; }
+.bs-p15-reason { font-size: 10.5px; line-height: 1.4; }
+.bs-p15-sim { margin-top: 10px; padding-top: 8px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+.bs-p15-simhd { font-size: 10px; letter-spacing: 0.14em; color: var(--bs-ink-2, #c9d1e8); margin-bottom: 6px; }
+.bs-p15-sim select { background: rgba(255, 255, 255, 0.04); color: inherit; border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 6px; padding: 6px 8px; font: inherit; font-size: 16px; min-height: 32px; }
+@media (min-width: 700px) { .bs-p15-sim select { font-size: 11px; } }
+.bs-p15-stats { font-size: 11px; margin: 6px 0; line-height: 1.5; }
+.bs-p15-simrows { max-height: 30vh; }
+.bs-p15-whybtn { margin-top: 8px; background: none; border: 0; padding: 4px 0; cursor: pointer;
+  color: var(--bs-cyan, #4fd6e6); font: inherit; font-size: 10.5px; min-height: 32px; }
+.bs-p15-why { margin: 2px 0 0 16px; padding: 0; font-size: 10.5px; line-height: 1.45; color: var(--bs-ink-3); }
+.bs-p15-why li + li { margin-top: 4px; }
 .bs-rain-conf.settled { color: var(--bs-good, #2fd35b); }
 .bs-rain-conf.high { color: var(--bs-cyan, #4fd6e6); }
 /* the call follows a near-certain Kalshi market */

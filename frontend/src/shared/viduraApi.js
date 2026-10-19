@@ -360,6 +360,10 @@ export const vidura = {
   // The daily rain board (climate.rain_forecast): read it, rebuild it
   // (truncate and load, 20-60s), quote one city's market live, and buy YES or
   // NO on it under the confirmation's key so a retry is the same order.
+  // PREDICT-15 (botstation.predict15): the live YES/NO and the replay.
+  predict15: (coins = 'BTC,ETH') => api.get(`/bots/predict15?coins=${encodeURIComponent(coins)}`),
+  predict15Simulate: ({ coin, minute, days }) => api.get(
+    `/bots/predict15/simulate?coin=${coin}&minute=${minute}&days=${days}`, { timeout: 300000 }),
   rainForecast: () => api.get('/climate/rain-forecast'),
   rainForecastRefresh: () => api.post('/climate/rain-forecast/refresh', {}, { timeout: 180000 }),
   rainQuote: (ticker) => api.get(`/climate/rain-forecast/quote?ticker=${encodeURIComponent(ticker)}`),
