@@ -25,6 +25,8 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urlparse
 
+import re
+
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
@@ -132,6 +134,9 @@ class TradierCredentials:
     base_url: str | None = None
 
 
+_OCC = re.compile(r"^[A-Z.]{1,6}\d{6}[CP]\d{8}$")
+
+
 class TradierClient:
     def __init__(self, creds: TradierCredentials):
         self.creds = creds
@@ -193,8 +198,9 @@ class TradierClient:
                or b.get("total_cash") or 0)
         open_pl = float(b.get("open_pl") or 0)
         close_pl = float(b.get("close_pl") or 0)   # today's realized P&L
-        return {
-            "total_equity": float(b.get("total_equity") or 0),
+        equity = float(b.get("total_equity") or 0)
+        out = {
+            "total_equity": equity,
             "total_cash": float(b.get("total_cash") or 0),
             "option_buying_power": float(obp or 0),
             "open_pl": open_pl,
@@ -203,6 +209,49 @@ class TradierClient:
             "account_id": self.creds.account_id,
             "sandbox": self.creds.sandbox,
         }
+        if self.creds.sandbox:
+            self._mark_sandbox(out)
+        return out
+
+    def _mark_sandbox(self, out: dict) -> None:
+        """Re-mark the sandbox's open P&L at the current bid.
+
+        Tradier's SANDBOX does not mark its balances to the market: on
+        2026-10-19 it valued three option positions at $16,717 -- $902 under
+        their cost -- while the same positions at the bid were worth $29,454,
+        so the desk's header read -$902 over a positions table reading
+        +$11,800. Here every holding is valued at the bid (the ask for a
+        short), against Tradier's own cost basis, the way the positions table
+        marks it; open P&L, today and equity follow. Tradier's figures stay
+        alongside as venue_*. Anything that cannot be quoted keeps Tradier's
+        numbers -- a partial re-mark would be a third, wrong answer.
+        """
+        try:
+            held = self.positions()
+            if not held:
+                return
+            quoted = {str(q.get("symbol") or "").upper(): q
+                      for q in self.quotes([str(h.get("symbol")) for h in held])}
+            value = cost = 0.0
+            for h in held:
+                sym = str(h.get("symbol") or "").upper()
+                qty = float(h.get("quantity") or 0)
+                q = quoted.get(sym) or {}
+                px = q.get("bid") if qty > 0 else q.get("ask")
+                if px is None or h.get("cost_basis") is None:
+                    return
+                mult = 100 if _OCC.match(sym) else 1
+                value += float(px) * qty * mult
+                cost += float(h["cost_basis"])
+        except Exception:                               # noqa: BLE001
+            return                                      # Tradier's numbers stand
+        marked = round(value - cost, 2)
+        out["venue_open_pl"] = out["open_pl"]
+        out["venue_total_equity"] = out["total_equity"]
+        out["total_equity"] = round(out["total_equity"] + marked - out["open_pl"], 2)
+        out["open_pl"] = marked
+        out["day_pl"] = round(marked + out["close_pl"], 2)
+        out["marked_at"] = "bid"
 
     # ── market data ─────────────────────────────────────────────────────────
     def expirations(self, symbol: str) -> list[str]:
