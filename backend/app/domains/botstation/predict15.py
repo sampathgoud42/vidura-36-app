@@ -156,6 +156,19 @@ def best_side(p_yes: float, yes_bid: float | None, yes_ask: float | None) -> dic
     return out
 
 
+def call_side(p_call: float, yes_bid: float | None, yes_ask: float | None) -> dict:
+    """The CALL's side at the live quote: YES at the ask, NO at 1 - the bid,
+    and its edge after the fee against the call's own probability."""
+    if p_call >= 0.5:
+        if yes_ask is None or not 0.01 <= yes_ask <= 0.99:
+            return {"side": "YES", "price": None, "edge": None}
+        return {"side": "YES", "price": yes_ask, "edge": round(p_call - yes_ask - fee(yes_ask), 4)}
+    if yes_bid is None or not 0.01 <= yes_bid <= 0.99:
+        return {"side": "NO", "price": None, "edge": None}
+    no = round(1 - yes_bid, 4)
+    return {"side": "NO", "price": no, "edge": round((1 - p_call) - no - fee(no), 4)}
+
+
 # ---- live ------------------------------------------------------------------
 
 def _market(series: str) -> dict | None:
@@ -283,19 +296,27 @@ def _quote_at(series: str, m: dict, minute: int) -> tuple[float | None, float | 
 
 
 def simulate(coin: str = "BTC", *, days: float = 1, minute: int = 2,
-             edge_min: float = EDGE_MIN) -> dict:
+             edge_min: float = EDGE_MIN, rule: str = "edge") -> dict:
     """Replay real settled windows the way a bot would trade them.
 
     For each window of the last ``days``: at ``minute`` after the open, the
     model's P(YES) from the Coinbase price then and the hour before it; the
-    real Kalshi YES bid/ask at that minute; buy the better side when it beats
-    the quote by ``edge_min`` after the fee; settle on Kalshi's own result.
-    Every input is what was knowable at that minute.
+    real Kalshi YES bid/ask at that minute; then, by ``rule``:
+
+        "edge"  buy the better side when it beats the quote by ``edge_min``
+                after the fee
+        "call"  buy the CALL's side every window (YES at the ask, NO at
+                1 - the bid) -- the rule the btc15 v11 / eth15 v3 engines
+                trade, and the replay their 24-hour gate reads
+
+    and settle on Kalshi's own result. Every input is what was knowable at
+    that minute.
     """
     coin = coin.upper()
     days = max(0.25, min(float(days), SIM_MAX_DAYS))
     minute = max(0, min(int(minute), WINDOW_MIN - 1))
-    key = (coin, days, minute, round(edge_min, 4))
+    rule = "call" if rule == "call" else "edge"
+    key = (coin, days, minute, round(edge_min, 4), rule)
     hit = _sim_cache.get(key)
     if hit and time.time() - hit[0] < 600:
         return hit[1]
@@ -334,14 +355,17 @@ def simulate(coin: str = "BTC", *, days: float = 1, minute: int = 2,
                "p_model": round(p, 3), "call": "YES" if pc >= 0.5 else "NO",
                "result": m["result"].upper(), "right": (pc >= 0.5) == yes}
         side = best_side(p, bid, ask)
+        if rule == "call":
+            side = call_side(pc, bid, ask)
         row.update(yes_bid=bid, yes_ask=ask, side=side["side"], price=side["price"], edge=side["edge"])
-        if side["edge"] is not None and side["edge"] >= edge_min:
+        if side["price"] is not None and (rule == "call" or (side["edge"] is not None
+                                                             and side["edge"] >= edge_min)):
             won = (side["side"] == "YES") == yes
             cost = side["price"] + fee(side["price"])
             trades += 1; wins += won; pnl += (1.0 if won else 0.0) - cost; spent += cost
             row.update(traded=True, won=won, pnl=round((1.0 if won else 0.0) - cost, 4))
         rows.append(row)
-    out = {"coin": coin, "days": days, "minute": minute, "edge_min": edge_min,
+    out = {"coin": coin, "days": days, "minute": minute, "edge_min": edge_min, "rule": rule,
            "windows": calls, "accuracy": round(right / calls, 4) if calls else None,
            "trades": trades, "win_rate": round(wins / trades, 4) if trades else None,
            "pnl_per_contract": round(pnl, 2), "roi": round(pnl / spent, 4) if spent else None,
