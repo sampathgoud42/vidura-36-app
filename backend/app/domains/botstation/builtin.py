@@ -371,6 +371,30 @@ _CONFIRMED_LINES = (
     "Take-profit +15%, stop -30%, both armed only after the buy FILLS")
 
 
+# The PREDICT-15 engine (btc15 v11, eth15 v3): $1 on the call at T+2,
+# held to settlement, gated on the last 24h of the same rule.
+_P15_DEFAULTS = {"stake_usd": 1, "entry_open_s": 120, "entry_close_s": 180,
+                 "min_price_c": 5, "max_price_c": 95}
+_P15_OPTIONS = {
+    **_STACK_OPTIONS,
+    "stake_usd": {"type": "number", "min": 1, "max": 100, "default": 1,
+                  "label": "Stake per window (USD) -- PREDICT-15 engine",
+                  "group": "Entry"},
+}
+_P15_LINES = (
+    "At T+2 minutes, buys the PREDICT-15 call -- YES or NO from the price against the "
+    "strike, blended with Kalshi's mid -- at the live ask, immediate-or-cancel",
+    "$1 a window (whole contracts, at least one), held to settlement: no take-profit, no stop",
+    "Only while a replay of this rule over the last 24h, at the real Kalshi quotes with the "
+    "fee, is profitable -- otherwise it sits the window out",
+    "Research: docs/research/predict-15.md")
+
+
+def _predict15(name: str) -> tuple[str, tuple[str, ...]]:
+    return (f"PREDICT-15 on {name}: buy the call at T+2 for $1, while the last 24 hours of "
+            "the same rule made money.", _P15_LINES)
+
+
 def _confirmed(name: str) -> tuple[str, tuple[str, ...]]:
     return (f"Trades {name}'s CRYPTO-board headline when it carries the ✓: "
             "CALL ✓ or PUT ✓, with the 30-minute DMI on the same side.",
@@ -457,8 +481,10 @@ _STRATEGY: dict[tuple[str, str], tuple[str, tuple[str, ...]]] = {
 
     ("btc15", "v9"): _stacked("BTC"),
     ("btc15", "v10"): _confirmed("BTC"),
+    ("btc15", "v11"): _predict15("BTC"),
     ("eth15", "v1"): _stacked("ETH"),
     ("eth15", "v2"): _confirmed("ETH"),
+    ("eth15", "v3"): _predict15("ETH"),
     ("gold15", "v5"): _stacked("gold"),
     ("silver15", "v5"): _stacked("silver"),
     ("oil15", "v5"): _stacked("oil"),
@@ -704,18 +730,25 @@ BUILTIN = [
                      option_defaults=dict(_V9_DEFAULTS)),
           # v10, the default: the board's CALL ✓ / PUT ✓ with 30m matching,
           # 30-300s, 35-69c, TP +15% SL -30%. v9 stays selectable.
-          BotVersion("v10", f"{_BTC15}/v10_bot_kalshi_btc15.py", default=True,
-                     option_defaults=dict(_V10_DEFAULTS))),
-         "cwd_customer", "v2_trade_history.csv", options=_STACK_OPTIONS),
+          BotVersion("v10", f"{_BTC15}/v10_bot_kalshi_btc15.py",
+                     option_defaults=dict(_V10_DEFAULTS)),
+          # v11, the default: PREDICT-15 -- $1 on the call at T+2, held to
+          # settlement, while the last 24h of the rule is profitable.
+          BotVersion("v11", f"{_BTC15}/v11_bot_kalshi_btc15.py", default=True,
+                     option_defaults=dict(_P15_DEFAULTS))),
+         "cwd_customer", "v2_trade_history.csv", options=_P15_OPTIONS),
     # ETH's quarter-hour on the stacked engine from the start: the same loop
     # as btc15 v9, reading the CRYPTO board's eth row and trading KXETH15M.
     _bot("eth15", "Kalshi ETH 15-minute bot", "crypto", "15m",
          (BotVersion("v1", f"{_ETH15}/v1_bot_kalshi_eth15.py",
                      option_defaults=dict(_V9_DEFAULTS)),
           # v2, the default: the same confirmed engine as btc15 v10.
-          BotVersion("v2", f"{_ETH15}/v2_bot_kalshi_eth15.py", default=True,
-                     option_defaults=dict(_V10_DEFAULTS))),
-         "cwd_customer", options=_STACK_OPTIONS),
+          BotVersion("v2", f"{_ETH15}/v2_bot_kalshi_eth15.py",
+                     option_defaults=dict(_V10_DEFAULTS)),
+          # v3, the default: the PREDICT-15 engine, as btc15 v11.
+          BotVersion("v3", f"{_ETH15}/v3_bot_kalshi_eth15.py", default=True,
+                     option_defaults=dict(_P15_DEFAULTS))),
+         "cwd_customer", options=_P15_OPTIONS),
     _bot("btc60", "Kalshi BTC 60-minute bot", "btc", "60m",
          (BotVersion("fable5", f"{_BTC60}/bot_kalshi_btc60_fable5.py", default=True),
           BotVersion("burst", f"{_BTC60}/bot_kalshi_btc60_burst.py")),
