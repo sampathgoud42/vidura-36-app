@@ -912,6 +912,8 @@
 /* The one control that spends money is the only one wearing the live colour. */
 .bs-btn.live { border-color: #2fd35b; color: #2fd35b; }
 .bs-btn.live:hover:not(:disabled) { background: rgba(47, 211, 91, 0.12); }
+/* The next step when the legs have expired: REFRESH LEGS, in the sun colour. */
+.bs-btn.warn { border-color: var(--bs-sun); color: var(--bs-sun); }
 .bs-luck-note { font-size: 11px; color: var(--bs-ink-3); margin: 4px 0 8px; }
 .bs-luck-err { font-size: 11px; color: #ff6b6b; margin: 4px 0 8px; }
 .bs-luck-ok { font-size: 12px; color: #2fd35b; margin: 6px 0; }
