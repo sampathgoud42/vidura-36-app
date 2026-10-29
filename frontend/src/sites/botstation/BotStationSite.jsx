@@ -1106,6 +1106,17 @@ function LuckPanel() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
   const [flt, setFlt] = useState(() => luckFilterFrom({}));
+  // Which of the sheet's actions the error is from: it decides the banner's
+  // word, NOT PLACED or NOT REFRESHED.
+  const [errFrom, setErrFrom] = useState('');
+  // Redraws the sheet each second for the preview's expiry clock, only while
+  // the sheet is open.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    if (!sheet) return undefined;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [sheet]);
   // The sport picker. Kept as the sports UNticked, so every sport starts
   // ticked, and "all ticked" goes to the server as no list at all -- which
   // covers a sport that opens after this one was read, too.
@@ -1215,10 +1226,15 @@ function LuckPanel() {
 
   // `over` is the sheet's RESCAN: filters wider than the scan that filled
   // it, written back into the form so the dock says what was scanned.
-  const build = async (over) => {
+  // `refresh` is the sheet's REFRESH LEGS: the same scan again, for fresh
+  // prices and a live token, with the sheet left open on the old legs until
+  // the new ones arrive -- and the ticks and filters carried over to them.
+  const build = async (over, refresh = false) => {
     const f = over ? { ...form, ...over } : form;
     if (over) setForm(f);
-    setBusy('preview'); setError(''); setResult(null); setPreview(null);
+    setBusy(refresh ? 'refresh' : 'preview'); setError(''); setErrFrom('');
+    setResult(null);
+    if (!refresh) setPreview(null);
     setElapsed(0);
     try {
       const gates = {
@@ -1235,9 +1251,16 @@ function LuckPanel() {
       });
       const out = await awaitJob(job.job_id);
       if (out && out.ok) {
-        setPreview({ ...out, gates });
-        setFlt(luckFilterFrom(gates));
-        setKeep(luckDefaultKeep(out.legs, n(f.min_legs, 5)));
+        setPreview({ ...out, gates, expiresAt: Date.now() + (out.expires_in_s || 900) * 1000 });
+        if (refresh) {
+          // The legs still on the board keep their ticks. Too few survive
+          // to place, and it starts again from a random 75%.
+          const still = new Set(out.legs.map((l) => l.ticker).filter((t) => keep.has(t)));
+          setKeep(still.size >= n(f.min_legs, 5) ? still : luckDefaultKeep(out.legs, n(f.min_legs, 5)));
+        } else {
+          setFlt(luckFilterFrom(gates));
+          setKeep(luckDefaultKeep(out.legs, n(f.min_legs, 5)));
+        }
         setSheet(true);
       } else {
         // A failed build is exactly when the funnel is worth reading, and
@@ -1249,11 +1272,14 @@ function LuckPanel() {
           .map((f) => `${f.sport} ${f.eligible} eligible, ${f.hosted} in the collection`);
         setError([(out && out.detail) || 'no ticket could be built']
           .concat(lost.length ? [`— ${lost.join('; ')}`] : []).join(' '));
+        if (refresh) setErrFrom('refresh');
       }
     } catch (e) {
       setError(String((e && e.message) || e));
+      if (refresh) setErrFrom('refresh');
     } finally { setBusy(''); }
   };
+  const refreshLegs = () => build(null, true);
 
   const toggle = (ticker) => setKeep((prev) => {
     const next = new Set(prev);
@@ -1293,10 +1319,16 @@ function LuckPanel() {
   const chosen = shown.filter((l) => keep.has(l.ticker));
   const chosenOdds = chosen.reduce((acc, l) => acc * ((l.price_c || 0) / 100), 1);
   const enough = chosen.length >= n(form.min_legs, 5);
+  // The server holds a preview 15 minutes, and a restart forgets it sooner;
+  // either way it answers "expired", which is the same as the clock running
+  // out. Past that, PLACE cannot succeed and REFRESH LEGS is the way on.
+  const leftS = preview && preview.expiresAt != null
+    ? Math.max(0, Math.round((preview.expiresAt - Date.now()) / 1000)) : null;
+  const expired = leftS === 0;
 
   const place = async () => {
     if (!preview || !enough) return;
-    setBusy('place'); setError(''); setResult(null); setElapsed(0);
+    setBusy('place'); setError(''); setErrFrom(''); setResult(null); setElapsed(0);
     try {
       const job = await vidura.luckPlace({
         token: preview.token,
@@ -1309,10 +1341,14 @@ function LuckPanel() {
       // The sheet stays open on every leg, for another ticket from the same
       // scan. The token just used is spent; the server hands back a fresh one
       // over the same legs.
-      if (out && out.next_token) setPreview((p) => (p ? { ...p, token: out.next_token } : p));
-      if (!(out && out.placed)) setError((out && out.detail) || 'not placed');
+      if (out && out.next_token) {
+        setPreview((p) => (p ? { ...p, token: out.next_token,
+          expiresAt: Date.now() + (out.next_expires_in_s || 900) * 1000 } : p));
+      }
+      if (out && out.expired) setPreview((p) => (p ? { ...p, expiresAt: 0 } : p));
+      if (!(out && out.placed)) { setError((out && out.detail) || 'not placed'); setErrFrom('place'); }
     } catch (e) {
-      setError(String((e && e.message) || e));
+      setError(String((e && e.message) || e)); setErrFrom('place');
     } finally { setBusy(''); }
   };
 
@@ -1539,6 +1575,8 @@ function LuckPanel() {
                 : null}
               {' \u00b7 '}buys at market, spending
               ${n(form.min_usd, 5).toFixed(2)}–${n(form.max_usd, 7.5).toFixed(2)}
+              {leftS == null ? null : expired ? ' \u00b7 legs expired'
+                : ` \u00b7 legs good for ${Math.floor(leftS / 60)}:${String(leftS % 60).padStart(2, '0')}`}
             </p>
 
             <div className="bs-luck-actions">
@@ -1547,12 +1585,32 @@ function LuckPanel() {
               <button type="button" className="bs-btn" onClick={reroll} disabled={!!busy}
                 title="tick a fresh random 75% of the legs the filters show">RANDOM 75%</button>
               <button type="button" className="bs-btn live" onClick={place}
-                disabled={!!busy || !enough}>
+                disabled={!!busy || !enough || expired}
+                title={expired ? 'these legs have expired — refresh them first' : undefined}>
                 {busy === 'place'
                   ? `PLACING\u2026${elapsed ? ` ${Math.round(elapsed)}s` : ''}`
                   : `PLACE ORDER \u2014 ${chosen.length} LEGS`}
               </button>
+              <button type="button" className={`bs-btn${expired ? ' warn' : ''}`}
+                onClick={refreshLegs} disabled={!!busy}
+                title="scan again with the same settings — fresh prices, a fresh preview, your ticks and filters kept">
+                {busy === 'refresh'
+                  ? `REFRESHING\u2026${elapsed ? ` ${Math.round(elapsed)}s` : ''}`
+                  : 'REFRESH LEGS'}
+              </button>
             </div>
+            {busy === 'refresh' ? (
+              <p className="bs-luck-note">
+                Reading every live market again — a couple of minutes. The legs
+                below stay as they are until the fresh ones arrive.
+              </p>
+            ) : null}
+            {expired && !busy && !error ? (
+              <div className="bs-luck-banner bad">
+                <b>EXPIRED</b> these legs can no longer be placed — REFRESH LEGS
+                scans again with the same settings.
+              </div>
+            ) : null}
             {/* What the last PLACE did, kept in view: the sheet no longer
                 closes on it, so this is where a fill or a refusal is read. */}
             {result && result.placed ? (
@@ -1573,7 +1631,8 @@ function LuckPanel() {
             ) : null}
             {error ? (
               <div className="bs-luck-banner bad">
-                <b>NOT PLACED</b> {error}
+                <b>{errFrom === 'refresh' ? 'NOT REFRESHED' : 'NOT PLACED'}</b> {error}
+                {expired && errFrom !== 'refresh' ? ' — REFRESH LEGS scans again with the same settings.' : null}
               </div>
             ) : null}
             {!enough ? (

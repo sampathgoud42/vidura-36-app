@@ -665,7 +665,9 @@ def place(cred, token: str, *, tenant_slug: str = "",
     # Another operator's preview reads exactly like an expired one: a token is
     # not a way to buy what someone else was shown, nor to learn it exists.
     if held is None or held.get("owner", "") != owner:
-        return {"placed": False,
+        # `expired` is for the sheet: it offers REFRESH LEGS on this answer
+        # rather than reading it out of the text.
+        return {"placed": False, "expired": True,
                 "detail": "that preview has expired -- take a fresh one"}
 
     # The operator may deselect legs. They may NEVER add one: a confirmation
