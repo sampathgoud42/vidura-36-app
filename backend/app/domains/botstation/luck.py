@@ -767,8 +767,12 @@ def place(cred, token: str, *, tenant_slug: str = "",
                 "detail": "could not assemble a combo the exchange accepts"}
 
     # Spent, so the token is done whatever happened next -- a preview must
-    # never be able to buy twice.
+    # never be able to buy twice. The sheet stays open for another ticket from
+    # the same legs, so it is handed a NEW token over the same offer: a second
+    # order then takes a second, deliberate PLACE, never a replayed request.
     _PREVIEWS.pop(token, None)
+    next_token = uuid.uuid4().hex
+    _PREVIEWS[next_token] = {**held, "expires": time.time() + PREVIEW_TTL_S}
     if outcome.get("placed") and tenant_slug:
         from app.domains.botstation.ledger import entries
         entries.record_entry(
@@ -779,7 +783,8 @@ def place(cred, token: str, *, tenant_slug: str = "",
             contracts=outcome.get("contracts"),
             entry_price_c=outcome.get("filled_c") or outcome.get("limit_c"),
             is_live=True, raw=outcome)
-    return {**outcome, "legs_used": len(picked)}
+    return {**outcome, "legs_used": len(picked), "next_token": next_token,
+            "next_expires_in_s": PREVIEW_TTL_S}
 
 
 # ---- jobs -----------------------------------------------------------------

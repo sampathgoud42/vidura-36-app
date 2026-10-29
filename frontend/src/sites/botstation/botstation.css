@@ -915,6 +915,25 @@
 .bs-luck-note { font-size: 11px; color: var(--bs-ink-3); margin: 4px 0 8px; }
 .bs-luck-err { font-size: 11px; color: #ff6b6b; margin: 4px 0 8px; }
 .bs-luck-ok { font-size: 12px; color: #2fd35b; margin: 6px 0; }
+/* The last PLACE's outcome, inside the sheet, which now stays open on it. */
+.bs-luck-banner {
+  border: 1px solid; padding: 8px 10px; margin: 4px 0 8px;
+  font-size: 11px; line-height: 1.5; overflow-wrap: anywhere;
+}
+.bs-luck-banner b { letter-spacing: 0.14em; margin-right: 4px; }
+.bs-luck-banner.ok { color: #2fd35b; border-color: #2fd35b; background: rgba(47, 211, 91, 0.07); }
+.bs-luck-banner.bad { color: #ff6b6b; border-color: #ff6b6b; background: rgba(255, 107, 107, 0.07); }
+.bs-luck-banner .dim { color: var(--bs-ink-3); }
+/* The sheet's filters: three range rows, side by side where there is room. */
+.bs-luck-filters {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 6px 14px; align-items: center; margin: 2px 0 8px;
+}
+.bs-luck-filters .bs-luckrow .lbl { flex-basis: 52px; }
+/* 16px on the inputs: iOS Safari zooms the page into any smaller field. */
+.bs-luck-filters .bs-luckrow .bs-input { font-size: 16px; padding: 4px 6px; }
+.bs-luck-fltbtns { display: flex; gap: 6px; }
+.bs-luck-fltbtns .bs-btn { min-height: 32px; padding: 6px 10px; }
 .bs-luck-legs { max-height: 340px; overflow: auto; border: 1px solid var(--bs-hair-2); }
 .bs-luck-legs table { width: 100%; border-collapse: collapse; font-size: 11px; }
 .bs-luck-legs th, .bs-luck-legs td { padding: 5px 8px; text-align: left; white-space: nowrap; }
