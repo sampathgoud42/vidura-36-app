@@ -1062,6 +1062,29 @@ function luckDefaultKeep(legs, minLegs) {
   return new Set(tickers.slice(0, want));
 }
 
+// The sheet's filters start at the scan's own band and floor: as set, they
+// hide nothing. The bid range starts on the same band, since the band is
+// applied to the bid.
+function luckFilterFrom(gates) {
+  const lo = String(gates.min_leg_c ?? 67);
+  const hi = String(gates.max_leg_c ?? 97);
+  return { min_c: lo, max_c: hi, min_bid: lo, max_bid: hi,
+    min_vol: String(gates.min_volume_usd ?? 0) };
+}
+
+function luckPasses(l, f) {
+  const within = (v, lo, hi) => {
+    if (v == null) return true;
+    const a = Number(lo); const b = Number(hi);
+    return !(lo !== '' && Number.isFinite(a) && v < a)
+      && !(hi !== '' && Number.isFinite(b) && v > b);
+  };
+  const vol = Number(f.min_vol);
+  return within(l.price_c, f.min_c, f.max_c)
+    && within(l.bid_c, f.min_bid, f.max_bid)
+    && !(f.min_vol !== '' && Number.isFinite(vol) && (l.volume_usd || 0) < vol);
+}
+
 function LuckPanel() {
   const [open, setOpen] = useState(false);
   const [sheet, setSheet] = useState(false);
@@ -1082,6 +1105,7 @@ function LuckPanel() {
   const [keep, setKeep] = useState(() => new Set());
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [flt, setFlt] = useState(() => luckFilterFrom({}));
   // The sport picker. Kept as the sports UNticked, so every sport starts
   // ticked, and "all ticked" goes to the server as no list at all -- which
   // covers a sport that opens after this one was read, too.
@@ -1189,24 +1213,31 @@ function LuckPanel() {
     throw new Error('gave up waiting for the scan');
   };
 
-  const build = async () => {
+  // `over` is the sheet's RESCAN: filters wider than the scan that filled
+  // it, written back into the form so the dock says what was scanned.
+  const build = async (over) => {
+    const f = over ? { ...form, ...over } : form;
+    if (over) setForm(f);
     setBusy('preview'); setError(''); setResult(null); setPreview(null);
     setElapsed(0);
     try {
+      const gates = {
+        min_leg_c: n(f.min_leg_c, 67), max_leg_c: n(f.max_leg_c, 97),
+        min_volume_usd: n(f.min_volume_usd, 0),
+      };
       const job = await vidura.luckPreview({
-        min_legs: n(form.min_legs, 5), max_legs: n(form.max_legs, 24),
-        min_leg_c: n(form.min_leg_c, 67),
-        max_leg_c: n(form.max_leg_c, 97),
-        min_volume_usd: n(form.min_volume_usd, 0),
-        max_spread_c: n(form.max_spread_c, 3),
-        max_hours: n(form.max_hours, 72),
-        no_side_only: !!form.no_side,
+        min_legs: n(f.min_legs, 5), max_legs: n(f.max_legs, 24),
+        ...gates,
+        max_spread_c: n(f.max_spread_c, 3),
+        max_hours: n(f.max_hours, 72),
+        no_side_only: !!f.no_side,
         sports: sportsOff.size ? sportsOn : [],
       });
       const out = await awaitJob(job.job_id);
       if (out && out.ok) {
-        setPreview(out);
-        setKeep(luckDefaultKeep(out.legs, n(form.min_legs, 5)));
+        setPreview({ ...out, gates });
+        setFlt(luckFilterFrom(gates));
+        setKeep(luckDefaultKeep(out.legs, n(f.min_legs, 5)));
         setSheet(true);
       } else {
         // A failed build is exactly when the funnel is worth reading, and
@@ -1229,22 +1260,43 @@ function LuckPanel() {
     if (next.has(ticker)) next.delete(ticker); else next.add(ticker);
     return next;
   });
-  const allOn = () => setKeep(new Set((preview ? preview.legs : []).map((l) => l.ticker)));
+
+  // The sheet's own filters, over the legs the scan already returned. They
+  // can only narrow it: a leg outside the scan's band was never fetched, so
+  // a filter set WIDER than the scan offers a RESCAN rather than pretending.
+  const shown = preview ? preview.legs.filter((l) => luckPasses(l, flt)) : [];
+  const hidden = preview ? preview.legs.length - shown.length : 0;
+  const g = preview && preview.gates;
+  const wider = !!g && (n(flt.min_c, g.min_leg_c) < g.min_leg_c
+    || n(flt.max_c, g.max_leg_c) > g.max_leg_c
+    || n(flt.min_bid, g.min_leg_c) < g.min_leg_c
+    || n(flt.max_bid, g.max_leg_c) > g.max_leg_c
+    || n(flt.min_vol, g.min_volume_usd) < g.min_volume_usd);
+  const setF = (k) => (e) => setFlt((v) => ({ ...v, [k]: e.target.value }));
+  const rescan = () => build({
+    min_leg_c: String(Math.min(n(flt.min_c, g.min_leg_c), n(flt.min_bid, g.min_leg_c))),
+    max_leg_c: String(Math.max(n(flt.max_c, g.max_leg_c), n(flt.max_bid, g.max_leg_c))),
+    min_volume_usd: String(n(flt.min_vol, g.min_volume_usd)),
+  });
+
+  // ALL, NONE and RANDOM act on the legs the filters show; a hidden leg is
+  // never placed, ticked or not.
+  const allOn = () => setKeep(new Set(shown.map((l) => l.ticker)));
   const allOff = () => setKeep(new Set());
   // A fresh random 75%, for after ALL or NONE has replaced the first one.
-  const reroll = () => setKeep(luckDefaultKeep(preview ? preview.legs : [], n(form.min_legs, 5)));
+  const reroll = () => setKeep(luckDefaultKeep(shown, n(form.min_legs, 5)));
   const randomStart = !!preview && preview.legs.length > LUCK_RANDOM_OVER;
 
   // The odds of what is SELECTED, not of what was proposed. Deselect a leg
   // and this moves -- showing the preview's original number beside an edited
   // ticket would be a lie.
-  const chosen = preview ? preview.legs.filter((l) => keep.has(l.ticker)) : [];
+  const chosen = shown.filter((l) => keep.has(l.ticker));
   const chosenOdds = chosen.reduce((acc, l) => acc * ((l.price_c || 0) / 100), 1);
   const enough = chosen.length >= n(form.min_legs, 5);
 
   const place = async () => {
     if (!preview || !enough) return;
-    setBusy('place'); setError(''); setElapsed(0);
+    setBusy('place'); setError(''); setResult(null); setElapsed(0);
     try {
       const job = await vidura.luckPlace({
         token: preview.token,
@@ -1254,8 +1306,11 @@ function LuckPanel() {
       });
       const out = await awaitJob(job.job_id);
       setResult(out);
-      if (out && out.placed) { setPreview(null); setSheet(false); }
-      else setError((out && out.detail) || 'not placed');
+      // The sheet stays open on every leg, for another ticket from the same
+      // scan. The token just used is spent; the server hands back a fresh one
+      // over the same legs.
+      if (out && out.next_token) setPreview((p) => (p ? { ...p, token: out.next_token } : p));
+      if (!(out && out.placed)) setError((out && out.detail) || 'not placed');
     } catch (e) {
       setError(String((e && e.message) || e));
     } finally { setBusy(''); }
@@ -1421,7 +1476,7 @@ function LuckPanel() {
             </div>
 
             <div className="bs-luck-actions">
-              <button type="button" className="bs-btn" onClick={build}
+              <button type="button" className="bs-btn" onClick={() => build()}
                 disabled={!!busy || noSport}
                 title={noSport ? 'tick at least one sport' : undefined}>
                 {busy === 'preview' ? 'SCANNING\u2026' : 'BUILD TICKET'}
@@ -1461,7 +1516,8 @@ function LuckPanel() {
                 onClick={() => { if (!busy) setSheet(false); }}>×</button>
             </header>
             <p className="bs-luck-note">
-              {chosen.length} of {preview.legs.length} kept
+              {chosen.length} of {shown.length} kept
+              {hidden ? ` (${hidden} of ${preview.legs.length} hidden by the filters)` : null}
               {randomStart ? ', a random 75% ticked to start' : null}
               {' \u00b7 '}chance {(chosenOdds * 100).toFixed(3)}%
               {' \u00b7 '}{preview.scanned.toLocaleString()} markets scanned
@@ -1488,10 +1544,8 @@ function LuckPanel() {
             <div className="bs-luck-actions">
               <button type="button" className="bs-btn" onClick={allOn} disabled={!!busy}>ALL</button>
               <button type="button" className="bs-btn" onClick={allOff} disabled={!!busy}>NONE</button>
-              {randomStart ? (
-                <button type="button" className="bs-btn" onClick={reroll} disabled={!!busy}
-                  title="tick a fresh random 75% of the legs">RANDOM 75%</button>
-              ) : null}
+              <button type="button" className="bs-btn" onClick={reroll} disabled={!!busy}
+                title="tick a fresh random 75% of the legs the filters show">RANDOM 75%</button>
               <button type="button" className="bs-btn live" onClick={place}
                 disabled={!!busy || !enough}>
                 {busy === 'place'
@@ -1499,12 +1553,78 @@ function LuckPanel() {
                   : `PLACE ORDER \u2014 ${chosen.length} LEGS`}
               </button>
             </div>
+            {/* What the last PLACE did, kept in view: the sheet no longer
+                closes on it, so this is where a fill or a refusal is read. */}
+            {result && result.placed ? (
+              <div className="bs-luck-banner ok">
+                <b>ORDER PLACED</b>
+                {' '}{result.legs_used} legs · {result.contracts} contracts
+                {result.filled_c != null ? ` at ${result.filled_c}c`
+                  : result.limit_c != null ? ` limit ${result.limit_c}c` : ''}
+                {result.cost_usd != null ? ` · $${result.cost_usd}` : ''}
+                {result.contracts ? ` · max payout $${Math.round(result.contracts).toLocaleString()}` : ''}
+                <span className="dim">
+                  {result.combo_ticker ? ` · ${result.combo_ticker}` : ''}
+                  {result.order_id || result.quote_id
+                    ? ` · ${result.order_id ? 'order' : 'quote'} ${result.order_id || result.quote_id}` : ''}
+                  {result.detail ? ` · ${result.detail}` : ''}
+                </span>
+              </div>
+            ) : null}
+            {error ? (
+              <div className="bs-luck-banner bad">
+                <b>NOT PLACED</b> {error}
+              </div>
+            ) : null}
             {!enough ? (
               <p className="bs-luck-err">
                 keep at least {n(form.min_legs, 5)} legs
               </p>
             ) : null}
-            {error ? <p className="bs-luck-err">{error}</p> : null}
+
+            {/* Narrowing the legs on the sheet, without a new scan. Price and
+                volume start at the scan's own band and floor; set wider, they
+                offer a RESCAN, since those legs were never fetched. */}
+            <div className="bs-luck-filters">
+              <label className="bs-luckrow">
+                <span className="lbl">Price c</span>
+                <input className="bs-input" type="number" min="1" max="99" inputMode="numeric"
+                  value={flt.min_c} onChange={setF('min_c')} disabled={!!busy}
+                  aria-label="lowest leg price, cents" />
+                <i>–</i>
+                <input className="bs-input" type="number" min="1" max="99" inputMode="numeric"
+                  value={flt.max_c} onChange={setF('max_c')} disabled={!!busy}
+                  aria-label="highest leg price, cents" />
+              </label>
+              <label className="bs-luckrow">
+                <span className="lbl">Bid c</span>
+                <input className="bs-input" type="number" min="0" max="99" inputMode="numeric"
+                  value={flt.min_bid} onChange={setF('min_bid')} disabled={!!busy}
+                  aria-label="lowest bid, cents" />
+                <i>–</i>
+                <input className="bs-input" type="number" min="0" max="99" inputMode="numeric"
+                  value={flt.max_bid} onChange={setF('max_bid')} disabled={!!busy}
+                  aria-label="highest bid, cents" />
+              </label>
+              <label className="bs-luckrow">
+                <span className="lbl">Min vol</span>
+                <input className="bs-input" type="number" min="0" step="500" inputMode="numeric"
+                  value={flt.min_vol} onChange={setF('min_vol')} disabled={!!busy}
+                  aria-label="minimum dollar volume per leg" />
+                <i>$</i>
+              </label>
+              <div className="bs-luck-fltbtns">
+                <button type="button" className="bs-btn" disabled={!!busy}
+                  onClick={() => setFlt(luckFilterFrom(preview.gates || {}))}
+                  title="back to the scan's own band and floor">RESET</button>
+                {wider ? (
+                  <button type="button" className="bs-btn" disabled={!!busy} onClick={rescan}
+                    title="these filters are wider than the scan — scan again with them">
+                    RESCAN
+                  </button>
+                ) : null}
+              </div>
+            </div>
 
             <div className="bs-luck-legs">
               <table>
@@ -1516,7 +1636,7 @@ function LuckPanel() {
                     <th className="num">Volume</th></tr>
                 </thead>
                 <tbody>
-                  {preview.legs.map((l, i) => (
+                  {shown.map((l, i) => (
                     <tr key={l.ticker} className={keep.has(l.ticker) ? '' : 'off'}>
                       <td>
                         <input type="checkbox" checked={keep.has(l.ticker)}
