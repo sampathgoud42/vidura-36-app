@@ -3,14 +3,13 @@
 sofascore_rankings.py — daily ATP/WTA/ITF tennis rankings scraper.
 ==================================================================
 Scrapes https://www.sofascore.com/tennis/rankings/atp and /wta with Playwright
-(headless Chromium) AND the ITF World Tennis Tour rankings (men + women) via
-ITF's own public JSON API, then writes one clean CSV for the Kalshi sports bot.
+(headless Chromium) AND the ITF World Tennis Tour rankings (men + women) from
+live-tennis.eu, then writes one clean CSV for the Kalshi sports bot.
 
-ITF (07/10): the ITF pages render their table from a client-side widget, but
-ITF also exposes the same data at a plain JSON endpoint
-(``/tennis/api/PlayerRankApi/GetPlayerRankings?circuitCode=MT|WT&matchTypeCode=S``)
-— fetched directly (no browser). MT = men's world tennis tour, WT = women's;
-both are written with ``tour="ITF"``. ATP/WTA rows are written FIRST so that a
+ITF (10/28): ITF's own JSON API now answers scripted requests with an
+Incapsula bot-check page, so the ITF rankings are read from live-tennis.eu's
+live ITF tables (plain HTML, fetched directly, no browser). MT = men's world
+tennis tour, WT = women's; both are written with ``tour="ITF"``. ATP/WTA rows are written FIRST so that a
 player who also holds an ITF rank resolves to their WTA/ATP entry (the bot's
 loaders keep the first occurrence, and WTA/ATP outranks ITF for the favorite).
 
@@ -48,6 +47,7 @@ from __future__ import annotations
 
 import asyncio
 import csv
+import html
 import json
 import os
 import re
@@ -63,13 +63,13 @@ _HERE = Path(__file__).resolve().parent
 BASE = "https://www.sofascore.com"
 TOURS = ("ATP", "WTA", "ITF")
 
-# ITF World Tennis Tour rankings — public JSON API (no browser/token needed).
-# circuitCode: MT = men's, WT = women's; matchTypeCode S = singles. Both feed
+# ITF World Tennis Tour rankings — live-tennis.eu's live ITF tables (plain
+# HTML, no browser). 10/28: ITF's own JSON API now sits behind an Incapsula
+# bot check, so it is no longer read. MT = men's, WT = women's; both feed
 # tour="ITF". Depth default 500/gender to mirror the ATP/WTA CSV depth.
-ITF_API = "https://www.itftennis.com/tennis/api/PlayerRankApi/GetPlayerRankings"
 ITF_CIRCUITS = (
-    ("MT", "https://www.itftennis.com/en/rankings/mens-world-tennis-tour-rankings/"),
-    ("WT", "https://www.itftennis.com/en/rankings/womens-world-tennis-tour-rankings/"),
+    ("MT", "https://live-tennis.eu/en/itf-men-live-ranking"),
+    ("WT", "https://live-tennis.eu/en/itf-women-live-ranking"),
 )
 ITF_TAKE = int(os.getenv("SOFA_ITF_TAKE", "500"))
 ITF_TIMEOUT_S = float(os.getenv("SOFA_ITF_TIMEOUT_S", "30"))
@@ -134,62 +134,52 @@ def parse_rankings_json(data: dict, tour: str) -> list[dict]:
     return rows
 
 
-# ── ITF World Tennis Tour (public JSON API; no browser) ───────────────────────
-def parse_itf_json(data: dict) -> list[dict]:
-    """ITF ``{"items":[{rank, playerGivenName, playerFamilyName, ...}]}`` → rows
-    (all tagged tour="ITF")."""
+# ── ITF World Tennis Tour (live-tennis.eu HTML table; no browser) ─────────────
+# One player per <tr>: <td class=rk>RANK ... <td class=pn>NAME, then cells for
+# age, country code and points (the age cell sometimes has no class).
+_ITF_RANK = re.compile(r"<td class=rk>\s*(\d+)\s*</td>")
+_ITF_NAME = re.compile(r"<td class=pn>(.*?)</td>(.*)", re.S)
+_TD = re.compile(r"<td[^>]*>(.*?)</td>", re.S)
+
+
+def _cell_text(s: str) -> str:
+    return html.unescape(re.sub(r"<[^>]+>", "", s)).strip()
+
+
+def parse_itf_html(page: str) -> list[dict]:
+    """live-tennis.eu live ITF ranking page → rows (all tagged tour="ITF").
+    Ranks/points are LIVE (official release plus results since), the same
+    ordering ITF's next release will publish."""
     rows: list[dict] = []
     seen: set = set()
-    for it in (data.get("items") or []):
-        if it.get("hiddenPlayer"):
+    for tr in page.split("<tr")[1:]:
+        rk, nm = _ITF_RANK.search(tr), _ITF_NAME.search(tr)
+        if not rk or not nm:
             continue
-        given = (it.get("playerGivenName") or "").strip()
-        family = (it.get("playerFamilyName") or "").strip()
-        name = f"{given} {family}".strip()
-        rank = _to_int(it.get("rank"))
-        if not name or rank is None:
+        rank, name = _to_int(rk.group(1)), _cell_text(nm.group(1))
+        after = _TD.findall(nm.group(2))           # age, country, points, ...
+        if not name or rank is None or len(after) < 3 or (rank, name) in seen:
             continue
-        key = (rank, name)
-        if key in seen:
-            continue
-        seen.add(key)
-        rows.append({
-            "tour": "ITF", "rank": rank, "player": name,
-            "country": (it.get("playerNationality")
-                        or it.get("playerNationalityCode") or "").strip(),
-            "points": _to_int(it.get("points")),
-        })
-    rows.sort(key=lambda r: (r["rank"] is None, r["rank"] or 10 ** 9))
+        seen.add((rank, name))
+        rows.append({"tour": "ITF", "rank": rank, "player": name,
+                     "country": _cell_text(after[1]),
+                     "points": _to_int(_cell_text(after[2]))})
+    rows.sort(key=lambda r: r["rank"])
     return rows
 
 
-# The ITF API serves at most this many per request: ask for more and it falls
-# back to its default page of TEN (10/03: take=500 returned 10 players, and
-# the CSV that replaced a 1,000-row one held 20). So it is read in pages.
-ITF_PAGE = 100
-
-
-def fetch_itf_circuit(circuit: str, referer: str, take: int) -> list[dict]:
-    """Fetch one ITF circuit (MT men / WT women) singles rankings via the public
-    JSON API, ``take`` players in pages of ITF_PAGE. Synchronous (fast, no
-    browser); raises on HTTP/JSON failure."""
-    rows: list[dict] = []
-    skip = 0
-    while len(rows) < take:
-        size = min(ITF_PAGE, take - len(rows))
-        url = (f"{ITF_API}?circuitCode={circuit}&matchTypeCode=S"
-               f"&take={size}&skip={skip}&isOrderAscending=true")
-        req = urllib.request.Request(url, headers={
-            "User-Agent": UA, "Accept": "application/json",
-            "X-Requested-With": "XMLHttpRequest", "Referer": referer})
-        with urllib.request.urlopen(req, timeout=ITF_TIMEOUT_S) as resp:
-            data = json.loads(resp.read().decode("utf-8", errors="replace"))
-        page = data.get("items") or []
-        rows.extend(parse_itf_json(data))
-        skip += len(page)
-        if len(page) < size or skip >= int(data.get("totalItems") or 0):
-            break
-    return rows
+def fetch_itf_circuit(circuit: str, url: str, take: int) -> list[dict]:
+    """Fetch one ITF circuit (MT men / WT women) singles rankings, the top
+    ``take`` players. Synchronous (fast, no browser); raises on HTTP failure
+    or a page with no ranking rows."""
+    req = urllib.request.Request(url, headers={"User-Agent": UA,
+                                               "Accept": "text/html"})
+    with urllib.request.urlopen(req, timeout=ITF_TIMEOUT_S) as resp:
+        page = resp.read().decode("utf-8", errors="replace")
+    rows = parse_itf_html(page)
+    if not rows:
+        raise RuntimeError(f"no ranking rows found on {url}")
+    return rows[:take]
 
 
 # ── ATP / WTA from ESPN's public rankings JSON ────────────────────────────────
@@ -235,13 +225,16 @@ async def fetch_itf(take: int = ITF_TAKE) -> list[dict]:
     blocking HTTP calls in a thread so it composes with the async pipeline."""
     loop = asyncio.get_event_loop()
     out: list[dict] = []
-    for circuit, referer in ITF_CIRCUITS:
+    for circuit, url in ITF_CIRCUITS:
         try:
-            rows = await loop.run_in_executor(None, fetch_itf_circuit, circuit, referer, take)
+            rows = await loop.run_in_executor(None, fetch_itf_circuit, circuit, url, take)
             print(f"[ITF/{circuit}] scraped {len(rows)} players")
             out.extend(rows)
         except Exception as e:
             print(f"[ITF/{circuit}] error: {e}", file=sys.stderr)
+    if not out and _existing_rows_for_tour("ITF"):
+        print("[ITF] no fresh rows — keeping the last-known ITF rows from the CSV "
+              "(they go stale until the ITF fetch works again)", file=sys.stderr)
     return out
 
 
