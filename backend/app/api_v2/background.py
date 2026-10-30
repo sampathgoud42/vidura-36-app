@@ -12,9 +12,10 @@ Three of them, and the first one is the reason this module exists at all:
                  a Bot Station DMI signal, on Kalshi's fifteen-minute markets.
                  Every two seconds: a quarter-hour market moves too fast for
                  the risk monitor's ten.
-  luck schedule  the scheduled Luck parley: at 9:00 and 18:00 Chicago time,
-                 a ticket built and placed for every operator who has the
-                 schedule switched on. Checked every minute.
+  luck schedule  the Luck parley's AUTO ORDER: at 9:00 and 18:00 Chicago
+                 time, or every N hours on the hour, a ticket built and placed
+                 -- when its chance is under the operator's cap -- for every
+                 operator who has it switched on. Checked every minute.
   super telegram new Super Signals, posted to each operator's Telegram chat
                  when their feed is on. Every thirty seconds.
 

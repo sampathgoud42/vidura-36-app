@@ -1,8 +1,9 @@
-"""The luck parley, on a schedule.
+"""The luck parley, on a schedule -- the desk's AUTO ORDER.
 
 While an operator has it switched on, a ticket is built and placed in the
-background at 9:00 and 18:00 Chicago time, every day, from the settings the
-Luck form held when the schedule was switched on or last updated:
+background -- at 9:00 and 18:00 Chicago time every day, or every N hours on
+the hour when the operator picked a frequency -- from the settings the Luck
+form held when it was switched on or last updated:
 
   1. cash   the shards a combo spends from -- 0 and 1; Kalshi moves cash from
             0 to 1 itself for a combo -- must hold at least the ticket's most
@@ -11,7 +12,10 @@ Luck form held when the schedule was switched on or last updated:
             exact legs before anything is bought, as on the desk;
   3. pick   the legs the form would have ticked: every one up to ten, a
             random three in four past ten, never fewer than the minimum;
-  4. place  luck.place.
+  4. odds   the chance of the picked legs all winning -- the product of
+            their prices, as the sheet shows it -- must be under the cap
+            (10% unless set), or the slot is skipped;
+  5. place  luck.place.
 
 Each slot is claimed by writing its row FIRST, unique per (operator, slot):
 a slot runs once, across loop passes and across restarts. A run cut off by a
@@ -47,11 +51,17 @@ STALE_RUN_S = 30 * 60
 # many legs a random share of them, never fewer than the minimum.
 PICK_OVER = 10
 PICK_SHARE = 0.75
+# The frequencies AUTO ORDER offers, in hours. Each divides the day, so the
+# slots fall on the same clock hours every day: every 6 is 0, 6, 12, 18. 0 is
+# the original twice a day, at SLOTS.
+EVERY_HOURS = (0, 1, 2, 3, 4, 6, 8, 12, 24)
+MAX_CHANCE_PCT = 10.0
 
 CONFIG_DEFAULTS = {
     "min_legs": 5, "max_legs": 24, "min_usd": 5.0, "max_usd": 7.5,
     "min_leg_c": 67, "max_leg_c": 97, "min_volume_usd": 5000.0,
     "max_spread_c": 3, "max_hours": 72, "no_side_only": False, "sports": [],
+    "every_hours": 0, "max_chance_pct": MAX_CHANCE_PCT,
 }
 
 
@@ -63,26 +73,34 @@ def _naive_utc(moment: datetime) -> datetime:
     return moment.astimezone(timezone.utc).replace(tzinfo=None)
 
 
-def due_slot(now: datetime | None = None) -> str | None:
+def _slots(every_hours: int = 0) -> tuple:
+    """The day's (hour, minute) slots: SLOTS, or every N hours from midnight."""
+    every = int(every_hours or 0)
+    if every <= 0:
+        return SLOTS
+    return tuple((h, 0) for h in range(0, 24, every))
+
+
+def due_slot(now: datetime | None = None, every_hours: int = 0) -> str | None:
     """The slot that is due now, "2026-10-04 09:00" -- or None."""
     local = (now or _now()).astimezone(TZ)
-    for hour, minute in SLOTS:
+    for hour, minute in _slots(every_hours):
         at = local.replace(hour=hour, minute=minute, second=0, microsecond=0)
         if at <= local < at + timedelta(seconds=GRACE_S):
             return at.strftime("%Y-%m-%d %H:%M")
     return None
 
 
-def next_slot(now: datetime | None = None) -> datetime:
+def next_slot(now: datetime | None = None, every_hours: int = 0) -> datetime:
     """When the next slot starts, in UTC."""
     local = (now or _now()).astimezone(TZ)
     for days in (0, 1):
         day = local + timedelta(days=days)
-        for hour, minute in SLOTS:
+        for hour, minute in _slots(every_hours):
             at = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
             if at > local:
                 return at.astimezone(timezone.utc)
-    return local.astimezone(timezone.utc)            # unreachable: two slots a day
+    return local.astimezone(timezone.utc)            # unreachable: a slot a day at least
 
 
 def pick_tickers(legs: list[dict], min_legs: int, rng=random) -> list[str]:
@@ -103,6 +121,16 @@ def _config(raw: str | None) -> dict:
         saved = {}
     return {**CONFIG_DEFAULTS, **{k: v for k, v in saved.items()
                                   if k in CONFIG_DEFAULTS}}
+
+
+def chance(legs: list[dict], tickers: list[str]) -> float:
+    """The chance of every picked leg winning, 0-1: the product of their
+    prices, the same number the sheet shows."""
+    price = {leg["ticker"]: (leg.get("price_c") or 0) / 100 for leg in legs}
+    out = 1.0
+    for ticker in tickers:
+        out *= price.get(ticker, 0.0)
+    return out
 
 
 def _serialize_run(row) -> dict:
@@ -126,12 +154,15 @@ def get_state(db, tenant_id: str, *, runs: int = 6) -> dict:
     row = db.scalar(repo.query(LuckSchedule))
     recent = db.scalars(repo.query(LuckRun).order_by(
         LuckRun.created_at.desc()).limit(runs)).all()
+    cfg = _config(row.config_json) if row else None
+    every = int(cfg["every_hours"]) if cfg else 0
     return {
         "enabled": bool(row and row.enabled),
-        "config": _config(row.config_json) if row else None,
-        "times": [f"{h:02d}:{m:02d}" for h, m in SLOTS],
+        "config": cfg,
+        "times": [f"{h:02d}:{m:02d}" for h, m in _slots(every)],
+        "every_hours_choices": list(EVERY_HOURS),
         "tz": "America/Chicago",
-        "next_run": next_slot().isoformat() if row and row.enabled else None,
+        "next_run": next_slot(every_hours=every).isoformat() if row and row.enabled else None,
         "runs": [_serialize_run(r) for r in recent],
     }
 
@@ -200,6 +231,13 @@ def run_ticket(cred, tenant, cfg: dict, rng=random) -> dict:
         return {"status": "skipped",
                 "detail": str(built.get("detail") or "no ticket could be built")[:255]}
     tickers = pick_tickers(built["legs"], int(cfg["min_legs"]), rng=rng)
+    cap = float(cfg.get("max_chance_pct") or MAX_CHANCE_PCT)
+    odds_pct = chance(built["legs"], tickers) * 100
+    if odds_pct >= cap:
+        return {"status": "skipped", "legs": len(tickers),
+                "detail": f"chance {odds_pct:.2f}% with {len(tickers)} of "
+                          f"{len(built['legs'])} legs is not under {cap:g}% -- "
+                          "nothing bought"}
     placed = luck.place(
         cred, built["token"], tenant_slug=tenant.slug, tickers=tickers,
         min_usd=float(cfg["min_usd"]), max_usd=need,
@@ -215,6 +253,7 @@ def run_ticket(cred, tenant, cfg: dict, rng=random) -> dict:
                        f"{placed.get('contracts')} contracts"
                        + (f" at {placed.get('filled_c')}c"
                           if placed.get("filled_c") is not None else "")
+                       + f", chance {odds_pct:.2f}%"
                        + (f" — {placed['detail']}" if placed.get("detail") else ""))[:255],
             "legs": legs, "cost_usd": float(cost) if cost is not None else None,
             "combo_ticker": placed.get("combo_ticker")}
@@ -252,9 +291,6 @@ def sweep_all_tenants(now: datetime | None = None, rng=random) -> int:
 
     now = now or _now()
     _interrupt_stale(now)
-    slot = due_slot(now)
-    if slot is None:
-        return 0
     attempted = 0
     with session_scope() as db:
         tenant_ids = list(db.scalars(select(Tenant.id)).all())
@@ -266,9 +302,13 @@ def sweep_all_tenants(now: datetime | None = None, rng=random) -> int:
                     LuckSchedule.enabled.is_(True)))
                 if schedule is None:
                     continue
+                cfg = _config(schedule.config_json)
+                # Each operator's own frequency decides which slot is due.
+                slot = due_slot(now, int(cfg["every_hours"] or 0))
+                if slot is None:
+                    continue
                 if schedule.enabled_at and schedule.enabled_at > _slot_start(slot):
                     continue                    # switched on after this slot began
-                cfg = _config(schedule.config_json)
                 # Claim the slot before anything else. The unique key makes
                 # a second claim fail, which is the whole point.
                 run = LuckRun(slot=slot, status="running")

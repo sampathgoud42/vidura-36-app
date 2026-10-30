@@ -1145,11 +1145,24 @@ function LuckPanel() {
   const [sched, setSched] = useState(null);
   const [schedBusy, setSchedBusy] = useState(false);
   const [schedErr, setSchedErr] = useState('');
+  // AUTO ORDER's own two settings: how often (hours; 0 is 9 AM & 6 PM) and
+  // the chance a ticket must be under to be bought. Switching it on opens
+  // `autoSetup` to ask for them before anything is saved.
+  const [autoEvery, setAutoEvery] = useState('1');
+  const [autoCap, setAutoCap] = useState('10');
+  const [autoSetup, setAutoSetup] = useState(false);
   useEffect(() => {
     if (!open) return undefined;
     let alive = true;
     vidura.luckSchedule()
-      .then((s) => { if (alive) setSched(s); })
+      .then((s) => {
+        if (!alive) return;
+        setSched(s);
+        if (s && s.enabled && s.config) {
+          setAutoEvery(String(s.config.every_hours ?? 0));
+          setAutoCap(String(s.config.max_chance_pct ?? 10));
+        }
+      })
       .catch((e) => { if (alive) setSchedErr(String((e && e.message) || e)); });
     return () => { alive = false; };
   }, [open]);
@@ -1172,6 +1185,7 @@ function LuckPanel() {
     min_volume_usd: n(form.min_volume_usd, 0), max_spread_c: n(form.max_spread_c, 3),
     max_hours: n(form.max_hours, 72), no_side_only: !!form.no_side,
     sports: sportsOff.size ? [...sportsOn].sort() : [],
+    every_hours: n(autoEvery, 1), max_chance_pct: n(autoCap, 10),
   });
   const sameTicket = (a, b) => !!a && !!b && Object.keys(ticketNow()).every((k) => (
     k === 'sports' ? [...(a.sports || [])].sort().join() === [...(b.sports || [])].sort().join()
@@ -1181,6 +1195,8 @@ function LuckPanel() {
     + `${Number(t.max_usd).toFixed(2)} · ${t.min_leg_c}–${t.max_leg_c}c · vol ≥ $${Number(t.min_volume_usd).toLocaleString()}`
     + ` · ≤${t.max_spread_c}c · ${t.max_hours}h · ${(t.sports || []).length ? t.sports.join(', ') : 'all sports'}`
     + (t.no_side_only ? ' · NO side' : '');
+  const everyText = (h) => (Number(h) ? (Number(h) === 1 ? 'every hour' : `every ${Number(h)} hours`)
+    : '9:00 AM & 6:00 PM CT daily');
   const saveSchedule = async (body) => {
     setSchedBusy(true); setSchedErr('');
     try {
@@ -1189,19 +1205,28 @@ function LuckPanel() {
       setSchedErr(String((e && e.message) || e));
     } finally { setSchedBusy(false); }
   };
-  const toggleSchedule = async (e) => {
-    if (!e.target.checked) { saveSchedule({ enabled: false }); return; }
+  // Off saves at once. On only opens the setup -- frequency and chance cap
+  // -- and START there is what switches it on.
+  const toggleSchedule = (e) => {
+    if (!e.target.checked) { setAutoSetup(false); saveSchedule({ enabled: false }); return; }
+    setAutoSetup(true);
+  };
+  const capOk = n(autoCap, 0) > 0 && n(autoCap, 0) <= 100;
+  const startAuto = async () => {
     const t = ticketNow();
+    const when = everyText(t.every_hours);
     const ok = await confirmDialog({
-      title: 'Schedule the luck parley?',
-      body: 'Every day at 9:00 AM and 6:00 PM CT, in the background: if the combo shards '
-        + `hold at least $${t.max_usd.toFixed(2)}, a ticket is built with these settings — `
-        + `${ticketText(t)} — and placed, spending $${t.min_usd.toFixed(2)}–$${t.max_usd.toFixed(2)} `
-        + 'each time with nobody confirming it.',
-      confirmText: 'Switch on',
+      title: 'Start auto order?',
+      body: `${when[0].toUpperCase()}${when.slice(1)}, in the background: if the combo shards hold at least `
+        + `$${t.max_usd.toFixed(2)}, the legs are scanned with these settings — ${ticketText(t)} — a random 75% `
+        + `of them picked, and if their chance is under ${t.max_chance_pct}% the ticket is placed, spending `
+        + `$${t.min_usd.toFixed(2)}–$${t.max_usd.toFixed(2)} each time with nobody confirming it.`,
+      confirmText: 'Start',
       cancelText: 'Cancel',
     });
-    if (ok) saveSchedule({ enabled: true, config: t });
+    if (!ok) return;
+    setAutoSetup(false);
+    saveSchedule({ enabled: true, config: t });
   };
   const slotText = (slot) => {
     const [d, t] = String(slot || '').split(' ');
@@ -1367,25 +1392,57 @@ function LuckPanel() {
                 keeps the ticket saved when it was switched on (or UPDATEd),
                 not whatever the form says later. */}
             <div className="bs-luckrow bs-lucksched">
-              <span className="lbl">Schedule</span>
-              <label className="bs-luckswitch" title="place this ticket automatically at 9:00 AM and 6:00 PM CT, every day">
-                <input type="checkbox" checked={!!(sched && sched.enabled)}
+              <span className="lbl">Auto order</span>
+              <label className="bs-luckswitch" title="scan, pick a random 75% and place this ticket automatically, on a frequency you choose">
+                <input type="checkbox" checked={!!(sched && sched.enabled) || autoSetup}
                   disabled={schedBusy || sched === null} onChange={toggleSchedule}
-                  aria-label="Schedule the luck parley at 9 AM and 6 PM CT daily" />
+                  aria-label="Auto order the luck parley" />
                 <span className="track" /><span className="knob" />
               </label>
-              <span className="txt">9:00 AM &amp; 6:00 PM CT · daily</span>
+              <span className="txt">
+                {sched && sched.enabled && sched.config ? everyText(sched.config.every_hours)
+                  : autoSetup ? 'choose how often' : 'off'}
+              </span>
             </div>
+            {/* Asked when it is switched on, and kept beside it while on: a
+                change shows UPDATE, as a changed form does. */}
+            {autoSetup || (sched && sched.enabled) ? (
+              <div className="bs-luckrow bs-luckauto">
+                <span className="lbl">Every</span>
+                <select className="bs-input" value={autoEvery} disabled={schedBusy}
+                  onChange={(e) => setAutoEvery(e.target.value)} aria-label="Auto order frequency">
+                  {((sched && sched.every_hours_choices) || [0, 1, 2, 3, 4, 6, 8, 12, 24]).map((h) => (
+                    <option key={h} value={String(h)}>
+                      {h ? (h === 1 ? '1 hour' : `${h} hours`) : '9 AM & 6 PM'}
+                    </option>
+                  ))}
+                </select>
+                <span className="lbl">Chance &lt;</span>
+                <input className="bs-input" type="number" inputMode="decimal" min="0.1" max="100" step="0.5"
+                  value={autoCap} disabled={schedBusy} onChange={(e) => setAutoCap(e.target.value)}
+                  aria-label="Place only under this chance %" />
+                <span className="txt">%</span>
+              </div>
+            ) : null}
+            {autoSetup && !(sched && sched.enabled) ? (
+              <div className="bs-luck-fltbtns">
+                <button type="button" className="bs-btn live" onClick={startAuto}
+                  disabled={schedBusy || !capOk || noSport}>START AUTO ORDER</button>
+                <button type="button" className="bs-btn" onClick={() => setAutoSetup(false)}
+                  disabled={schedBusy}>CANCEL</button>
+              </div>
+            ) : null}
             {sched && sched.enabled && sched.config ? (
               <p className="bs-luck-note bs-lucksched-on">
                 ON · next {new Date(sched.next_run).toLocaleString('en-US', {
                   timeZone: 'America/Chicago', weekday: 'short', hour: 'numeric', minute: '2-digit' })} CT
                 {' · '}{ticketText(sched.config)}
+                {` · places under ${Number(sched.config.max_chance_pct ?? 10)}% chance`}
                 {schedDiffers ? (
                   <button type="button" className="bs-btn bs-lucksched-up" disabled={schedBusy}
                     onClick={() => saveSchedule({ enabled: true, config: ticketNow() })}
-                    title="the form differs from the scheduled ticket — schedule the form's settings instead">
-                    UPDATE SCHEDULE
+                    title="the form differs from the auto order's ticket — use the form's settings instead">
+                    UPDATE AUTO ORDER
                   </button>
                 ) : null}
               </p>
