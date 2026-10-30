@@ -993,6 +993,11 @@ class LuckScheduleTicket(LuckPreviewRequest):
     spend range placing takes."""
     min_usd: float = Field(default=5, gt=0, le=5000)
     max_usd: float = Field(default=7.5, gt=0, le=5000)
+    # AUTO ORDER's frequency: every N hours on the hour, Chicago time. 0 is
+    # the original 9:00 and 18:00. One of luck_schedule.EVERY_HOURS.
+    every_hours: int = Field(default=0, ge=0, le=24)
+    # Placed only when the picked legs' chance of all winning is under this.
+    max_chance_pct: float = Field(default=10, gt=0, le=100)
 
 
 class LuckScheduleRequest(BaseModel):
@@ -1032,6 +1037,10 @@ def luck_schedule_set(payload: LuckScheduleRequest,
             raise HTTPException(status_code=422, detail="max legs is below min legs")
         if payload.config.max_usd < payload.config.min_usd:
             raise HTTPException(status_code=422, detail="max spend is below min spend")
+        if payload.config.every_hours not in luck_schedule.EVERY_HOURS:
+            raise HTTPException(status_code=422,
+                                detail="frequency must divide the day: "
+                                       + ", ".join(f"{h}h" for h in luck_schedule.EVERY_HOURS[1:]))
         config = payload.config.model_dump()
         config["sports"] = [s.strip().lower()[:40] for s in config.get("sports") or []
                             if s and s.strip()]

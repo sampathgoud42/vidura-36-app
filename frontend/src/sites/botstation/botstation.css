@@ -1153,6 +1153,13 @@
 .bs-luckswitch input:disabled ~ .track, .bs-luckswitch input:disabled ~ .knob { opacity: 0.5; }
 .bs-lucksched-on { color: var(--bs-ink-2); }
 .bs-lucksched-up { margin-left: 6px; padding: 3px 8px; min-height: 24px; font-size: 9px; }
+/* Auto order's frequency and chance cap, beside the switch. */
+.bs-luckauto { margin: 4px 0 6px; }
+.bs-luckauto .lbl { flex: 0 0 auto; }
+.bs-luckauto .lbl:first-child { flex-basis: 62px; }
+.bs-luckauto select.bs-input { flex: 2 1 0; text-align: left; }
+.bs-luckauto input.bs-input { flex: 1 1 0; max-width: 64px; }
+.bs-luckauto .txt { font-size: 10px; color: var(--bs-ink-2); }
 .bs-luckruns { list-style: none; margin: 2px 0 8px; padding: 0; font-size: 10px; color: var(--bs-ink-2); }
 .bs-luckruns li { padding: 3px 0; border-top: 1px dashed var(--bs-hair); }
 .bs-luckruns b { font-weight: 600; color: var(--bs-ink); margin-right: 6px; }
@@ -1163,6 +1170,7 @@
 .bs-luckruns .dim { color: var(--bs-ink-3); }
 @media (pointer: coarse) {
   .bs-lucksched { min-height: 44px; }
+  .bs-luckauto .bs-input { font-size: 16px; min-height: 36px; }
   .bs-luckswitch { width: 46px; height: 28px; }
   .bs-luckswitch .knob { top: 5px; left: 5px; width: 18px; height: 18px; }
   .bs-luckswitch input:checked ~ .knob { transform: translateX(18px); }
